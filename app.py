@@ -1,7 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 
-# 支付链接（美元版）
+# 更新后的支付链接（$9.99版）—— 请确认你的 Lemon Squeezy 链接是否已更新
 PAYMENT_LINK = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"
 
 zhipu_client = OpenAI(
@@ -40,15 +40,15 @@ if st.session_state.is_premium:
 else:
     st.info(f"Free User · Used ~ {st.session_state.daily_tokens//1000}k tokens today")
     st.markdown("---")
-    if st.button("🚀 Upgrade to Premium ($6.99/month)", type="primary", use_container_width=True):
+    if st.button("🚀 Upgrade to Premium ($9.99/month)", type="primary", use_container_width=True):
         st.link_button(
-            label="Pay $6.99/month - Unlock Unlimited Usage",
+            label="Pay $9.99/month - Unlock Unlimited Usage",
             url=PAYMENT_LINK,
             type="primary",
             use_container_width=True
         )
 
-# 聊天部分
+# 聊天部分保持不变
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -85,7 +85,7 @@ if prompt := st.chat_input("Ask me anything..."):
                 st.session_state.messages.append({"role": "assistant", "content": answer})
 
                 if not st.session_state.is_premium and st.session_state.daily_tokens > 80000:
-                    st.warning("Free quota is almost used up! Upgrade to enjoy unlimited access.")
+                    st.warning("Free quota is almost used up! Upgrade for unlimited access.")
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
