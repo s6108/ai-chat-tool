@@ -1,8 +1,9 @@
 import streamlit as st
 from openai import OpenAI
 
-# 更新后的支付链接（$9.99版）—— 请确认你的 Lemon Squeezy 链接是否已更新
-PAYMENT_LINK = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"
+# 支付链接（请确认你的 Lemon Squeezy 链接是否已更新为 $9.99 和 $14.99）
+PAYMENT_LINK_BASIC = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"   # $9.99 基础版
+PAYMENT_LINK_PREMIUM = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/你的高级版链接"   # ← 这里填 $14.99 高级版的支付链接
 
 zhipu_client = OpenAI(
     api_key=st.secrets["ZHIPU_API_KEY"],
@@ -27,7 +28,14 @@ if "daily_tokens" not in st.session_state:
 
 with st.sidebar:
     st.header("⚙️ Settings")
-    model_choice = st.radio("Select Model", ["智谱AI (GLM-4)", "DeepSeek"], index=0)
+    
+    # 默认推荐 DeepSeek（成本更低）
+    model_choice = st.radio(
+        "Select Model",
+        ["DeepSeek (Recommended - Cheaper & Fast)", "智谱AI (GLM-4)"],
+        index=0
+    )
+    
     temperature = st.slider("Creativity", 0.0, 1.0, 0.7, 0.1)
 
     st.markdown("---")
@@ -35,20 +43,22 @@ with st.sidebar:
         st.session_state.messages = []
         st.success("Chat history cleared")
 
+# 付费状态显示
 if st.session_state.is_premium:
     st.success("✅ You are a Premium User · Unlimited Access")
 else:
     st.info(f"Free User · Used ~ {st.session_state.daily_tokens//1000}k tokens today")
     st.markdown("---")
-    if st.button("🚀 Upgrade to Premium ($9.99/month)", type="primary", use_container_width=True):
-        st.link_button(
-            label="Pay $9.99/month - Unlock Unlimited Usage",
-            url=PAYMENT_LINK,
-            type="primary",
-            use_container_width=True
-        )
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Upgrade Basic ($9.99/month)", type="primary", use_container_width=True):
+            st.link_button("Pay $9.99/month - Unlimited Usage", PAYMENT_LINK_BASIC, type="primary", use_container_width=True)
+    with col2:
+        if st.button("Upgrade Premium ($14.99/month)", type="secondary", use_container_width=True):
+            st.link_button("Pay $14.99/month - Higher Priority + New Features", PAYMENT_LINK_PREMIUM, type="primary", use_container_width=True)
 
-# 聊天部分保持不变
+# 聊天部分
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -64,12 +74,14 @@ if prompt := st.chat_input("Ask me anything..."):
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
-                if model_choice == "智谱AI (GLM-4)":
-                    client = zhipu_client
-                    model_name = "glm-4"
-                else:
+                if "DeepSeek" in model_choice:
                     client = deepseek_client
                     model_name = "deepseek-chat"
+                    model_display = "DeepSeek"
+                else:
+                    client = zhipu_client
+                    model_name = "glm-4"
+                    model_display = "智谱AI"
 
                 response = client.chat.completions.create(
                     model=model_name,
