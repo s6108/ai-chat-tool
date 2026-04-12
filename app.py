@@ -1,6 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 
+# 支付链接（美元版）
 PAYMENT_LINK = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"
 
 zhipu_client = OpenAI(
@@ -13,10 +14,10 @@ deepseek_client = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
-st.set_page_config(page_title="AI聊天工具", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="AI Chat Tool", page_icon="🤖", layout="centered")
 
-st.title("🤖 AI聊天工具")
-st.markdown("**智谱AI + DeepSeek** · 低成本 · 高性能 · 连续对话")
+st.title("🤖 AI Chat Tool")
+st.markdown("**Zhipu AI + DeepSeek** · Low Cost · High Performance · Continuous Chat")
 
 if "is_premium" not in st.session_state:
     st.session_state.is_premium = False
@@ -25,28 +26,29 @@ if "daily_tokens" not in st.session_state:
     st.session_state.daily_tokens = 0
 
 with st.sidebar:
-    st.header("⚙️ 设置")
-    model_choice = st.radio("选择模型", ["智谱AI (GLM-4)", "DeepSeek"], index=0)
-    temperature = st.slider("创意度", 0.0, 1.0, 0.7, 0.1)
+    st.header("⚙️ Settings")
+    model_choice = st.radio("Select Model", ["智谱AI (GLM-4)", "DeepSeek"], index=0)
+    temperature = st.slider("Creativity", 0.0, 1.0, 0.7, 0.1)
 
     st.markdown("---")
-    if st.button("🗑️ 清空聊天记录", use_container_width=True):
+    if st.button("🗑️ Clear Chat History", use_container_width=True):
         st.session_state.messages = []
-        st.success("聊天记录已清空")
+        st.success("Chat history cleared")
 
 if st.session_state.is_premium:
-    st.success("✅ 您是付费用户 · 享受无限使用")
+    st.success("✅ You are a Premium User · Unlimited Access")
 else:
-    st.info(f"免费用户 · 今日已用约 {st.session_state.daily_tokens//1000}k Token")
+    st.info(f"Free User · Used ~ {st.session_state.daily_tokens//1000}k tokens today")
     st.markdown("---")
-    if st.button("🚀 升级为付费用户（每月 ¥6.99）", type="primary", use_container_width=True):
+    if st.button("🚀 Upgrade to Premium ($6.99/month)", type="primary", use_container_width=True):
         st.link_button(
-            label="立即支付解锁无限使用",
+            label="Pay $6.99/month - Unlock Unlimited Usage",
             url=PAYMENT_LINK,
             type="primary",
             use_container_width=True
         )
 
+# 聊天部分
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -54,13 +56,13 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("输入你的问题..."):
+if prompt := st.chat_input("Ask me anything..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("AI思考中..."):
+        with st.spinner("Thinking..."):
             try:
                 if model_choice == "智谱AI (GLM-4)":
                     client = zhipu_client
@@ -83,9 +85,9 @@ if prompt := st.chat_input("输入你的问题..."):
                 st.session_state.messages.append({"role": "assistant", "content": answer})
 
                 if not st.session_state.is_premium and st.session_state.daily_tokens > 80000:
-                    st.warning("免费额度即将用完！点击上方按钮升级付费版")
+                    st.warning("Free quota is almost used up! Upgrade to enjoy unlimited access.")
 
             except Exception as e:
-                st.error(f"调用失败: {str(e)}")
+                st.error(f"Error: {str(e)}")
 
-st.caption("Powered by 智谱AI & DeepSeek | 已部署到海外")
+st.caption("Powered by Zhipu AI & DeepSeek | Deployed Overseas")
