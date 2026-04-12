@@ -44,11 +44,14 @@ if st.session_state.is_premium:
     st.success("✅ 您是付费用户 · 享受无限使用")
 else:
     st.info(f"免费用户 · 今日已用约 {st.session_state.daily_tokens//1000}k Token")
-    st.markdown("---")
+     st.markdown("---")
     if st.button("🚀 升级为付费用户（每月 ¥6.99）", type="primary", use_container_width=True):
-        st.markdown(f"[立即支付解锁无限使用]({PAYMENT_LINK})")
-        st.success("正在跳转支付页面...")
-
+        st.link_button(
+            label="立即支付解锁无限使用",
+            url=PAYMENT_LINK,
+            type="primary",
+            use_container_width=True
+        )
 # 聊天历史
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -93,3 +96,4 @@ if prompt := st.chat_input("输入你的问题..."):
                 st.error(f"调用失败: {str(e)}")
 
 st.caption("Powered by 智谱AI & DeepSeek | 已部署到海外")
+st.caption(...) 之前，保持其他代码不变。
