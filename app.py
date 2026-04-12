@@ -1,7 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 
-# 从 Streamlit Secrets 读取 API Key（云端部署必须用这个）
+# 从 Streamlit Secrets 读取 API Key（云端必须用这个方式）
 zhipu_client = OpenAI(
     api_key=st.secrets["ZHIPU_API_KEY"],
     base_url="https://open.bigmodel.cn/api/paas/v4/"
@@ -13,11 +13,7 @@ deepseek_client = OpenAI(
 )
 
 # 页面配置
-st.set_page_config(
-    page_title="我的AI聊天工具",
-    page_icon="🤖",
-    layout="centered"
-)
+st.set_page_config(page_title="我的AI聊天工具", page_icon="🤖", layout="centered")
 
 st.title("🤖 我的AI聊天工具")
 st.markdown("**支持智谱AI (GLM) 和 DeepSeek · 低成本 · 高性能**")
@@ -25,21 +21,10 @@ st.markdown("**支持智谱AI (GLM) 和 DeepSeek · 低成本 · 高性能**")
 # 侧边栏
 with st.sidebar:
     st.header("⚙️ 模型设置")
-    model_choice = st.radio(
-        "选择AI模型",
-        options=["智谱AI (GLM-4)", "DeepSeek"],
-        index=0
-    )
+    model_choice = st.radio("选择AI模型", ["智谱AI (GLM-4)", "DeepSeek"], index=0)
     
-    temperature = st.slider(
-        "创意度 (Temperature)",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.7,
-        step=0.1
-    )
-    
-    st.markdown("---")
+    temperature = st.slider("创意度 (Temperature)", 0.0, 1.0, 0.7, 0.1)
+
     if st.button("🗑️ 清空聊天记录", use_container_width=True):
         st.session_state.messages = []
         st.success("聊天记录已清空！")
@@ -49,9 +34,9 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # 显示历史消息
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
 # 用户输入
 if prompt := st.chat_input("在这里输入你的问题..."):
