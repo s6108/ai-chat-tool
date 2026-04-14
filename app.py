@@ -28,10 +28,10 @@ qwen_client = OpenAI(
 )
 
 # ==================== 支付链接 ====================
-PAYMENT_LINK_BASIC = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"   # $9.99 基础版
-PAYMENT_LINK_PREMIUM = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a"   # $14.99 高级版
+PAYMENT_LINK_BASIC = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"
+PAYMENT_LINK_PREMIUM = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a"
 
-# 页面配置 + 美化
+# 页面配置
 st.set_page_config(
     page_title="AI Chat Tool",
     page_icon="🤖",
@@ -44,6 +44,14 @@ st.markdown("""
 **Zhipu AI + DeepSeek + Kimi + Doubao + Qwen**  
 Low Cost · High Performance · Continuous Chat / 低成本 · 高性能 · 连续对话
 """)
+
+# 初始化 session_state（提前初始化，避免 AttributeError）
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "is_premium" not in st.session_state:
+    st.session_state.is_premium = False
+if "daily_tokens" not in st.session_state:
+    st.session_state.daily_tokens = 0
 
 # 侧边栏
 with st.sidebar:
@@ -87,10 +95,7 @@ model_map = {
 
 client, model_name, display_name = model_map[model_option]
 
-# 付费状态和升级按钮（始终显示）
-if "is_premium" not in st.session_state:
-    st.session_state.is_premium = False
-
+# 付费状态和升级按钮
 if st.session_state.is_premium:
     st.success("✅ You are a Premium User · Unlimited Access / 您是付费用户 · 无限使用")
 else:
@@ -114,9 +119,6 @@ else:
         )
 
 # 聊天逻辑
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -139,6 +141,7 @@ if prompt := st.chat_input("Ask me anything... / 输入你的问题..."):
                 answer = response.choices[0].message.content
                 st.markdown(answer)
                 st.session_state.messages.append({"role": "assistant", "content": answer})
+                st.session_state.daily_tokens += len(prompt) * 2 + len(answer)
             except Exception as e:
                 st.error(f"{display_name} 调用失败: {str(e)}")
 
