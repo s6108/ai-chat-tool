@@ -89,14 +89,15 @@ model_map = {
         (kimi_client, "kimi-k2.5", "Kimi"),
     
     "豆包-Pro (Powerful) / 豆包-Pro（能力强）": 
-        (doubao_client, "Doubao-Seed-2.0-pro", "豆包-Pro"),
+        (doubao_client, "ep-20260415022601-jm5b7", "豆包-Pro"),
     
     "豆包-Lite (Fast & Cheap) / 豆包-Lite（更快更省）": 
-        (doubao_client, "Doubao-Seed-2.0-lite", "豆包-Lite"),
+        (doubao_client, "ep-20260415023354-lx4bm", "豆包-Lite"),
     
     "通义千问 (Balanced) / 通义千问（综合均衡）": 
         (qwen_client, "qwen3.6-plus", "通义千问")
 }
+
 
 client, model_name, display_name = model_map[model_option]
 
