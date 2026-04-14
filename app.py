@@ -1,7 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 
-# ==================== 从 st.secrets 读取 API Keys ====================
+# ==================== API Keys from st.secrets ====================
 zhipu_client = OpenAI(
     api_key=st.secrets["ZHIPU_API_KEY"],
     base_url="https://open.bigmodel.cn/api/paas/v4/"
@@ -27,11 +27,23 @@ qwen_client = OpenAI(
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 
-# 页面配置
-st.set_page_config(page_title="AI Chat Tool", page_icon="🤖", layout="centered")
+# ==================== 支付链接 ====================
+PAYMENT_LINK_BASIC = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"   # $9.99 基础版
+PAYMENT_LINK_PREMIUM = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a"   # $14.99 高级版
+
+# 页面配置 + 美化
+st.set_page_config(
+    page_title="AI Chat Tool",
+    page_icon="🤖",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 
 st.title("🤖 AI Chat Tool / 多模型AI聊天工具")
-st.markdown("**Zhipu AI + DeepSeek + Kimi + Doubao + Qwen** · Low Cost · High Performance · Continuous Chat")
+st.markdown("""
+**Zhipu AI + DeepSeek + Kimi + Doubao + Qwen**  
+Low Cost · High Performance · Continuous Chat / 低成本 · 高性能 · 连续对话
+""")
 
 # 侧边栏
 with st.sidebar:
@@ -57,28 +69,49 @@ with st.sidebar:
         st.session_state.messages = []
         st.success("Chat history cleared / 已清空")
 
-# 模型映射（已修复 Kimi temperature 问题）
+# 模型映射
 model_map = {
     "DeepSeek (Recommended - Cheaper & Fast) / DeepSeek（推荐 - 性价比最高）": 
         (deepseek_client, "deepseek-chat", "DeepSeek"),
-    
     "智谱 GLM-4 (Natural Chinese) / 智谱 GLM-4（中文对话自然）": 
         (zhipu_client, "glm-4", "智谱AI"),
-    
     "Kimi (Strong Long Context) / Kimi（超长上下文强）": 
         (kimi_client, "kimi-k2.5", "Kimi"),
-    
     "豆包-Pro (Powerful) / 豆包-Pro（能力强）": 
         (doubao_client, "Doubao-Seed-2.0-pro", "豆包-Pro"),
-    
     "豆包-Lite (Fast & Cheap) / 豆包-Lite（更快更省）": 
         (doubao_client, "Doubao-Seed-2.0-lite", "豆包-Lite"),
-    
     "通义千问 (Balanced) / 通义千问（综合均衡）": 
         (qwen_client, "qwen3.6-plus", "通义千问")
 }
 
 client, model_name, display_name = model_map[model_option]
+
+# 付费状态和升级按钮（始终显示）
+if "is_premium" not in st.session_state:
+    st.session_state.is_premium = False
+
+if st.session_state.is_premium:
+    st.success("✅ You are a Premium User · Unlimited Access / 您是付费用户 · 无限使用")
+else:
+    st.info(f"Free User · Used ~ {st.session_state.daily_tokens//1000}k tokens today / 免费用户 · 今日已用约 {st.session_state.daily_tokens//1000}k tokens")
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.link_button(
+            label="Upgrade Basic ($9.99/month) / 升级基础版 ($9.99/月)",
+            url=PAYMENT_LINK_BASIC,
+            type="primary",
+            use_container_width=True
+        )
+    with col2:
+        st.link_button(
+            label="Upgrade Premium ($14.99/month) / 升级高级版 ($14.99/月)",
+            url=PAYMENT_LINK_PREMIUM,
+            type="secondary",
+            use_container_width=True
+        )
 
 # 聊天逻辑
 if "messages" not in st.session_state:
@@ -96,9 +129,7 @@ if prompt := st.chat_input("Ask me anything... / 输入你的问题..."):
     with st.chat_message("assistant"):
         with st.spinner(f"{display_name} is thinking... / {display_name} 正在思考..."):
             try:
-                # Kimi 特殊处理：只允许 temperature = 1.0
                 temp = 1.0 if "Kimi" in display_name else temperature
-
                 response = client.chat.completions.create(
                     model=model_name,
                     messages=st.session_state.messages,
