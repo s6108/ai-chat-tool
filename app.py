@@ -81,14 +81,19 @@ with st.sidebar:
 model_map = {
     "DeepSeek (Recommended - Cheaper & Fast) / DeepSeek（推荐 - 性价比最高）": 
         (deepseek_client, "deepseek-chat", "DeepSeek"),
+    
     "智谱 GLM-4 (Natural Chinese) / 智谱 GLM-4（中文对话自然）": 
         (zhipu_client, "glm-4", "智谱AI"),
+    
     "Kimi (Strong Long Context) / Kimi（超长上下文强）": 
         (kimi_client, "kimi-k2.5", "Kimi"),
+    
     "豆包-Pro (Powerful) / 豆包-Pro（能力强）": 
         (doubao_client, "Doubao-Seed-2.0-pro", "豆包-Pro"),
+    
     "豆包-Lite (Fast & Cheap) / 豆包-Lite（更快更省）": 
         (doubao_client, "Doubao-Seed-2.0-lite", "豆包-Lite"),
+    
     "通义千问 (Balanced) / 通义千问（综合均衡）": 
         (qwen_client, "qwen3.6-plus", "通义千问")
 }
