@@ -1,9 +1,8 @@
 import streamlit as st
 from openai import OpenAI
 
-# 支付链接（请确认你的 Lemon Squeezy 链接是否已更新为 $9.99 和 $14.99）
-PAYMENT_LINK_BASIC = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"   # $9.99 基础版
-PAYMENT_LINK_PREMIUM = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/你的高级版链接"   # ← 这里填 $14.99 高级版的支付链接
+# ==================== 从 Streamlit Secrets 读取 API Keys ====================
+# 注意：这些 Key 不要写在代码里！请在 Streamlit Cloud 的 Secrets 中设置
 
 zhipu_client = OpenAI(
     api_key=st.secrets["ZHIPU_API_KEY"],
@@ -15,50 +14,61 @@ deepseek_client = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
+kimi_client = OpenAI(
+    api_key=st.secrets["KIMI_API_KEY"],
+    base_url="https://api.moonshot.cn/v1"
+)
+
+doubao_client = OpenAI(
+    api_key=st.secrets["DOUBAO_API_KEY"],
+    base_url="https://ark.cn-beijing.volces.com/api/v3"
+)
+
+qwen_client = OpenAI(
+    api_key=st.secrets["DASHSCOPE_API_KEY"],
+    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+)
+
+# 页面配置
 st.set_page_config(page_title="AI Chat Tool", page_icon="🤖", layout="centered")
 
-st.title("🤖 AI Chat Tool")
-st.markdown("**Zhipu AI + DeepSeek** · Low Cost · High Performance · Continuous Chat")
+st.title("🤖 多模型 AI 聊天工具")
+st.markdown("**DeepSeek + 智谱 + Kimi + 豆包 + 通义千问** · 低成本 · 高性能 · 多场景适配")
 
-if "is_premium" not in st.session_state:
-    st.session_state.is_premium = False
-
-if "daily_tokens" not in st.session_state:
-    st.session_state.daily_tokens = 0
-
+# 侧边栏模型选择
 with st.sidebar:
-    st.header("⚙️ Settings")
-    
-    # 默认推荐 DeepSeek（成本更低）
-    model_choice = st.radio(
-        "Select Model",
-        ["DeepSeek (Recommended - Cheaper & Fast)", "智谱AI (GLM-4)"],
+    st.header("⚙️ 模型选择")
+    model_option = st.radio(
+        "选择模型",
+        options=[
+            "DeepSeek (推荐 - 性价比最高)",
+            "智谱 GLM-4 (中文对话自然)",
+            "Kimi (超长上下文强)",
+            "豆包 (速度快、创意好)",
+            "通义千问 (综合能力均衡)"
+        ],
         index=0
     )
-    
-    temperature = st.slider("Creativity", 0.0, 1.0, 0.7, 0.1)
+
+    temperature = st.slider("创意度", 0.0, 1.0, 0.7, 0.1)
 
     st.markdown("---")
-    if st.button("🗑️ Clear Chat History", use_container_width=True):
+    if st.button("🗑️ 清空聊天记录", use_container_width=True):
         st.session_state.messages = []
-        st.success("Chat history cleared")
+        st.success("已清空")
 
-# 付费状态显示
-if st.session_state.is_premium:
-    st.success("✅ You are a Premium User · Unlimited Access")
-else:
-    st.info(f"Free User · Used ~ {st.session_state.daily_tokens//1000}k tokens today")
-    st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Upgrade Basic ($9.99/month)", type="primary", use_container_width=True):
-            st.link_button("Pay $9.99/month - Unlimited Usage", PAYMENT_LINK_BASIC, type="primary", use_container_width=True)
-    with col2:
-        if st.button("Upgrade Premium ($14.99/month)", type="secondary", use_container_width=True):
-            st.link_button("Pay $14.99/month - Higher Priority + New Features", PAYMENT_LINK_PREMIUM, type="primary", use_container_width=True)
+# 模型映射
+model_map = {
+    "DeepSeek (推荐 - 性价比最高)": (deepseek_client, "deepseek-chat", "DeepSeek"),
+    "智谱 GLM-4 (中文对话自然)": (zhipu_client, "glm-4", "智谱AI"),
+    "Kimi (超长上下文强)": (kimi_client, "kimi-k2.5", "Kimi"),
+    "豆包 (速度快、创意好)": (doubao_client, "doubao-1-5-pro-32k", "豆包"),
+    "通义千问 (综合能力均衡)": (qwen_client, "qwen3.6-plus", "通义千问")
+}
 
-# 聊天部分
+client, model_name, display_name = model_map[model_option]
+
+# 聊天逻辑
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -66,23 +76,14 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("Ask me anything..."):
+if prompt := st.chat_input("输入你的问题..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner(f"{display_name} 正在思考..."):
             try:
-                if "DeepSeek" in model_choice:
-                    client = deepseek_client
-                    model_name = "deepseek-chat"
-                    model_display = "DeepSeek"
-                else:
-                    client = zhipu_client
-                    model_name = "glm-4"
-                    model_display = "智谱AI"
-
                 response = client.chat.completions.create(
                     model=model_name,
                     messages=st.session_state.messages,
@@ -90,16 +91,9 @@ if prompt := st.chat_input("Ask me anything..."):
                     max_tokens=1024
                 )
                 answer = response.choices[0].message.content
-
-                st.session_state.daily_tokens += len(prompt) * 2 + len(answer)
-
                 st.markdown(answer)
                 st.session_state.messages.append({"role": "assistant", "content": answer})
-
-                if not st.session_state.is_premium and st.session_state.daily_tokens > 80000:
-                    st.warning("Free quota is almost used up! Upgrade for unlimited access.")
-
             except Exception as e:
-                st.error(f"Error: {str(e)}")
+                st.error(f"{display_name} 调用失败: {str(e)}")
 
-st.caption("Powered by Zhipu AI & DeepSeek | Deployed Overseas")
+st.caption("Powered by 中国多模型 · 已部署到海外")
