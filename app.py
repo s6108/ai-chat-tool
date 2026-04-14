@@ -1,9 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 
-# ==================== 从 Streamlit Secrets 读取 API Keys ====================
-# 注意：这些 Key 不要写在代码里！请在 Streamlit Cloud 的 Secrets 中设置
-
+# ==================== 从 st.secrets 读取 API Keys ====================
 zhipu_client = OpenAI(
     api_key=st.secrets["ZHIPU_API_KEY"],
     base_url="https://open.bigmodel.cn/api/paas/v4/"
@@ -32,38 +30,52 @@ qwen_client = OpenAI(
 # 页面配置
 st.set_page_config(page_title="AI Chat Tool", page_icon="🤖", layout="centered")
 
-st.title("🤖 多模型 AI 聊天工具")
-st.markdown("**DeepSeek + 智谱 + Kimi + 豆包 + 通义千问** · 低成本 · 高性能 · 多场景适配")
+st.title("🤖 AI Chat Tool / 多模型AI聊天工具")
+st.markdown("**Zhipu AI + DeepSeek + Kimi + Doubao + Qwen** · Low Cost · High Performance · Continuous Chat")
 
-# 侧边栏模型选择
+# 侧边栏
 with st.sidebar:
-    st.header("⚙️ 模型选择")
+    st.header("⚙️ Settings / 设置")
+    
     model_option = st.radio(
-        "选择模型",
+        "Select Model / 选择模型",
         options=[
-            "DeepSeek (推荐 - 性价比最高)",
-            "智谱 GLM-4 (中文对话自然)",
-            "Kimi (超长上下文强)",
-            "豆包 (速度快、创意好)",
-            "通义千问 (综合能力均衡)"
+            "DeepSeek (Recommended - Cheaper & Fast) / DeepSeek（推荐 - 性价比最高）",
+            "智谱 GLM-4 (Natural Chinese) / 智谱 GLM-4（中文对话自然）",
+            "Kimi (Strong Long Context) / Kimi（超长上下文强）",
+            "豆包-Pro (Powerful) / 豆包-Pro（能力强）",
+            "豆包-Lite (Fast & Cheap) / 豆包-Lite（更快更省）",
+            "通义千问 (Balanced) / 通义千问（综合均衡）"
         ],
         index=0
     )
 
-    temperature = st.slider("创意度", 0.0, 1.0, 0.7, 0.1)
+    temperature = st.slider("Creativity / 创意度", 0.0, 1.0, 0.7, 0.1)
 
     st.markdown("---")
-    if st.button("🗑️ 清空聊天记录", use_container_width=True):
+    if st.button("🗑️ Clear Chat History / 清空聊天记录", use_container_width=True):
         st.session_state.messages = []
-        st.success("已清空")
+        st.success("Chat history cleared / 已清空")
 
-# 模型映射
+# 模型映射（已修复 Kimi temperature 问题）
 model_map = {
-    "DeepSeek (推荐 - 性价比最高)": (deepseek_client, "deepseek-chat", "DeepSeek"),
-    "智谱 GLM-4 (中文对话自然)": (zhipu_client, "glm-4", "智谱AI"),
-    "Kimi (超长上下文强)": (kimi_client, "kimi-k2.5", "Kimi"),
-    "豆包 (速度快、创意好)": (doubao_client, "doubao-1-5-pro-32k", "豆包"),
-    "通义千问 (综合能力均衡)": (qwen_client, "qwen3.6-plus", "通义千问")
+    "DeepSeek (Recommended - Cheaper & Fast) / DeepSeek（推荐 - 性价比最高）": 
+        (deepseek_client, "deepseek-chat", "DeepSeek"),
+    
+    "智谱 GLM-4 (Natural Chinese) / 智谱 GLM-4（中文对话自然）": 
+        (zhipu_client, "glm-4", "智谱AI"),
+    
+    "Kimi (Strong Long Context) / Kimi（超长上下文强）": 
+        (kimi_client, "kimi-k2.5", "Kimi"),
+    
+    "豆包-Pro (Powerful) / 豆包-Pro（能力强）": 
+        (doubao_client, "Doubao-Seed-2.0-pro", "豆包-Pro"),
+    
+    "豆包-Lite (Fast & Cheap) / 豆包-Lite（更快更省）": 
+        (doubao_client, "Doubao-Seed-2.0-lite", "豆包-Lite"),
+    
+    "通义千问 (Balanced) / 通义千问（综合均衡）": 
+        (qwen_client, "qwen3.6-plus", "通义千问")
 }
 
 client, model_name, display_name = model_map[model_option]
@@ -76,18 +88,21 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("输入你的问题..."):
+if prompt := st.chat_input("Ask me anything... / 输入你的问题..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner(f"{display_name} 正在思考..."):
+        with st.spinner(f"{display_name} is thinking... / {display_name} 正在思考..."):
             try:
+                # Kimi 特殊处理：只允许 temperature = 1.0
+                temp = 1.0 if "Kimi" in display_name else temperature
+
                 response = client.chat.completions.create(
                     model=model_name,
                     messages=st.session_state.messages,
-                    temperature=temperature,
+                    temperature=temp,
                     max_tokens=1024
                 )
                 answer = response.choices[0].message.content
@@ -96,4 +111,4 @@ if prompt := st.chat_input("输入你的问题..."):
             except Exception as e:
                 st.error(f"{display_name} 调用失败: {str(e)}")
 
-st.caption("Powered by 中国多模型 · 已部署到海外")
+st.caption("Powered by Chinese Multi-Models · Deployed Overseas / 由中国多模型驱动 · 已部署到海外")
