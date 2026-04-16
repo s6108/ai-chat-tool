@@ -3,22 +3,11 @@ import streamlit as st
 st.set_page_config(
     page_title="Mango AI",
     page_icon="🥭",
-    layout="centered",
-    initial_sidebar_state="expanded"
+    layout="centered"
 )
 
-# 极简可靠的背景（减少卸载时白屏风险）
-st.markdown("""
-<style>
-    .main {
-        background: #FFF8E1;
-    }
-    .stChatMessage {
-        border-radius: 18px;
-        padding: 14px 18px;
-    }
-</style>
-""", unsafe_allow_html=True)
+# 极简背景
+st.markdown("<style>.main {background: #FFF8E1;}</style>", unsafe_allow_html=True)
 
 # 初始化
 if "messages" not in st.session_state:
@@ -32,7 +21,6 @@ with st.sidebar:
     model_options = ["DeepSeek", "智谱 GLM-4", "Kimi", "豆包-Pro", "豆包-Lite", "通义千问"]
     selected_model = st.radio("选择模型", model_options, label_visibility="collapsed")
     
-    st.divider()
     if st.button("🗑️ 清空聊天", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
@@ -41,7 +29,7 @@ with st.sidebar:
 st.title("🥭 Mango AI")
 st.caption("Zhipu + DeepSeek + Kimi + Doubao + Qwen\n低成本 · 高性能 · 连续对话")
 
-# 支付按钮（使用 st.link_button，最稳定跳转方式）
+# 支付按钮（最稳定方式）
 col1, col2 = st.columns(2)
 
 with col1:
