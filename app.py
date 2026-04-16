@@ -55,14 +55,7 @@ with st.sidebar:
     st.markdown("### 🥭 Mango AI")
     st.caption("多模型 AI 聊天工具")
     
-    model_options = [
-        "DeepSeek",
-        "智谱 GLM-4",
-        "Kimi",
-        "豆包-Pro",
-        "豆包-Lite",
-        "通义千问"
-    ]
+    model_options = ["DeepSeek", "智谱 GLM-4", "Kimi", "豆包-Pro", "豆包-Lite", "通义千问"]
     selected_model = st.radio("选择模型", model_options, label_visibility="collapsed")
     
     st.divider()
@@ -74,22 +67,22 @@ with st.sidebar:
 st.markdown('<h1 style="text-align: center; color: #FF9800;">🥭 Mango AI</h1>', unsafe_allow_html=True)
 st.markdown('<p style="text-align: center; color: #666;">Zhipu + DeepSeek + Kimi + Doubao + Qwen<br>低成本 · 高性能 · 连续对话</p >', unsafe_allow_html=True)
 
-# ==================== 升级按钮（使用 JS 强制外部浏览器打开） ====================
+# ==================== 支付按钮（JS 强制外部浏览器打开） ====================
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown(f'''
-        <a href=" " target="_blank" 
-           onclick="window.open(this.href, '_system'); return false;"
+    st.markdown('''
+        <a href=" " 
+           target="_blank" onclick="window.open(this.href, '_system'); return false;" 
            style="text-decoration: none;">
             <button class="custom-btn base-btn">🚀 升级基础版 ($9.99/月)</button>
         </a >
     ''', unsafe_allow_html=True)
 
 with col2:
-    st.markdown(f'''
-        <a href="你的高级版支付链接" target="_blank" 
-           onclick="window.open(this.href, '_system'); return false;"
+    st.markdown('''
+        <a href="https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a" 
+           target="_blank" onclick="window.open(this.href, '_system'); return false;" 
            style="text-decoration: none;">
             <button class="custom-btn premium-btn">⭐ 升级高级版 ($14.99/月)</button>
         </a >
