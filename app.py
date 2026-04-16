@@ -7,35 +7,39 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==================== CSS 美化（重点修复） ====================
+# ==================== CSS 美化 - 加强按钮颜色优先级 ====================
 st.markdown("""
 <style>
     .main {
         background: linear-gradient(135deg, #FFF8E1 0%, #FFFCF5 100%);
     }
     
-    /* 升级按钮 - 基础版浅橙色 */
-    .stButton button[key="base"] {
+    /* 基础版按钮 - 浅橙色 */
+    button[key="base"], button[data-testid="base"] {
         background: linear-gradient(90deg, #FFCC33, #FFAA00) !important;
         color: #333 !important;
-        font-weight: bold;
-        border-radius: 12px;
+        font-weight: bold !important;
+        border-radius: 12px !important;
         border: none !important;
+        box-shadow: 0 4px 12px rgba(255, 204, 51, 0.3) !important;
     }
-    .stButton button[key="base"]:hover {
+    button[key="base"]:hover, button[data-testid="base"]:hover {
         background: linear-gradient(90deg, #FFDD55, #FFBB22) !important;
+        transform: translateY(-2px);
     }
     
-    /* 升级按钮 - 高级版深橙色 */
-    .stButton button[key="premium"] {
+    /* 高级版按钮 - 深橙色 */
+    button[key="premium"], button[data-testid="premium"] {
         background: linear-gradient(90deg, #FF7700, #FF5500) !important;
         color: white !important;
-        font-weight: bold;
-        border-radius: 12px;
+        font-weight: bold !important;
+        border-radius: 12px !important;
         border: none !important;
+        box-shadow: 0 4px 12px rgba(255, 119, 0, 0.4) !important;
     }
-    .stButton button[key="premium"]:hover {
+    button[key="premium"]:hover, button[data-testid="premium"]:hover {
         background: linear-gradient(90deg, #FF8800, #FF6600) !important;
+        transform: translateY(-2px);
     }
     
     /* 聊天气泡 */
@@ -51,12 +55,6 @@ st.markdown("""
         background: white !important;
         border: 1px solid #FFEECC;
     }
-    
-    .header-title {
-        font-size: 32px;
-        font-weight: bold;
-        color: #FF9800;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -68,7 +66,7 @@ if "is_premium" not in st.session_state:
 if "daily_tokens" not in st.session_state:
     st.session_state.daily_tokens = 0
 
-# ==================== 侧边栏 - 恢复模型选择 ====================
+# ==================== 侧边栏 ====================
 with st.sidebar:
     st.markdown("### 🥭 Mango AI")
     st.caption("多模型 AI 聊天工具")
@@ -82,10 +80,10 @@ with st.sidebar:
         st.rerun()
 
 # ==================== 主界面 ====================
-st.markdown('<h1 class="header-title" style="text-align: center;">🥭 Mango AI</h1>', unsafe_allow_html=True)
+st.markdown('<h1 style="text-align: center; color: #FF9800;">🥭 Mango AI</h1>', unsafe_allow_html=True)
 st.markdown('<p style="text-align: center; color: #666;">Zhipu + DeepSeek + Kimi + Doubao + Qwen<br>低成本 · 高性能 · 连续对话</p >', unsafe_allow_html=True)
 
-# 升级按钮（使用 key 来精准控制颜色）
+# 升级按钮（使用 key 精准控制）
 col1, col2 = st.columns(2)
 
 with col1:
@@ -96,7 +94,7 @@ with col2:
 
 st.divider()
 
-# 聊天区
+# 聊天记录
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.chat_message("user").markdown(msg["content"])
