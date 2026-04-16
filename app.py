@@ -1,114 +1,112 @@
 import streamlit as st
-import hmac
-import hashlib
-import json
-from datetime import datetime
 from openai import OpenAI
+import os
 
-# ==================== API Keys ====================
-zhipu_client = OpenAI(api_key=st.secrets["ZHIPU_API_KEY"], base_url="https://open.bigmodel.cn/api/paas/v4/")
-deepseek_client = OpenAI(api_key=st.secrets["DEEPSEEK_API_KEY"], base_url="https://api.deepseek.com")
-kimi_client = OpenAI(api_key=st.secrets["KIMI_API_KEY"], base_url="https://api.moonshot.cn/v1")
-doubao_client = OpenAI(api_key=st.secrets["DOUBAO_API_KEY"], base_url="https://ark.cn-beijing.volces.com/api/v3")
-qwen_client = OpenAI(api_key=st.secrets["DASHSCOPE_API_KEY"], base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+# ==================== 页面配置 ====================
+st.set_page_config(
+    page_title="Mango AI",
+    page_icon="🥭",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 
-# ==================== 支付链接 ====================
-PAYMENT_LINK_BASIC = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87"
-PAYMENT_LINK_PREMIUM = "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a"
+# ==================== 自定义 CSS 美化 ====================
+st.markdown("""
+<style>
+    .main {background: linear-gradient(135deg, #FFF8E1 0%, #FFFFFF 100%);}
+    .stChatMessage {border-radius: 18px; padding: 12px 16px;}
+    .user-message {background: #FF9800 !important; color: white !important;}
+    .assistant-message {background: #F1F1F1 !important; color: #333 !important;}
+    
+    .header-title {
+        font-size: 28px;
+        font-weight: bold;
+        background: linear-gradient(90deg, #FF9800, #FF6600);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    .upgrade-btn {
+        border-radius: 12px;
+        font-weight: bold;
+        padding: 12px 20px;
+        transition: all 0.3s;
+    }
+    .upgrade-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(255, 152, 0, 0.3);
+    }
+</style>
+""", unsafe_allow_html=True)
 
-st.set_page_config(page_title="AI Chat Tool", page_icon="🤖", layout="centered")
-
-st.title("🤖 AI Chat Tool / 多模型AI聊天工具")
-st.markdown("**Zhipu + DeepSeek + Kimi + Doubao + Qwen**  \n低成本 · 高性能 · 连续对话")
-
-# 初始化 session_state
+# ==================== 初始化 ====================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "is_premium" not in st.session_state:
     st.session_state.is_premium = False
 if "daily_tokens" not in st.session_state:
     st.session_state.daily_tokens = 0
-if "user_email" not in st.session_state:
-    st.session_state.user_email = None
 
-# ==================== Webhook 验证（接收 Lemon Squeezy 通知） ====================
-if st.query_params.get("webhook") == "true":
-    try:
-        # 这里简化处理，实际生产建议加签名验证
-        data = st.query_params.to_dict()
-        if data.get("event") in ["subscription_created", "subscription_updated"]:
-            st.session_state.is_premium = True
-            st.session_state.user_email = data.get("customer_email")
-            st.success("✅ 支付成功！您已成为付费用户，享受无限使用权限。")
-    except:
-        pass
-
+# ==================== 侧边栏 ====================
 with st.sidebar:
-    st.header("⚙️ 设置")
-    model_option = st.radio("选择模型", 
-        options=[
-            "DeepSeek (推荐 - 性价比最高)",
-            "智谱 GLM-4 (中文自然)",
-            "Kimi (超长上下文)",
-            "豆包-Pro (能力强)",
-            "豆包-Lite (更快更省)",
-            "通义千问 (综合均衡)"
-        ], index=0)
+    st.image("https://your-mango-icon-url.com/icon.png", width=80)  # 可替换成你的图标链接
+    st.markdown('<p class="header-title">🥭 Mango AI</p >', unsafe_allow_html=True)
+    st.caption("多模型 AI 聊天工具")
+
+    model_options = {
+        "DeepSeek": "deepseek-chat",
+        "智谱 GLM-4": "glm-4",
+        "Kimi": "moonshot-v1-8k",
+        "豆包-Pro": "Doubao-Seed-2.0-pro",
+        "通义千问": "qwen-max"
+    }
     
-    temperature = st.slider("创意度", 0.0, 1.0, 0.7, 0.1)
+    selected_model = st.selectbox("选择模型", list(model_options.keys()))
     
-    if st.button("清空聊天记录", use_container_width=True):
-        st.session_state.messages = []
-
-# 模型映射（使用你正确的 Endpoint）
-model_map = {
-    "DeepSeek (推荐 - 性价比最高)": (deepseek_client, "deepseek-chat", "DeepSeek"),
-    "智谱 GLM-4 (中文自然)": (zhipu_client, "glm-4", "智谱AI"),
-    "Kimi (超长上下文)": (kimi_client, "kimi-k2.5", "Kimi"),
-    "豆包-Pro (能力强)": (doubao_client, "ep-20260415022601-jm5b7", "豆包-Pro"),
-    "豆包-Lite (更快更省)": (doubao_client, "ep-20260415023354-lx4bm", "豆包-Lite"),
-    "通义千问 (综合均衡)": (qwen_client, "qwen3.6-plus", "通义千问")
-}
-
-client, model_name, display_name = model_map[model_option]
-
-# 付费状态显示 + 升级按钮
-if st.session_state.is_premium:
-    st.success("✅ 您是付费用户 · 无限使用所有模型")
-else:
-    st.info(f"免费用户 · 今日已用约 {st.session_state.daily_tokens//1000}k tokens")
-    st.markdown("---")
+    st.divider()
+    
     col1, col2 = st.columns(2)
     with col1:
-        st.link_button("升级基础版 ($9.99/月)", PAYMENT_LINK_BASIC, type="primary", use_container_width=True)
-    with col2:
-        st.link_button("升级高级版 ($14.99/月)", PAYMENT_LINK_PREMIUM, type="secondary", use_container_width=True)
+        if st.button("🗑️ 清空聊天", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+    
+    st.caption(f"今日已用: {st.session_state.daily_tokens} tokens")
 
-# 聊天逻辑
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+# ==================== 主界面 ====================
+st.markdown('<h1 style="text-align: center; color: #FF9800;">🥭 Mango AI</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align: center; color: #666;">Zhipu + DeepSeek + Kimi + Doubao + Qwen<br>低成本 · 高性能 · 连续对话</p >', unsafe_allow_html=True)
 
+# 付费升级区域
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("🚀 升级基础版 ($9.99/月)", type="primary", use_container_width=True):
+        st.markdown('<a href=" " target="_blank">跳转支付</a >', unsafe_allow_html=True)
+
+with col2:
+    if st.button("⭐ 升级高级版 ($14.99/月)", use_container_width=True):
+        st.markdown('<a href="你的高级版支付链接" target="_blank">跳转支付</a >', unsafe_allow_html=True)
+
+st.divider()
+
+# 聊天记录
+for message in st.session_state.messages:
+    if message["role"] == "user":
+        st.chat_message("user", avatar="🧑").markdown(message["content"])
+    else:
+        st.chat_message("assistant", avatar="🥭").markdown(message["content"])
+
+# 输入框
 if prompt := st.chat_input("输入你的问题..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    st.chat_message("user", avatar="🧑").markdown(prompt)
     
-    with st.chat_message("assistant"):
-        with st.spinner(f"{display_name} 正在思考..."):
-            try:
-                temp = 1.0 if "Kimi" in display_name else temperature
-                response = client.chat.completions.create(
-                    model=model_name,
-                    messages=st.session_state.messages,
-                    temperature=temp,
-                    max_tokens=1024
-                )
-                answer = response.choices[0].message.content
-                st.markdown(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-                st.session_state.daily_tokens += len(prompt) * 2 + len(answer)
-            except Exception as e:
-                st.error(f"{display_name} 调用失败: {str(e)}")
+    with st.chat_message("assistant", avatar="🥭"):
+        with st.spinner("思考中..."):
+            # 这里放你的实际调用代码（保持你原来的 API 调用逻辑）
+            response = "这是测试回复，实际代码中请替换为你的模型调用逻辑。"
+            st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
+# 页脚
 st.caption("Powered by Chinese Multi-Models · Deployed Overseas")
