@@ -7,40 +7,36 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==================== CSS 美化 - 加强按钮颜色优先级 ====================
+# ==================== 加强版 CSS（按钮颜色优先级更高） ====================
 st.markdown("""
 <style>
     .main {
-        background: linear-gradient(135deg, #FFF8E1 0%, #FFFCF5 100%);
+        background: linear-gradient(135deg, #FFF8E1 0%, #FFFCF5 100%) !important;
     }
     
     /* 基础版按钮 - 浅橙色 */
-    button[key="base"], button[data-testid="base"] {
+    button[data-testid="stButton"][aria-label*="基础版"],
+    button[key="base"] {
         background: linear-gradient(90deg, #FFCC33, #FFAA00) !important;
         color: #333 !important;
         font-weight: bold !important;
         border-radius: 12px !important;
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(255, 204, 51, 0.3) !important;
-    }
-    button[key="base"]:hover, button[data-testid="base"]:hover {
-        background: linear-gradient(90deg, #FFDD55, #FFBB22) !important;
-        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(255, 204, 51, 0.4) !important;
     }
     
     /* 高级版按钮 - 深橙色 */
-    button[key="premium"], button[data-testid="premium"] {
+    button[data-testid="stButton"][aria-label*="高级版"],
+    button[key="premium"] {
         background: linear-gradient(90deg, #FF7700, #FF5500) !important;
         color: white !important;
         font-weight: bold !important;
         border-radius: 12px !important;
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(255, 119, 0, 0.4) !important;
+        box-shadow: 0 4px 15px rgba(255, 119, 0, 0.5) !important;
     }
-    button[key="premium"]:hover, button[data-testid="premium"]:hover {
-        background: linear-gradient(90deg, #FF8800, #FF6600) !important;
-        transform: translateY(-2px);
-    }
+    
+    /* 按钮悬停效果 */
+    button[key="base"]:hover { background: linear-gradient(90deg, #FFDD55, #FFBB22) !important; }
+    button[key="premium"]:hover { background: linear-gradient(90deg, #FF8800, #FF6600) !important; }
     
     /* 聊天气泡 */
     .stChatMessage {
@@ -66,12 +62,19 @@ if "is_premium" not in st.session_state:
 if "daily_tokens" not in st.session_state:
     st.session_state.daily_tokens = 0
 
-# ==================== 侧边栏 ====================
+# ==================== 侧边栏 - 恢复所有模型（含豆包-Lite） ====================
 with st.sidebar:
     st.markdown("### 🥭 Mango AI")
     st.caption("多模型 AI 聊天工具")
     
-    model_options = ["DeepSeek", "智谱 GLM-4", "Kimi", "豆包-Pro", "通义千问"]
+    model_options = [
+        "DeepSeek",
+        "智谱 GLM-4",
+        "Kimi",
+        "豆包-Pro",
+        "豆包-Lite",          # 已补回
+        "通义千问"
+    ]
     selected_model = st.radio("选择模型", model_options, label_visibility="collapsed")
     
     st.divider()
@@ -83,7 +86,7 @@ with st.sidebar:
 st.markdown('<h1 style="text-align: center; color: #FF9800;">🥭 Mango AI</h1>', unsafe_allow_html=True)
 st.markdown('<p style="text-align: center; color: #666;">Zhipu + DeepSeek + Kimi + Doubao + Qwen<br>低成本 · 高性能 · 连续对话</p >', unsafe_allow_html=True)
 
-# 升级按钮（使用 key 精准控制）
+# 升级按钮区域
 col1, col2 = st.columns(2)
 
 with col1:
