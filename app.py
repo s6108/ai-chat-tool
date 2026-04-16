@@ -3,42 +3,11 @@ import streamlit as st
 st.set_page_config(
     page_title="Mango AI",
     page_icon="🥭",
-    layout="centered",
-    initial_sidebar_state="expanded"
+    layout="centered"
 )
 
-# CSS 美化
-st.markdown("""
-<style>
-    .main { background: linear-gradient(135deg, #FFF8E1 0%, #FFFCF5 100%) !important; }
-    
-    .custom-btn {
-        border: none !important;
-        border-radius: 12px !important;
-        padding: 14px 24px !important;
-        font-size: 16px !important;
-        font-weight: bold !important;
-        width: 100% !important;
-        margin: 8px 0 !important;
-        cursor: pointer !important;
-        transition: all 0.3s !important;
-    }
-    
-    .base-btn {
-        background: linear-gradient(90deg, #FFCC33, #FFAA00) !important;
-        color: #333 !important;
-        box-shadow: 0 4px 15px rgba(255, 204, 51, 0.4) !important;
-    }
-    .base-btn:hover { background: linear-gradient(90deg, #FFDD55, #FFBB22) !important; }
-    
-    .premium-btn {
-        background: linear-gradient(90deg, #FF7700, #FF5500) !important;
-        color: white !important;
-        box-shadow: 0 4px 15px rgba(255, 119, 0, 0.5) !important;
-    }
-    .premium-btn:hover { background: linear-gradient(90deg, #FF8800, #FF6600) !important; }
-</style>
-""", unsafe_allow_html=True)
+# 简单背景
+st.markdown("<style>.main {background: #FFF8E1;}</style>", unsafe_allow_html=True)
 
 # 初始化
 if "messages" not in st.session_state:
@@ -52,37 +21,24 @@ with st.sidebar:
     model_options = ["DeepSeek", "智谱 GLM-4", "Kimi", "豆包-Pro", "豆包-Lite", "通义千问"]
     selected_model = st.radio("选择模型", model_options, label_visibility="collapsed")
     
-    st.divider()
     if st.button("🗑️ 清空聊天", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
 # 主界面
-st.markdown('<h1 style="text-align: center; color: #FF9800;">🥭 Mango AI</h1>', unsafe_allow_html=True)
-st.markdown('<p style="text-align: center; color: #666;">Zhipu + DeepSeek + Kimi + Doubao + Qwen<br>低成本 · 高性能 · 连续对话</p >', unsafe_allow_html=True)
+st.title("🥭 Mango AI")
+st.caption("Zhipu + DeepSeek + Kimi + Doubao + Qwen\n低成本 · 高性能 · 连续对话")
 
-# ==================== 支付按钮（加强版） ====================
+# 支付按钮 - 使用最简单的方式
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown('''
-        <a href=" " 
-           target="_blank" 
-           onclick="window.open(this.href, '_system'); return false;"
-           style="text-decoration: none;">
-            <button class="custom-btn base-btn">🚀 升级基础版 ($9.99/月)</button>
-        </a >
-    ''', unsafe_allow_html=True)
+    if st.button("🚀 升级基础版 ($9.99/月)", use_container_width=True):
+        st.markdown('[打开支付页面](https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87)', unsafe_allow_html=True)
 
 with col2:
-    st.markdown('''
-        <a href="https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a" 
-           target="_blank" 
-           onclick="window.open(this.href, '_system'); return false;"
-           style="text-decoration: none;">
-            <button class="custom-btn premium-btn">⭐ 升级高级版 ($14.99/月)</button>
-        </a >
-    ''', unsafe_allow_html=True)
+    if st.button("⭐ 升级高级版 ($14.99/月)", use_container_width=True):
+        st.markdown('[打开支付页面](https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a)', unsafe_allow_html=True)
 
 st.divider()
 
