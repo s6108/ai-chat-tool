@@ -7,12 +7,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==================== CSS 美化 ====================
+# CSS 美化
 st.markdown("""
 <style>
-    .main {
-        background: linear-gradient(135deg, #FFF8E1 0%, #FFFCF5 100%) !important;
-    }
+    .main { background: linear-gradient(135deg, #FFF8E1 0%, #FFFCF5 100%) !important; }
     
     .custom-btn {
         border: none !important;
@@ -31,26 +29,22 @@ st.markdown("""
         color: #333 !important;
         box-shadow: 0 4px 15px rgba(255, 204, 51, 0.4) !important;
     }
-    .base-btn:hover {
-        background: linear-gradient(90deg, #FFDD55, #FFBB22) !important;
-    }
+    .base-btn:hover { background: linear-gradient(90deg, #FFDD55, #FFBB22) !important; }
     
     .premium-btn {
         background: linear-gradient(90deg, #FF7700, #FF5500) !important;
         color: white !important;
         box-shadow: 0 4px 15px rgba(255, 119, 0, 0.5) !important;
     }
-    .premium-btn:hover {
-        background: linear-gradient(90deg, #FF8800, #FF6600) !important;
-    }
+    .premium-btn:hover { background: linear-gradient(90deg, #FF8800, #FF6600) !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 初始化 ====================
+# 初始化
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ==================== 侧边栏 ====================
+# 侧边栏
 with st.sidebar:
     st.markdown("### 🥭 Mango AI")
     st.caption("多模型 AI 聊天工具")
@@ -63,17 +57,18 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# ==================== 主界面 ====================
+# 主界面
 st.markdown('<h1 style="text-align: center; color: #FF9800;">🥭 Mango AI</h1>', unsafe_allow_html=True)
 st.markdown('<p style="text-align: center; color: #666;">Zhipu + DeepSeek + Kimi + Doubao + Qwen<br>低成本 · 高性能 · 连续对话</p >', unsafe_allow_html=True)
 
-# ==================== 支付按钮（JS 强制外部浏览器打开） ====================
+# ==================== 支付按钮（加强版） ====================
 col1, col2 = st.columns(2)
 
 with col1:
     st.markdown('''
         <a href=" " 
-           target="_blank" onclick="window.open(this.href, '_system'); return false;" 
+           target="_blank" 
+           onclick="window.open(this.href, '_system'); return false;"
            style="text-decoration: none;">
             <button class="custom-btn base-btn">🚀 升级基础版 ($9.99/月)</button>
         </a >
@@ -82,7 +77,8 @@ with col1:
 with col2:
     st.markdown('''
         <a href="https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a" 
-           target="_blank" onclick="window.open(this.href, '_system'); return false;" 
+           target="_blank" 
+           onclick="window.open(this.href, '_system'); return false;"
            style="text-decoration: none;">
             <button class="custom-btn premium-btn">⭐ 升级高级版 ($14.99/月)</button>
         </a >
@@ -90,7 +86,7 @@ with col2:
 
 st.divider()
 
-# ==================== 聊天区 ====================
+# 聊天区
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.chat_message("user").markdown(msg["content"])
