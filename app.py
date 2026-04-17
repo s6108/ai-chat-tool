@@ -7,34 +7,36 @@ st.set_page_config(
     layout="centered"
 )
 
-# 背景 + 强化按钮颜色
+# 强化按钮颜色（针对 st.link_button）
 st.markdown("""
 <style>
     .main {background: linear-gradient(135deg, #FFF8E1, #FFFCF5) !important;}
     
     /* 基础版按钮 - 浅橙色 */
-    .stButton button[key="base"] {
+    .stLinkButton button[key="base"],
+    button[key="base"] {
         background: linear-gradient(90deg, #FFCC33, #FFAA00) !important;
         color: #000000 !important;
-        font-weight: bold;
-        border-radius: 12px;
+        font-weight: bold !important;
+        border-radius: 12px !important;
         border: none !important;
-        box-shadow: 0 4px 8px rgba(255, 180, 0, 0.3) !important;
+        box-shadow: 0 4px 12px rgba(255, 180, 0, 0.4) !important;
     }
     
     /* 高级版按钮 - 深橙色 */
-    .stButton button[key="premium"] {
+    .stLinkButton button[key="premium"],
+    button[key="premium"] {
         background: linear-gradient(90deg, #FF7700, #FF5500) !important;
         color: white !important;
-        font-weight: bold;
-        border-radius: 12px;
+        font-weight: bold !important;
+        border-radius: 12px !important;
         border: none !important;
-        box-shadow: 0 4px 8px rgba(255, 100, 0, 0.4) !important;
+        box-shadow: 0 4px 12px rgba(255, 100, 0, 0.5) !important;
     }
     
-    .stButton button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.2) !important;
+    .stLinkButton button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.25) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -46,7 +48,7 @@ if "messages" not in st.session_state:
 st.title("🥭 Mango AI")
 st.caption("Zhipu + DeepSeek + Kimi + Doubao + Qwen\n低成本 · 高性能 · 连续对话")
 
-# 付费按钮（直接使用 st.link_button，避免透明过渡）
+# 付费按钮（直接使用 st.link_button）
 col1, col2 = st.columns(2)
 with col1:
     st.link_button(
@@ -77,7 +79,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# 聊天区域
+# 聊天区域（保持不变）
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.chat_message("user").markdown(msg["content"])
