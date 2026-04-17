@@ -23,35 +23,22 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ==================== 安装引导（优化版） ====================
-# PWA 安装引导 - 可靠版（推荐现在用）
-st.markdown("""
-<div style="text-align: center; margin: 15px 0 25px 0; padding: 20px; 
-            background: linear-gradient(135deg, #FFFCF0, #FFE0B2); 
-            border-radius: 16px; border: 2px solid #FF9800;">
-    
-    <p style="margin: 0 0 10px 0; font-size: 18px; color: #E65100; font-weight: bold;">
-        📱 推荐：添加到主屏幕使用
-    </p >
-    
-    <p style="margin: 0 0 18px 0; color: #333; line-height: 1.6;">
-        点击浏览器右上角 <strong>⋮</strong> 菜单<br>
-        选择 <strong>“添加到主屏幕”</strong> 或 <strong>“安装应用”</strong><br>
-        添加后像原生 App 一样使用，关闭时不再白屏！
-    </p >
-
-    <div onclick="window.alert('请点击浏览器右上角 ⋮ → 选择「添加到主屏幕」或「安装应用」');" 
-         style="background: #FF9800; color: white; padding: 14px 30px; border-radius: 50px; 
-                font-size: 16px; font-weight: bold; cursor: pointer; display: inline-block;">
-        📲 点击这里 → 添加到主屏幕
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
 # ==================== 主界面 ====================
 st.title("🥭 Mango AI")
 st.caption("Zhipu + DeepSeek + Kimi + Doubao + Qwen 低成本 · 高性能 · 连续对话")
+# ==================== 安装引导（最稳定版） ====================
+st.info("""
+**📱 推荐：添加到主屏幕使用**
 
+点击浏览器右上角 **⋮** 菜单 → 选择 **“添加到主屏幕”** 或 **“安装应用”**
+
+添加后：
+• 像原生 App 一样打开  
+• 关闭时不再出现白屏  
+• 使用更流畅稳定
+""")
+
+st.caption("💡 小贴士：添加成功后，主屏幕会出现 Mango AI 图标，点击即可直接进入")
 # 付费按钮
 col1, col2 = st.columns(2)
 with col1:
