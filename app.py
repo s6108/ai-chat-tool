@@ -7,25 +7,34 @@ st.set_page_config(
     layout="centered"
 )
 
-# 背景 + 按钮颜色（浅橙 & 深橙）
+# 背景 + 强化按钮颜色
 st.markdown("""
 <style>
     .main {background: linear-gradient(135deg, #FFF8E1, #FFFCF5) !important;}
     
     /* 基础版按钮 - 浅橙色 */
-    button[data-testid="base"] {
+    .stButton button[key="base"] {
         background: linear-gradient(90deg, #FFCC33, #FFAA00) !important;
         color: #000000 !important;
         font-weight: bold;
         border-radius: 12px;
+        border: none !important;
+        box-shadow: 0 4px 8px rgba(255, 180, 0, 0.3) !important;
     }
     
     /* 高级版按钮 - 深橙色 */
-    button[data-testid="premium"] {
+    .stButton button[key="premium"] {
         background: linear-gradient(90deg, #FF7700, #FF5500) !important;
         color: white !important;
         font-weight: bold;
         border-radius: 12px;
+        border: none !important;
+        box-shadow: 0 4px 8px rgba(255, 100, 0, 0.4) !important;
+    }
+    
+    .stButton button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.2) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -34,19 +43,26 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ==================== 主界面 ====================
 st.title("🥭 Mango AI")
 st.caption("Zhipu + DeepSeek + Kimi + Doubao + Qwen\n低成本 · 高性能 · 连续对话")
 
-# 付费按钮（已加入你的真实链接）
+# 付费按钮（直接使用 st.link_button，避免透明过渡）
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("🚀 升级基础版 ($9.99/月)", key="base", use_container_width=True):
-        st.link_button("", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87")
+    st.link_button(
+        "🚀 升级基础版 ($9.99/月)",
+        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87",
+        use_container_width=True,
+        key="base"
+    )
 
 with col2:
-    if st.button("⭐ 升级高级版 ($14.99/月)", key="premium", use_container_width=True):
-        st.link_button("", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a")
+    st.link_button(
+        "⭐ 升级高级版 ($14.99/月)",
+        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a",
+        use_container_width=True,
+        key="premium"
+    )
 
 st.divider()
 
@@ -54,7 +70,6 @@ st.divider()
 with st.sidebar:
     st.markdown("### 🥭 Mango AI")
     st.caption("多模型 AI 聊天工具")
-    
     model_options = ["DeepSeek", "智谱 GLM-4", "Kimi", "豆包-Pro", "豆包-Lite", "通义千问"]
     selected_model = st.radio("选择模型", model_options, label_visibility="collapsed")
     
@@ -62,7 +77,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# ==================== 聊天区域 ====================
+# 聊天区域
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.chat_message("user").markdown(msg["content"])
