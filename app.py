@@ -12,7 +12,7 @@ st.markdown("""
 <meta name="theme-color" content="#FF9800">
 """, unsafe_allow_html=True)
 
-# 背景颜色
+# 背景
 st.markdown("<style>.main {background: linear-gradient(135deg, #FFF8E1, #FFFCF5) !important;}</style>", unsafe_allow_html=True)
 
 # 初始化
@@ -20,25 +20,20 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ==================== 安装引导（最稳定版） ====================
-st.info("""
-**📱 强烈推荐：添加到主屏幕使用**
+st.subheader("📱 强烈推荐：添加到主屏幕使用")
 
+st.write("""
 **操作步骤：**
-1. 点击浏览器右上角 **⋮** 菜单
-2. 选择 **“添加到主屏幕”** 或 **“安装应用”**
+1. 点击浏览器右上角 **⋮** 菜单  
+2. 选择 **“添加到主屏幕”** 或 **“安装应用”**  
 3. 点击添加
-
-**添加后好处：**
-• 像原生 App 一样打开  
-• 使用更流畅稳定
 """)
 
-# 可点击按钮（用 st.button，保证有反应）
-if st.button("📲 点击这里 → 添加到主屏幕", type="primary", use_container_width=True):
-    st.success("✅ 请点击浏览器右上角 ⋮ 菜单 → 选择「添加到主屏幕」或「安装应用」")
-    st.info("添加成功后，主屏幕会出现 Mango AI 图标")
+if st.button("📲 我知道了，去添加到主屏幕", type="primary", use_container_width=True):
+    st.success("✅ 请现在点击浏览器右上角 ⋮ → 选择「添加到主屏幕」或「安装应用」")
+    st.info("添加成功后，主屏幕会出现 🥭 Mango AI 图标，点击即可直接进入")
 
-st.caption("💡 添加成功后，主屏幕会出现 🥭 Mango AI 图标，点击即可直接进入")
+st.caption("💡 添加后好处：像原生 App 一样使用，关闭时不再白屏，更稳定")
 
 # ==================== 主界面 ====================
 st.title("🥭 Mango AI")
