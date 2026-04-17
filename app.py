@@ -24,22 +24,27 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ==================== 安装引导（优化版） ====================
+# PWA 安装引导 - 可靠版（推荐现在用）
 st.markdown("""
-<div style="text-align: center; margin: 15px 0 25px 0; padding: 18px; 
+<div style="text-align: center; margin: 15px 0 25px 0; padding: 20px; 
             background: linear-gradient(135deg, #FFFCF0, #FFE0B2); 
             border-radius: 16px; border: 2px solid #FF9800;">
-    <p style="margin: 0 0 8px 0; font-size: 17px; color: #E65100; font-weight: bold;">
+    
+    <p style="margin: 0 0 10px 0; font-size: 18px; color: #E65100; font-weight: bold;">
         📱 推荐：添加到主屏幕使用
     </p >
-    <p style="margin: 0 0 15px 0; color: #333; line-height: 1.5;">
-        点击浏览器右上角 <strong>⋮</strong> → <strong>“添加到主屏幕”</strong><br>
-        即可像原生 App 一样使用，关闭时不再白屏！
+    
+    <p style="margin: 0 0 18px 0; color: #333; line-height: 1.6;">
+        点击浏览器右上角 <strong>⋮</strong> 菜单<br>
+        选择 <strong>“添加到主屏幕”</strong> 或 <strong>“安装应用”</strong><br>
+        添加后像原生 App 一样使用，关闭时不再白屏！
     </p >
-    <button onclick="window.alert('请点击浏览器右上角 ⋮ 菜单，选择「添加到主屏幕」或「安装应用」'); return false;" 
-            style="background:#FF9800; color:white; border:none; padding:12px 28px; 
-                   border-radius:50px; font-size:16px; font-weight:bold;">
-        📲 一键安装到桌面
-    </button>
+
+    <div onclick="window.alert('请点击浏览器右上角 ⋮ → 选择「添加到主屏幕」或「安装应用」');" 
+         style="background: #FF9800; color: white; padding: 14px 30px; border-radius: 50px; 
+                font-size: 16px; font-weight: bold; cursor: pointer; display: inline-block;">
+        📲 点击这里 → 添加到主屏幕
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
