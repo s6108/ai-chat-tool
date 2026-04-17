@@ -6,10 +6,13 @@ st.set_page_config(
     layout="centered"
 )
 # PWA 支持
-st.markdown("""
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#FF9800">
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#FF9800">
+    """,
+    unsafe_allow_html=True
+)
 # 极简背景
 st.markdown("<style>.main {background: #FFF8E1;}</style>", unsafe_allow_html=True)
 
