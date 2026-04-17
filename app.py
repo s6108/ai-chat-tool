@@ -1,15 +1,15 @@
 import streamlit as st
-# PWA 支持
-st.markdown("""
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#FF9800">
-""", unsafe_allow_html=True)
+
 st.set_page_config(
     page_title="Mango AI",
     page_icon="🥭",
     layout="centered"
 )
-
+# PWA 支持
+st.markdown("""
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#FF9800">
+""", unsafe_allow_html=True)
 # 极简背景
 st.markdown("<style>.main {background: #FFF8E1;}</style>", unsafe_allow_html=True)
 
