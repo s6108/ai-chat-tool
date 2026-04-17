@@ -7,7 +7,7 @@ st.set_page_config(
 )
 # PWA 支持
 st.markdown("""
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FF9800">
 """, unsafe_allow_html=True)
 # 极简背景
