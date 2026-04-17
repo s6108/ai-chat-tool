@@ -1,1 +1,21 @@
-
+{
+  "name": "Mango AI",
+  "short_name": "Mango AI",
+  "description": "多模型 AI 聊天工具 - Zhipu + DeepSeek + Kimi + Doubao + Qwen",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF8E1",
+  "theme_color": "#FF9800",
+  "icons": [
+    {
+      "src": "https://your-mango-icon-url.com/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://your-mango-icon-url.com/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
