@@ -19,7 +19,11 @@ st.markdown("<style>.main {background: linear-gradient(135deg, #FFF8E1, #FFFCF5)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ==================== 安装引导（最稳定版） ====================
+
+# ==================== 主界面 ====================
+st.title("🥭 Mango AI")
+st.caption("Zhipu + DeepSeek + Kimi + Doubao + Qwen\n低成本 · 高性能 · 连续对话")
+# ==================== 安装引导（最终简洁版） ====================
 st.subheader("📱 强烈推荐：添加到主屏幕使用")
 
 st.write("""
@@ -29,16 +33,11 @@ st.write("""
 3. 点击添加
 """)
 
-if st.button("📲 我知道了，去添加到主屏幕", type="primary", use_container_width=True):
-    st.success("✅ 请现在点击浏览器右上角 ⋮ → 选择「添加到主屏幕」或「安装应用」")
-    st.info("添加成功后，主屏幕会出现 🥭 Mango AI 图标，点击即可直接进入")
+if st.button("📲 我知道了，现在去添加", type="primary", use_container_width=True):
+    st.success("✅ 请立即点击浏览器右上角 ⋮ → 选择「添加到主屏幕」或「安装应用」")
+    st.balloons()   # 加个气球特效，更明显
 
-st.caption("💡 添加后好处：像原生 App 一样使用，关闭时不再白屏，更稳定")
-
-# ==================== 主界面 ====================
-st.title("🥭 Mango AI")
-st.caption("Zhipu + DeepSeek + Kimi + Doubao + Qwen\n低成本 · 高性能 · 连续对话")
-
+st.caption("添加成功后，主屏幕会出现 🥭 Mango AI 图标，点击即可直接进入。")
 # 付费按钮
 col1, col2 = st.columns(2)
 with col1:
