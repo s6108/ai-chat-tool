@@ -7,48 +7,58 @@ st.set_page_config(
     layout="centered"
 )
 
-# 强化按钮颜色（针对 st.link_button）
+# 背景 + 按钮颜色
 st.markdown("""
 <style>
     .main {background: linear-gradient(135deg, #FFF8E1, #FFFCF5) !important;}
     
     /* 基础版按钮 - 浅橙色 */
-    .stLinkButton button[key="base"],
-    button[key="base"] {
+    .stLinkButton button[key="base"] {
         background: linear-gradient(90deg, #FFCC33, #FFAA00) !important;
         color: #000000 !important;
         font-weight: bold !important;
         border-radius: 12px !important;
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(255, 180, 0, 0.4) !important;
     }
     
     /* 高级版按钮 - 深橙色 */
-    .stLinkButton button[key="premium"],
-    button[key="premium"] {
+    .stLinkButton button[key="premium"] {
         background: linear-gradient(90deg, #FF7700, #FF5500) !important;
         color: white !important;
         font-weight: bold !important;
         border-radius: 12px !important;
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(255, 100, 0, 0.5) !important;
-    }
-    
-    .stLinkButton button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.25) !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 初始化
+# ==================== 全局 Client 初始化（关键优化：只创建一次） ====================
+@st.cache_resource
+def get_client(model_name):
+    if model_name == "DeepSeek":
+        return OpenAI(base_url="https://api.deepseek.com", api_key=st.secrets["DEEPSEEK_API_KEY"])
+    elif model_name == "智谱 GLM-4":
+        return OpenAI(base_url="https://open.bigmodel.cn/api/paas/v4/", api_key=st.secrets["ZHIPU_API_KEY"])
+    elif model_name == "Kimi":
+        return OpenAI(base_url="https://api.moonshot.cn/v1", api_key=st.secrets["KIMI_API_KEY"])
+    elif model_name in ["豆包-Pro", "豆包-Lite"]:
+        return OpenAI(base_url="https://ark.cn-beijing.volces.com/api/v3", api_key=st.secrets["DOUBAO_API_KEY"])
+    elif model_name == "通义千问":
+        return OpenAI(base_url="https://dashscope.aliyuncs.com/compatible-mode/v1", api_key=st.secrets["QWEN_API_KEY"])
+    return None
+
+# 初始化聊天记录（限制历史长度，防止越来越慢）
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# 限制历史消息数量（关键优化）
+MAX_HISTORY = 20
+if len(st.session_state.messages) > MAX_HISTORY:
+    st.session_state.messages = st.session_state.messages[-MAX_HISTORY:]
+
+# ==================== 主界面 ====================
 st.title("🥭 Mango AI")
 st.caption("Zhipu + DeepSeek + Kimi + Doubao + Qwen\n低成本 · 高性能 · 连续对话")
 
-# 付费按钮（直接使用 st.link_button）
+# 付费按钮
 col1, col2 = st.columns(2)
 with col1:
     st.link_button(
@@ -57,7 +67,6 @@ with col1:
         use_container_width=True,
         key="base"
     )
-
 with col2:
     st.link_button(
         "⭐ 升级高级版 ($14.99/月)",
@@ -72,6 +81,7 @@ st.divider()
 with st.sidebar:
     st.markdown("### 🥭 Mango AI")
     st.caption("多模型 AI 聊天工具")
+    
     model_options = ["DeepSeek", "智谱 GLM-4", "Kimi", "豆包-Pro", "豆包-Lite", "通义千问"]
     selected_model = st.radio("选择模型", model_options, label_visibility="collapsed")
     
@@ -79,7 +89,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# 聊天区域（保持不变）
+# ==================== 聊天区域 ====================
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.chat_message("user").markdown(msg["content"])
@@ -92,32 +102,27 @@ if prompt := st.chat_input("输入你的问题..."):
     with st.chat_message("assistant"):
         with st.spinner("思考中..."):
             try:
-                if selected_model == "DeepSeek":
-                    client = OpenAI(base_url="https://api.deepseek.com", api_key=st.secrets["DEEPSEEK_API_KEY"])
-                    response = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": prompt}]).choices[0].message.content
-
-                elif selected_model == "智谱 GLM-4":
-                    client = OpenAI(base_url="https://open.bigmodel.cn/api/paas/v4/", api_key=st.secrets["ZHIPU_API_KEY"])
-                    response = client.chat.completions.create(model="glm-4", messages=[{"role": "user", "content": prompt}]).choices[0].message.content
-
-                elif selected_model == "Kimi":
-                    client = OpenAI(base_url="https://api.moonshot.cn/v1", api_key=st.secrets["KIMI_API_KEY"])
-                    response = client.chat.completions.create(model="moonshot-v1-8k", messages=[{"role": "user", "content": prompt}]).choices[0].message.content
-
-                elif selected_model == "豆包-Pro":
-                    client = OpenAI(base_url="https://ark.cn-beijing.volces.com/api/v3", api_key=st.secrets["DOUBAO_API_KEY"])
-                    response = client.chat.completions.create(model="ep-20260415022601-jm5b7", messages=[{"role": "user", "content": prompt}]).choices[0].message.content
-
+                client = get_client(selected_model)
+                
+                if selected_model == "豆包-Pro":
+                    model_id = "ep-20260415022601-jm5b7"
                 elif selected_model == "豆包-Lite":
-                    client = OpenAI(base_url="https://ark.cn-beijing.volces.com/api/v3", api_key=st.secrets["DOUBAO_API_KEY"])
-                    response = client.chat.completions.create(model="ep-20260415023354-lx4bm", messages=[{"role": "user", "content": prompt}]).choices[0].message.content
-
+                    model_id = "ep-20260415023354-lx4bm"
+                elif selected_model == "DeepSeek":
+                    model_id = "deepseek-chat"
+                elif selected_model == "智谱 GLM-4":
+                    model_id = "glm-4"
+                elif selected_model == "Kimi":
+                    model_id = "moonshot-v1-8k"
                 elif selected_model == "通义千问":
-                    client = OpenAI(base_url="https://dashscope.aliyuncs.com/compatible-mode/v1", api_key=st.secrets["QWEN_API_KEY"])
-                    response = client.chat.completions.create(model="qwen-plus", messages=[{"role": "user", "content": prompt}]).choices[0].message.content
-
+                    model_id = "qwen-plus"
                 else:
-                    response = "模型调用失败，请检查配置。"
+                    model_id = "deepseek-chat"
+
+                response = client.chat.completions.create(
+                    model=model_id,
+                    messages=[{"role": "user", "content": prompt}]
+                ).choices[0].message.content
 
             except Exception as e:
                 response = f"调用失败: {str(e)}"
