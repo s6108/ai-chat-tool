@@ -1,19 +1,20 @@
 {
   "name": "Mango AI",
   "short_name": "Mango AI",
-  "description": "多模型 AI 聊天工具 - Zhipu + DeepSeek + Kimi + Doubao + Qwen",
+  "description": "多模型 AI 聊天工具 · Low Cost · High Performance",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FFF8E1",
-  "theme_color": "#FF9800",
+  "background_color": "#fff8e1",
+  "theme_color": "#ff9800",
+  "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/2920/2920311.png",
+      "src": "https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/2920/2920311.png",
+      "src": "https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png",
       "sizes": "512x512",
       "type": "image/png"
     }
