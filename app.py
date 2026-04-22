@@ -3,7 +3,7 @@ import os
 from openai import OpenAI
 import streamlit as st
 import os
-# ==================== PWA 配置（自定义芒果图标） ====================
+# ==================== PWA + iOS 图标配置 ====================
 st.set_page_config(
     page_title="Mango AI",
     page_icon="🥭",
@@ -11,12 +11,17 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 添加 PWA manifest 支持，让 iPhone 和安卓正确显示芒果图标
+# 加强版 PWA 配置（专门针对 iOS Safari，解决默认 S 图标问题）
 st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    
+    <!-- iOS 专用苹果图标 - 这是解决 S 图标的关键 -->
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png">
     """, unsafe_allow_html=True)
 # 安全读取 API Key
 def get_key(name: str):
