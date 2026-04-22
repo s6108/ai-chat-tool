@@ -87,24 +87,34 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        with st.spinner("思考中... / Thinking..."):
-            base_url, model_name, api_key = model_options[selected_model_name]
+       with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        full_response = ""
+        
+        try:
+            # 使用 streaming 方式，让回复一行一行实时显示（感觉更快）
+            stream = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                stream=True,
+                temperature=0.7,
+                max_tokens=1500,        # 限制单次回复长度，避免太慢
+            )
             
-            if not api_key:
-                st.error("该模型 API Key 未设置 / API Key not set for this model")
-            else:
-                try:
-                    client = OpenAI(base_url=base_url, api_key=api_key)
-                    response = client.chat.completions.create(
-                        model=model_name,
-                        messages=st.session_state.messages,
-                        temperature=0.7
-                    )
-                    answer = response.choices[0].message.content
-                    st.markdown(answer)
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
-                except Exception as e:
-                    st.error(f"调用失败: {str(e)} / Call failed: {str(e)}")
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    full_response += chunk.choices[0].delta.content
+                    # 实时显示正在输入的效果
+                    message_placeholder.markdown(full_response + "▌")
+            
+            # 显示最终完整回复
+            message_placeholder.markdown(full_response)
+            
+        except Exception as e:
+            message_placeholder.error(f"调用失败: {str(e)}")
+            full_response = "抱歉，模型调用出现错误，请稍后重试。"
+        
+    # 保存助手回复到聊天历史
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 st.caption("由中国主流大模型驱动 · 海外部署\nPowered by Chinese LLMs · Deployed Overseas")
