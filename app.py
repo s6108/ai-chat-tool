@@ -81,7 +81,8 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-       if prompt := st.chat_input("输入你的问题... / Ask anything..."):
+       
+           if prompt := st.chat_input("输入你的问题... / Ask anything..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -106,7 +107,6 @@ for message in st.session_state.messages:
                         full_response += delta
                         message_placeholder.markdown(full_response + "▌")
                 
-                # 显示最终完整回复
                 message_placeholder.markdown(full_response)
                 
             except Exception as e:
@@ -115,26 +115,5 @@ for message in st.session_state.messages:
             
         # 保存助手回复到聊天历史
         st.session_state.messages.append({"role": "assistant", "content": full_response})
-        
-    # 保存助手回复到历史记录
-    st.session_state.messages.append({"role": "assistant", "content": full_response})      
-            
-            # 最终显示完整回复（去掉光标）
-            message_placeholder.markdown(full_response)
-            
-        except Exception as e:
-            message_placeholder.error(f"调用失败: {str(e)}")
-            full_response = "抱歉，模型调用出现错误，请稍后重试。"
-        
-    # 保存到聊天历史
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
-            message_placeholder.markdown(full_response)
-            
-        except Exception as e:
-            message_placeholder.error(f"调用失败: {str(e)}")
-            full_response = "抱歉，模型调用出现错误，请稍后重试。"
-        
-    # 保存助手回复到聊天历史
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 st.caption("由中国主流大模型驱动 · 海外部署\nPowered by Chinese LLMs · Deployed Overseas")
