@@ -1,14 +1,23 @@
 import streamlit as st
 import os
 from openai import OpenAI
-
+import streamlit as st
+import os
+# ==================== PWA 配置（自定义芒果图标） ====================
 st.set_page_config(
     page_title="Mango AI",
     page_icon="🥭",
     layout="centered",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
+# 添加 PWA manifest 支持，让 iPhone 和安卓正确显示芒果图标
+st.markdown("""
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ff9800">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    """, unsafe_allow_html=True)
 # 安全读取 API Key
 def get_key(name: str):
     return os.getenv(name) or st.secrets.get(name)
