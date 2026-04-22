@@ -32,13 +32,13 @@ col1, col2 = st.columns(2)
 with col1:
     st.link_button(
         "🚀 Upgrade Basic ($9.99/month)", 
-        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87",
+        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en",
         use_container_width=True
     )
 with col2:
     st.link_button(
         "⭐ Upgrade Premium ($14.99/month)", 
-        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a",
+        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en",
         use_container_width=True
     )
 
