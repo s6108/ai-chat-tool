@@ -2,53 +2,89 @@ import streamlit as st
 import os
 from openai import OpenAI
 
-st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
-
 # PWA 配置
-st.markdown('<link rel="manifest" href="/manifest.json">', unsafe_allow_html=True)
+st.set_page_config(
+    page_title="Mango AI",
+    page_icon="🥭",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
 
-# ====================== API Key ======================
+st.markdown("""
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ff9800">
+    """, unsafe_allow_html=True)
+
+# API Key
 def get_key(name: str):
-    key = os.getenv(name) or st.secrets.get(name)
-    if key:
-        st.caption(f"✅ {name} 已加载")  # 调试用，后面可以删除
-    return str(key).strip() if key else None
+    return os.getenv(name) or st.secrets.get(name)
 
+ZHIPU_API_KEY = get_key("ZHIPU_API_KEY")
+DEEPSEEK_API_KEY = get_key("DEEPSEEK_API_KEY")
+KIMI_API_KEY = get_key("KIMI_API_KEY")
+DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 模型配置 ======================
+# 界面
+st.title("🥭 Mango AI")
+st.markdown("**多模型 AI 聊天工具**  \nMulti-Model AI Chat Tool · Low Cost · High Performance")
+
+col1, col2 = st.columns(2)
+with col1:
+    st.link_button("🚀 Upgrade Basic ($9.99/month)", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en", use_container_width=True)
+with col2:
+    st.link_button("⭐ Upgrade Premium ($14.99/month)", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", use_container_width=True)
+
+st.divider()
+
+# 模型选择
 model_options = {
-    "通义千问": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY),
-    # 其他模型...
+    "DeepSeek": ("https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY),
+    "智谱 GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
+    "Kimi": ("https://api.moonshot.cn/v1", "moonshot-v1-8k", KIMI_API_KEY),
+    "豆包-Pro": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415022601-jm5b7", DOUBAO_API_KEY),
+    "豆包-Lite": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415023354-lx4bm", DOUBAO_API_KEY),
+    "通义千问": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY)
 }
 
-# ====================== 聊天逻辑 ======================
-if prompt := st.chat_input("输入你的问题..."):
+selected_model_name = st.sidebar.radio("选择模型 / Select Model", list(model_options.keys()), index=0)
+
+base_url, model_name, api_key = model_options[selected_model_name]
+
+# 聊天逻辑
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("输入你的问题... / Ask anything..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
+        full_response = ""
         try:
-            api_key = DASHSCOPE_API_KEY
-            if not api_key:
-                raise ValueError("DASHSCOPE_API_KEY 未设置或为空")
-
-            client = OpenAI(
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-                api_key=api_key,
-                default_headers={"Authorization": f"Bearer {api_key}"}
-            )
-
+            client = OpenAI(base_url=base_url, api_key=api_key)
             stream = client.chat.completions.create(
-                model="qwen-plus",
-                messages=[{"role": "user", "content": prompt}],
+                model=model_name,
+                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
                 stream=True,
+                temperature=0.7,
+                max_tokens=2000,
             )
-
-            full_response = ""
             for chunk in stream:
-                if chunk.choices[0].delta.content:
+                if chunk.choices and chunk.choices[0].delta.content is not None:
                     full_response += chunk.choices[0].delta.content
                     message_placeholder.markdown(full_response + "▌")
             message_placeholder.markdown(full_response)
-
         except Exception as e:
-            message_placeholder.error(f"通义千问调用失败: {str(e)}")
+            message_placeholder.error(f"调用失败: {str(e)}")
+            full_response = "抱歉，模型调用出现错误，请稍后重试。"
+        
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+st.caption("由中国主流大模型驱动 · 海外部署\nPowered by Chinese LLMs · Deployed Overseas")
