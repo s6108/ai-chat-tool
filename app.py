@@ -19,7 +19,7 @@ st.markdown("""
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png">
     """, unsafe_allow_html=True)
 
-# ====================== API Key ======================
+# ====================== 安全读取 API Key ======================
 def get_key(name: str):
     return os.getenv(name) or st.secrets.get(name)
 
@@ -32,21 +32,29 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 # ====================== 界面 ======================
 st.title("🥭 Mango AI")
 
-st.markdown("**多模型 AI 聊天工具**  \nMulti-Model AI Chat Tool · Low Cost · High Performance")
+st.markdown("""
+**多模型 AI 聊天工具**  
+Multi-Model AI Chat Tool · Low Cost · High Performance
+""")
 
+# 付费按钮
 col1, col2 = st.columns(2)
 with col1:
-    st.link_button("🚀 Upgrade Basic ($9.99/month)", 
-                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en", 
-                   use_container_width=True)
+    st.link_button(
+        "🚀 Upgrade Basic ($9.99/month)", 
+        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en",
+        use_container_width=True
+    )
 with col2:
-    st.link_button("⭐ Upgrade Premium ($14.99/month)", 
-                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", 
-                   use_container_width=True)
+    st.link_button(
+        "⭐ Upgrade Premium ($14.99/month)", 
+        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en",
+        use_container_width=True
+    )
 
 st.divider()
 
-# 模型选择
+# 模型选择（默认 DeepSeek）
 model_options = {
     "DeepSeek": ("https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY),
     "智谱 GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
@@ -82,8 +90,9 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
         full_response = ""
         
         try:
-            # 加强处理通义千问（解决安卓平板问题）
+            # 加强处理通义千问（解决 Android APK 调用失败问题）
             if "通义千问" in selected_model_name or model_name.startswith("qwen"):
+                os.environ["OPENAI_API_KEY"] = str(api_key)
                 client = OpenAI(
                     base_url=base_url,
                     api_key=api_key,
@@ -103,7 +112,8 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
             
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content is not None:
-                    full_response += chunk.choices[0].delta.content
+                    delta = chunk.choices[0].delta.content
+                    full_response += delta
                     message_placeholder.markdown(full_response + "▌")
             
             message_placeholder.markdown(full_response)
