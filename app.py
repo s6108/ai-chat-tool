@@ -10,17 +10,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 加强版 PWA 配置
+# PWA 配置
 st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png">
     """, unsafe_allow_html=True)
 
-# ====================== 安全读取 API Key ======================
+# ====================== API Key ======================
 def get_key(name: str):
     return os.getenv(name) or st.secrets.get(name)
 
@@ -33,29 +32,21 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 # ====================== 界面 ======================
 st.title("🥭 Mango AI")
 
-st.markdown("""
-**多模型 AI 聊天工具**  
-Multi-Model AI Chat Tool · Low Cost · High Performance
-""")
+st.markdown("**多模型 AI 聊天工具**  \nMulti-Model AI Chat Tool · Low Cost · High Performance")
 
-# 付费按钮
 col1, col2 = st.columns(2)
 with col1:
-    st.link_button(
-        "🚀 Upgrade Basic ($9.99/month)", 
-        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en",
-        use_container_width=True
-    )
+    st.link_button("🚀 Upgrade Basic ($9.99/month)", 
+                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en", 
+                   use_container_width=True)
 with col2:
-    st.link_button(
-        "⭐ Upgrade Premium ($14.99/month)", 
-        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en",
-        use_container_width=True
-    )
+    st.link_button("⭐ Upgrade Premium ($14.99/month)", 
+                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", 
+                   use_container_width=True)
 
 st.divider()
 
-# 模型选择（默认 DeepSeek）
+# 模型选择
 model_options = {
     "DeepSeek": ("https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY),
     "智谱 GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
@@ -91,7 +82,7 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
         full_response = ""
         
         try:
-            # 通义千问加强处理（解决安卓平板失败问题）
+            # 加强处理通义千问（解决安卓平板问题）
             if "通义千问" in selected_model_name or model_name.startswith("qwen"):
                 client = OpenAI(
                     base_url=base_url,
@@ -112,8 +103,7 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
             
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content is not None:
-                    delta = chunk.choices[0].delta.content
-                    full_response += delta
+                    full_response += chunk.choices[0].delta.content
                     message_placeholder.markdown(full_response + "▌")
             
             message_placeholder.markdown(full_response)
