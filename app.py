@@ -90,10 +90,18 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
         message_placeholder = st.empty()
         full_response = ""
         
-        try:
-            client = OpenAI(base_url=base_url, api_key=api_key)
+                try:
+            # 通义千问需要特别加强 api_key 处理（解决安卓平板问题）
+            if "通义千问" in selected_model_name or model_name.startswith("qwen"):
+                client = OpenAI(
+                    base_url=base_url,
+                    api_key=api_key,
+                    default_headers={"Authorization": f"Bearer {api_key}"}
+                )
+            else:
+                client = OpenAI(base_url=base_url, api_key=api_key)
             
-            # Streaming 逐字输出（打字机效果）
+            # Streaming 调用
             stream = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
