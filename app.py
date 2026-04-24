@@ -85,32 +85,43 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        full_response = ""
-        
-                       try:
-            # 加强版 client 初始化（解决安卓平板通义千问失败问题）
-            if "通义千问" in selected_model_name or model_name.startswith("qwen"):
-                client = OpenAI(
-                    base_url=base_url,
-                    api_key=api_key,
-                    default_headers={"Authorization": f"Bearer {api_key}"},
-                    # 额外保险措施
-                    max_retries=2
-                )
-            else:
-                client = OpenAI(base_url=base_url, api_key=api_key)
+ with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
             
-            # Streaming 调用
-            stream = client.chat.completions.create(
-                model=model_name,
-                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                stream=True,
-                temperature=0.7,
-                max_tokens=2000,
-            )
+            try:
+                # 通义千问加强处理 + Streaming 逐字输出
+                if "通义千问" in selected_model_name or model_name.startswith("qwen"):
+                client = OpenAI(
+                        base_url=base_url,
+                        api_key=api_key,
+                        default_headers={"Authorization": f"Bearer {api_key}"}
+                    )
+                else:
+                    client = OpenAI(base_url=base_url, api_key=api_key)
+                
+                stream = client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                    stream=True,
+                    temperature=0.7,
+                    max_tokens=2000,
+                )
+                
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content is not None:
+                        delta = chunk.choices[0].delta.content
+                        full_response += delta
+                        message_placeholder.markdown(full_response + "▌")
+                
+                message_placeholder.markdown(full_response)
+                
+            except Exception as e:
+                message_placeholder.error(f"调用失败: {str(e)}")
+                full_response = "抱歉，模型调用出现错误，请稍后重试。"
+            
+        # 保存助手回复到历史
+        st.session_state.messages.append({"role": "assistant", "content": full_response})    
         
     # 保存助手回复到历史
     st.session_state.messages.append({"role": "assistant", "content": full_response})
