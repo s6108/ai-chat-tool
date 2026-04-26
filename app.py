@@ -100,24 +100,27 @@ for msg in st.session_state.messages:
         else:
             st.markdown(msg["content"])
 
-# ====================== 输入区域 ======================
+# ====================== 输入区域（小圆按钮风格） ======================
 prompt = st.chat_input("Ask anything...")
 
-col_attach, col_voice = st.columns([1, 1])
-with col_attach:
-    uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"], 
-                                     label_visibility="visible", key="uploader")
+# 小圆按钮
+btn_col1, btn_col2 = st.columns([1, 1])
 
-with col_voice:
-    audio_value = st.audio_input("🎤 语音输入", label_visibility="visible", key="voice")
+with btn_col1:
+    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg"], 
+                                     label_visibility="collapsed", key="attach")
 
+with btn_col2:
+    audio_value = st.audio_input("🎤", label_visibility="collapsed", key="voice")
+
+# 显示上传状态
 if uploaded_file is not None:
-    st.image(uploaded_file, width=300)
-    st.success(f"✅ 已上传: {uploaded_file.name}")
+    st.image(uploaded_file, width=280)
+    st.success("✅ Image uploaded")
 
 if audio_value is not None:
     st.audio(audio_value)
-    st.success("✅ 已录制语音")
+    st.success("✅ Voice recorded")
 
 # ====================== 发送消息 ======================
 if prompt or uploaded_file is not None:
