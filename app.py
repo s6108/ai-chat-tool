@@ -96,7 +96,29 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # 输入区域
-if prompt := st.chat_input("Ask anything..."):
+# ====================== 输入区域 + 发送逻辑 ======================
+prompt = st.chat_input("Ask anything...")
+
+col_attach, col_voice = st.columns([1, 1])
+
+with col_attach:
+    uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"], 
+                                     label_visibility="visible", key="uploader")
+
+with col_voice:
+    audio_value = st.audio_input("🎤 语音输入", label_visibility="visible", key="voice")
+
+# 处理附件和语音显示
+if uploaded_file is not None:
+    st.image(uploaded_file, width=300)
+    st.success(f"✅ 已上传: {uploaded_file.name}")
+
+if audio_value is not None:
+    st.audio(audio_value)
+    st.success("✅ 已录制语音")
+
+# ====================== 发送消息 ======================
+if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
