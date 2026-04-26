@@ -33,8 +33,8 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 st.title("🥭 Mango AI")
 
 st.markdown("""
-**多模型 AI 聊天工具**  
-Multi-Model AI Chat Tool · Low Cost · High Performance
+**Multi-Model AI Chat Tool**  
+Low Cost · High Performance
 """)
 
 # 付费按钮
@@ -50,23 +50,24 @@ with col2:
 
 st.divider()
 
-# ====================== 模型选择（主页面按钮） ======================
-st.subheader("选择模型 / Select Model")
+# ====================== 模型选择（小按钮横向排列） ======================
+st.subheader("Select Model")
 
+# 更紧凑的模型按钮（英文名称 + 小按钮）
 model_options = {
     "DeepSeek": ("https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY),
-    "智谱 GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
+    "GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
     "Kimi": ("https://api.moonshot.cn/v1", "moonshot-v1-8k", KIMI_API_KEY),
-    "豆包-Pro": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415022601-jm5b7", DOUBAO_API_KEY),
-    "豆包-Lite": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415023354-lx4bm", DOUBAO_API_KEY),
-    "通义千问": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY)
+    "Doubao-Pro": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415022601-jm5b7", DOUBAO_API_KEY),
+    "Doubao-Lite": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415023354-lx4bm", DOUBAO_API_KEY),
+    "Qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY)
 }
 
-# 使用 columns 显示模型按钮
+# 使用更紧凑的横向布局
 cols = st.columns(len(model_options))
 for idx, (name, (url, mdl, key)) in enumerate(model_options.items()):
     with cols[idx]:
-        if st.button(name, use_container_width=True, key=f"model_{idx}"):
+        if st.button(name, use_container_width=True, key=f"model_btn_{idx}"):
             st.session_state.selected_model_name = name
             st.session_state.base_url = url
             st.session_state.model_name = mdl
@@ -80,12 +81,16 @@ if "selected_model_name" not in st.session_state:
     st.session_state.model_name = model_options["DeepSeek"][1]
     st.session_state.api_key = model_options["DeepSeek"][2]
 
+st.caption(f"Current Model: **{st.session_state.selected_model_name}**")
+
+st.divider()
+
 # ====================== 聊天逻辑 ======================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # 清空聊天按钮
-if st.button("🗑️ 清空聊天记录 / Clear Chat"):
+if st.button("🗑️ Clear Chat History"):
     st.session_state.messages = []
     st.rerun()
 
