@@ -1,8 +1,9 @@
 import streamlit as st
 import os
+import base64
 from openai import OpenAI
 
-# ==================== PWA + iOS 图标配置 ====================
+# ==================== PWA + iOS 配置 ====================
 st.set_page_config(
     page_title="Mango AI",
     page_icon="🥭",
@@ -10,13 +11,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# PWA 配置
 st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     """, unsafe_allow_html=True)
 
-# ====================== 安全读取 API Key ======================
+# ====================== API Key ======================
 def get_key(name: str):
     return os.getenv(name) or st.secrets.get(name)
 
@@ -28,47 +29,41 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
 # ====================== 界面 ======================
 st.title("🥭 Mango AI")
-
-st.markdown("""
-**Multi-Model AI Chat Tool**  
-Low Cost · High Performance
-""")
+st.markdown("**Multi-Model AI Chat Tool** · Low Cost · High Performance")
 
 # 付费按钮
 col1, col2 = st.columns(2)
 with col1:
-    st.link_button("🚀 Basic $9.99", 
+    st.link_button("🚀 Basic $9.99/month", 
                    "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en", 
                    use_container_width=True)
 with col2:
-    st.link_button("⭐ Premium $14.99", 
+    st.link_button("⭐ Premium $14.99/month", 
                    "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", 
                    use_container_width=True)
 
 st.divider()
 
-# ====================== 模型选择（小红点按钮） ======================
+# ====================== 模型选择 ======================
 st.subheader("Select Model")
 
 model_options = {
     "DeepSeek": ("https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY),
     "GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
-    "GLM-4V": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4v", ZHIPU_API_KEY),   # ← 新增视觉模型
+    "GLM-4V": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4v", ZHIPU_API_KEY),
     "Kimi": ("https://api.moonshot.cn/v1", "moonshot-v1-8k", KIMI_API_KEY),
     "Doubao-Pro": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415022601-jm5b7", DOUBAO_API_KEY),
     "Doubao-Lite": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415023354-lx4bm", DOUBAO_API_KEY),
     "Qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY),
-    "Qwen-VL": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-vl-plus", DASHSCOPE_API_KEY)  # ← 新增视觉模型
+    "Qwen-VL": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-vl-plus", DASHSCOPE_API_KEY)
 }
 
-# 当前选中模型（默认 DeepSeek）
 if "selected_model_name" not in st.session_state:
     st.session_state.selected_model_name = "DeepSeek"
     st.session_state.base_url = model_options["DeepSeek"][0]
     st.session_state.model_name = model_options["DeepSeek"][1]
     st.session_state.api_key = model_options["DeepSeek"][2]
 
-# 小红点按钮横向排列
 cols = st.columns(len(model_options))
 for idx, (name, (url, mdl, key)) in enumerate(model_options.items()):
     with cols[idx]:
@@ -85,7 +80,7 @@ st.caption(f"**Current Model:** {st.session_state.selected_model_name}")
 
 st.divider()
 
-# ====================== 聊天逻辑 ======================
+# ====================== 聊天记录 ======================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -93,16 +88,22 @@ if st.button("🗑️ Clear Chat"):
     st.session_state.messages = []
     st.rerun()
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        if isinstance(msg.get("content"), list):
+            for item in msg["content"]:
+                if isinstance(item, dict):
+                    if item.get("type") == "text":
+                        st.markdown(item.get("text"))
+                    elif "image_url" in item:
+                        st.image(item["image_url"]["url"])
+        else:
+            st.markdown(msg["content"])
 
-# 输入区域
-# ====================== 输入区域 + 发送逻辑 ======================
+# ====================== 输入区域 ======================
 prompt = st.chat_input("Ask anything...")
 
 col_attach, col_voice = st.columns([1, 1])
-
 with col_attach:
     uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"], 
                                      label_visibility="visible", key="uploader")
@@ -110,7 +111,6 @@ with col_attach:
 with col_voice:
     audio_value = st.audio_input("🎤 语音输入", label_visibility="visible", key="voice")
 
-# 处理附件和语音显示
 if uploaded_file is not None:
     st.image(uploaded_file, width=300)
     st.success(f"✅ 已上传: {uploaded_file.name}")
@@ -121,37 +121,40 @@ if audio_value is not None:
 
 # ====================== 发送消息 ======================
 if prompt or uploaded_file is not None:
-    user_message = {"role": "user", "content": []}
-    
-    if prompt:
-        user_message["content"].append({"type": "text", "text": prompt})
-    
     if uploaded_file is not None:
-        # 把图片转为 base64 发送给视觉模型
-        import base64
         bytes_data = uploaded_file.getvalue()
         base64_image = base64.b64encode(bytes_data).decode('utf-8')
-        user_message["content"].append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-        })
-    
-    st.session_state.messages.append(user_message)
-    
+        
+        if "GLM-4V" in st.session_state.selected_model_name:
+            content = [
+                {"type": "text", "text": prompt or "请描述这张图片"},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+            ]
+        elif "Qwen-VL" in st.session_state.selected_model_name:
+            content = [
+                {"type": "text", "text": prompt or "请描述这张图片"},
+                {"image": f"data:image/jpeg;base64,{base64_image}"}
+            ]
+        else:
+            content = prompt or "请描述这张图片"
+    else:
+        content = prompt
+
+    user_msg = {"role": "user", "content": content}
+    st.session_state.messages.append(user_msg)
+
     with st.chat_message("user"):
         if prompt:
             st.markdown(prompt)
         if uploaded_file is not None:
             st.image(uploaded_file, width=300)
 
-    # AI 回复
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
         
         try:
             client = OpenAI(base_url=st.session_state.base_url, api_key=st.session_state.api_key)
-            
             stream = client.chat.completions.create(
                 model=st.session_state.model_name,
                 messages=st.session_state.messages,
@@ -159,18 +162,16 @@ if prompt or uploaded_file is not None:
                 temperature=0.7,
                 max_tokens=2000,
             )
-            
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content is not None:
                     full_response += chunk.choices[0].delta.content
                     message_placeholder.markdown(full_response + "▌")
-            
             message_placeholder.markdown(full_response)
-            
         except Exception as e:
             message_placeholder.error(f"调用失败: {str(e)}")
             full_response = "抱歉，模型调用出现错误，请稍后重试。"
         
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
+# 底部说明
 st.caption("由中国主流大模型驱动 · 海外部署\nPowered by Chinese LLMs · Deployed Overseas")
