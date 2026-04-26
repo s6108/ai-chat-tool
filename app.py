@@ -40,20 +40,19 @@ Low Cost · High Performance
 # 付费按钮
 col1, col2 = st.columns(2)
 with col1:
-    st.link_button("🚀 Upgrade Basic ($9.99/month)", 
+    st.link_button("🚀 Basic $9.99", 
                    "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en", 
                    use_container_width=True)
 with col2:
-    st.link_button("⭐ Upgrade Premium ($14.99/month)", 
+    st.link_button("⭐ Premium $14.99", 
                    "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", 
                    use_container_width=True)
 
 st.divider()
 
-# ====================== 模型选择（小按钮横向排列） ======================
+# ====================== 模型选择（小红点按钮） ======================
 st.subheader("Select Model")
 
-# 更紧凑的模型按钮（英文名称 + 小按钮）
 model_options = {
     "DeepSeek": ("https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY),
     "GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
@@ -63,25 +62,25 @@ model_options = {
     "Qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY)
 }
 
-# 使用更紧凑的横向布局
+# 小红点式按钮横向排列
 cols = st.columns(len(model_options))
 for idx, (name, (url, mdl, key)) in enumerate(model_options.items()):
     with cols[idx]:
-        if st.button(name, use_container_width=True, key=f"model_btn_{idx}"):
+        if st.button(f"🔴 {name}", use_container_width=True, key=f"model_{idx}"):
             st.session_state.selected_model_name = name
             st.session_state.base_url = url
             st.session_state.model_name = mdl
             st.session_state.api_key = key
             st.rerun()
 
-# 默认选择 DeepSeek
+# 当前选中模型显示
 if "selected_model_name" not in st.session_state:
     st.session_state.selected_model_name = "DeepSeek"
     st.session_state.base_url = model_options["DeepSeek"][0]
     st.session_state.model_name = model_options["DeepSeek"][1]
     st.session_state.api_key = model_options["DeepSeek"][2]
 
-st.caption(f"Current Model: **{st.session_state.selected_model_name}**")
+st.caption(f"Current: **{st.session_state.selected_model_name}**")
 
 st.divider()
 
@@ -89,8 +88,8 @@ st.divider()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 清空聊天按钮
-if st.button("🗑️ Clear Chat History"):
+# 清空按钮
+if st.button("🗑️ Clear Chat"):
     st.session_state.messages = []
     st.rerun()
 
@@ -98,10 +97,24 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("输入你的问题... / Ask anything..."):
+# 输入区域（带语音和图片附件）
+col_input1, col_input2, col_input3 = st.columns([6, 1, 1])
+
+with col_input1:
+    prompt = st.chat_input("Ask anything...")
+
+with col_input2:
+    uploaded_image = st.file_uploader("📷", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
+
+with col_input3:
+    uploaded_audio = st.file_uploader("🎤", type=["wav", "mp3"], label_visibility="collapsed")
+
+if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
+
+    # 这里可以后续处理图片和语音上传...
 
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
