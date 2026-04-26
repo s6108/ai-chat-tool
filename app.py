@@ -95,55 +95,73 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # ====================== 输入区域（带附件和语音） ======================
-col_input, col_attach, col_voice = st.columns([7, 1, 1])
+col_input, col_attach, col_voice = st.columns([6, 1, 1])
 
 with col_input:
     prompt = st.chat_input("Ask anything...")
 
 with col_attach:
-    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg", "pdf", "txt"], 
+    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg"], 
                                      label_visibility="collapsed", key="file_uploader")
 
 with col_voice:
     audio_value = st.audio_input("🎤", label_visibility="collapsed", key="voice_input")
 
-# 处理用户输入
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        full_response = ""
-        
-        try:
-            client = OpenAI(base_url=st.session_state.base_url, api_key=st.session_state.api_key)
-            
-            stream = client.chat.completions.create(
-                model=st.session_state.model_name,
-                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                stream=True,
-                temperature=0.7,
-                max_tokens=2000,
-            )
-            
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content is not None:
-                    full_response += chunk.choices[0].delta.content
-                    message_placeholder.markdown(full_response + "▌")
-            
-            message_placeholder.markdown(full_response)
-            
-        except Exception as e:
-            message_placeholder.error(f"调用失败: {str(e)}")
-            full_response = "抱歉，模型调用出现错误，请稍后重试。"
-        
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-# 处理附件和语音（占位，未来可扩展）
+# 处理图片上传
 if uploaded_file is not None:
-    st.info(f"📎 已上传: {uploaded_file.name} （功能开发中）")
+    st.image(uploaded_file, width=300)
+    st.success(f"✅ 图片已上传: {uploaded_file.name}")
+    # 这里可以后续让 AI 分析图片（需使用视觉模型）
 
+# 处理语音输入
 if audio_value is not None:
-    st.info("🎤 已录制语音 （功能开发中）")
+    st.audio(audio_value)
+    st.success("✅ 语音已录制")
+    # 这里可以后续调用语音转文字功能
+
+# ====================== 发送消息 ======================
+if prompt or uploaded_file is not None or audio_value is not None:
+    user_content = prompt if prompt else ""
+    
+    if uploaded_file is not None:
+        user_content += f"\n[图片: {uploaded_file.name}]"
+    
+    if audio_value is not None:
+        user_content += "\n[语音消息已录制]"
+
+    if user_content:
+        st.session_state.messages.append({"role": "user", "content": user_content})
+        with st.chat_message("user"):
+            st.markdown(user_content)
+            if uploaded_file is not None:
+                st.image(uploaded_file, width=300)
+
+        # AI 回复
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+            
+            try:
+                client = OpenAI(base_url=st.session_state.base_url, api_key=st.session_state.api_key)
+                
+                stream = client.chat.completions.create(
+                    model=st.session_state.model_name,
+                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                    stream=True,
+                    temperature=0.7,
+                    max_tokens=2000,
+                )
+                
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content is not None:
+                        full_response += chunk.choices[0].delta.content
+                        message_placeholder.markdown(full_response + "▌")
+                
+                message_placeholder.markdown(full_response)
+                
+            except Exception as e:
+                message_placeholder.error(f"调用失败: {str(e)}")
+                full_response = "抱歉，模型调用出现错误，请稍后重试。"
+            
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.caption("由中国主流大模型驱动 · 海外部署\nPowered by Chinese LLMs · Deployed Overseas")
