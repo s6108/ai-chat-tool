@@ -53,10 +53,12 @@ st.subheader("Select Model")
 model_options = {
     "DeepSeek": ("https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY),
     "GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
+    "GLM-4V": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4v", ZHIPU_API_KEY),   # ← 新增视觉模型
     "Kimi": ("https://api.moonshot.cn/v1", "moonshot-v1-8k", KIMI_API_KEY),
     "Doubao-Pro": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415022601-jm5b7", DOUBAO_API_KEY),
     "Doubao-Lite": ("https://ark.cn-beijing.volces.com/api/v3", "ep-20260415023354-lx4bm", DOUBAO_API_KEY),
-    "Qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY)
+    "Qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY),
+    "Qwen-VL": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-vl-plus", DASHSCOPE_API_KEY)  # ← 新增视觉模型
 }
 
 # 当前选中模型（默认 DeepSeek）
@@ -118,11 +120,31 @@ if audio_value is not None:
     st.success("✅ 已录制语音")
 
 # ====================== 发送消息 ======================
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+if prompt or uploaded_file is not None:
+    user_message = {"role": "user", "content": []}
+    
+    if prompt:
+        user_message["content"].append({"type": "text", "text": prompt})
+    
+    if uploaded_file is not None:
+        # 把图片转为 base64 发送给视觉模型
+        import base64
+        bytes_data = uploaded_file.getvalue()
+        base64_image = base64.b64encode(bytes_data).decode('utf-8')
+        user_message["content"].append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+        })
+    
+    st.session_state.messages.append(user_message)
+    
     with st.chat_message("user"):
-        st.markdown(prompt)
+        if prompt:
+            st.markdown(prompt)
+        if uploaded_file is not None:
+            st.image(uploaded_file, width=300)
 
+    # AI 回复
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
@@ -132,7 +154,7 @@ if prompt:
             
             stream = client.chat.completions.create(
                 model=st.session_state.model_name,
-                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                messages=st.session_state.messages,
                 stream=True,
                 temperature=0.7,
                 max_tokens=2000,
