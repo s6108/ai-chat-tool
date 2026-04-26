@@ -3,21 +3,15 @@ import os
 import base64
 from openai import OpenAI
 
-# ==================== PWA + iOS 配置 ====================
-st.set_page_config(
-    page_title="Mango AI",
-    page_icon="🥭",
-    layout="centered",
-    initial_sidebar_state="expanded",
-)
+# ==================== PWA 配置 ====================
+st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     """, unsafe_allow_html=True)
 
-# ====================== API Key ======================
+# ====================== API Keys ======================
 def get_key(name: str):
     return os.getenv(name) or st.secrets.get(name)
 
@@ -29,18 +23,12 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
 # ====================== 界面 ======================
 st.title("🥭 Mango AI")
-st.markdown("**Multi-Model AI Chat Tool** · Low Cost · High Performance")
+st.markdown("**Multi-Model AI Chat** · Low Cost · High Performance")
 
 # 付费按钮
-col1, col2 = st.columns(2)
-with col1:
-    st.link_button("🚀 Basic $9.99/month", 
-                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en", 
-                   use_container_width=True)
-with col2:
-    st.link_button("⭐ Premium $14.99/month", 
-                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", 
-                   use_container_width=True)
+c1, c2 = st.columns(2)
+with c1: st.link_button("🚀 Basic $9.99", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en", use_container_width=True)
+with c2: st.link_button("⭐ Premium $14.99", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", use_container_width=True)
 
 st.divider()
 
@@ -59,17 +47,17 @@ model_options = {
 }
 
 if "selected_model_name" not in st.session_state:
-    st.session_state.selected_model_name = "DeepSeek"
-    st.session_state.base_url = model_options["DeepSeek"][0]
-    st.session_state.model_name = model_options["DeepSeek"][1]
-    st.session_state.api_key = model_options["DeepSeek"][2]
+    st.session_state.selected_model_name = "GLM-4V"   # 默认使用视觉模型
+    st.session_state.base_url = model_options["GLM-4V"][0]
+    st.session_state.model_name = model_options["GLM-4V"][1]
+    st.session_state.api_key = model_options["GLM-4V"][2]
 
 cols = st.columns(len(model_options))
 for idx, (name, (url, mdl, key)) in enumerate(model_options.items()):
     with cols[idx]:
-        is_selected = st.session_state.selected_model_name == name
-        label = "🔴 " + name if is_selected else "⚪ " + name
-        if st.button(label, use_container_width=True, key=f"model_{idx}"):
+        selected = st.session_state.selected_model_name == name
+        label = "🔴 " + name if selected else "⚪ " + name
+        if st.button(label, use_container_width=True, key=f"btn_{idx}"):
             st.session_state.selected_model_name = name
             st.session_state.base_url = url
             st.session_state.model_name = mdl
@@ -90,32 +78,30 @@ if st.button("🗑️ Clear Chat"):
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        if isinstance(msg.get("content"), list):
-            for item in msg["content"]:
-                if isinstance(item, dict):
-                    if item.get("type") == "text":
-                        st.markdown(item.get("text"))
-                    elif "image_url" in item:
-                        st.image(item["image_url"]["url"])
+        content = msg.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    st.markdown(part.get("text"))
+                elif isinstance(part, dict) and "image_url" in part:
+                    st.image(part["image_url"]["url"])
         else:
-            st.markdown(msg["content"])
+            st.markdown(content)
 
-# ====================== 输入区域（小圆按钮风格） ======================
+# ====================== 输入区域（小圆按钮） ======================
 prompt = st.chat_input("Ask anything...")
 
-# 小圆按钮
-btn_col1, btn_col2 = st.columns([1, 1])
+col_attach, col_voice = st.columns([1, 1])
 
-with btn_col1:
-    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg"], 
-                                     label_visibility="collapsed", key="attach")
+with col_attach:
+    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg"], label_visibility="collapsed", key="attach_key")
 
-with btn_col2:
-    audio_value = st.audio_input("🎤", label_visibility="collapsed", key="voice")
+with col_voice:
+    audio_value = st.audio_input("🎤", label_visibility="collapsed", key="voice_key")
 
-# 显示上传状态
+# 显示上传内容
 if uploaded_file is not None:
-    st.image(uploaded_file, width=280)
+    st.image(uploaded_file, width=300)
     st.success("✅ Image uploaded")
 
 if audio_value is not None:
@@ -128,23 +114,23 @@ if prompt or uploaded_file is not None:
         bytes_data = uploaded_file.getvalue()
         base64_image = base64.b64encode(bytes_data).decode('utf-8')
         
-        if "GLM-4V" in st.session_state.selected_model_name:
-            content = [
-                {"type": "text", "text": prompt or "请描述这张图片"},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-            ]
-        elif "Qwen-VL" in st.session_state.selected_model_name:
-            content = [
-                {"type": "text", "text": prompt or "请描述这张图片"},
-                {"image": f"data:image/jpeg;base64,{base64_image}"}
-            ]
+        if st.session_state.selected_model_name in ["GLM-4V", "Qwen-VL"]:
+            if st.session_state.selected_model_name == "GLM-4V":
+                content = [
+                    {"type": "text", "text": prompt or "Describe this image"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]
+            else:
+                content = [
+                    {"type": "text", "text": prompt or "Describe this image"},
+                    {"image": f"data:image/jpeg;base64,{base64_image}"}
+                ]
         else:
-            content = prompt or "请描述这张图片"
+            content = prompt or "I uploaded an image, please describe it."   # 非视觉模型fallback
     else:
         content = prompt
 
-    user_msg = {"role": "user", "content": content}
-    st.session_state.messages.append(user_msg)
+    st.session_state.messages.append({"role": "user", "content": content})
 
     with st.chat_message("user"):
         if prompt:
@@ -152,10 +138,10 @@ if prompt or uploaded_file is not None:
         if uploaded_file is not None:
             st.image(uploaded_file, width=300)
 
+    # AI回复
     with st.chat_message("assistant"):
-        message_placeholder = st.empty()
+        placeholder = st.empty()
         full_response = ""
-        
         try:
             client = OpenAI(base_url=st.session_state.base_url, api_key=st.session_state.api_key)
             stream = client.chat.completions.create(
@@ -166,15 +152,14 @@ if prompt or uploaded_file is not None:
                 max_tokens=2000,
             )
             for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content is not None:
+                if chunk.choices and chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
-                    message_placeholder.markdown(full_response + "▌")
-            message_placeholder.markdown(full_response)
+                    placeholder.markdown(full_response + "▌")
+            placeholder.markdown(full_response)
         except Exception as e:
-            message_placeholder.error(f"调用失败: {str(e)}")
-            full_response = "抱歉，模型调用出现错误，请稍后重试。"
-        
+            placeholder.error(f"Error: {str(e)}")
+            full_response = "Sorry, something went wrong."
+
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-# 底部说明
 st.caption("由中国主流大模型驱动 · 海外部署\nPowered by Chinese LLMs · Deployed Overseas")
