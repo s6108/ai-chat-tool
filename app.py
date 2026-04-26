@@ -81,11 +81,10 @@ for msg in st.session_state.messages:
         content = msg.get("content")
         if isinstance(content, list):
             for part in content:
-                if isinstance(part, dict):
-                    if part.get("type") == "text":
-                        st.markdown(part.get("text"))
-                    elif "image_url" in part:
-                        st.image(part["image_url"]["url"])
+                if isinstance(part, dict) and part.get("type") == "text":
+                    st.markdown(part.get("text"))
+                elif isinstance(part, dict) and "image_url" in part:
+                    st.image(part["image_url"]["url"])
         else:
             st.markdown(content)
 
@@ -105,33 +104,27 @@ if uploaded_file is not None:
 if audio_value is not None:
     st.audio(audio_value)
 
-# ====================== 发送消息（优化版） ======================
+# ====================== 发送消息（最终修复版） ======================
 if prompt or uploaded_file is not None:
     model_name = st.session_state.selected_model_name
-    
+    user_content = []
+
+    if prompt:
+        user_content.append({"type": "text", "text": prompt})
+
     if uploaded_file is not None:
         bytes_data = uploaded_file.getvalue()
         base64_image = base64.b64encode(bytes_data).decode('utf-8')
         
         if model_name == "GLM-4V":
-            content = [
-                {"type": "text", "text": prompt or "Describe this image in detail."},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-            ]
+            user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}})
         elif model_name == "Qwen-VL":
-            content = prompt or "Describe this image."
-            # Qwen-VL 特殊处理：图片和文字分开
-            st.session_state.messages.append({"role": "user", "content": content})
-            st.session_state.messages.append({"role": "user", "content": [{"image": f"data:image/jpeg;base64,{base64_image}"}]})
-            user_content_for_display = content
+            user_content.append({"image": f"data:image/jpeg;base64,{base64_image}"})
         else:
-            content = prompt or "I sent an image, please describe it."
-    else:
-        content = prompt
+            user_content = [{"type": "text", "text": prompt or "I sent an image."}]
 
-    if model_name != "Qwen-VL":
-        st.session_state.messages.append({"role": "user", "content": content})
-        user_content_for_display = content
+    # 添加到历史
+    st.session_state.messages.append({"role": "user", "content": user_content if len(user_content) > 1 else user_content[0]})
 
     with st.chat_message("user"):
         if prompt:
@@ -159,7 +152,7 @@ if prompt or uploaded_file is not None:
             placeholder.markdown(full_response)
         except Exception as e:
             placeholder.error(f"Error: {str(e)}")
-            full_response = "Sorry, the model cannot process this request."
+            full_response = "Sorry, this model cannot process images. Please use GLM-4V."
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
