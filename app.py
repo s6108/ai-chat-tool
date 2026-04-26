@@ -94,7 +94,21 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("Ask anything..."):
+# ====================== 输入区域（带附件和语音） ======================
+col_input, col_attach, col_voice = st.columns([7, 1, 1])
+
+with col_input:
+    prompt = st.chat_input("Ask anything...")
+
+with col_attach:
+    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg", "pdf", "txt"], 
+                                     label_visibility="collapsed", key="file_uploader")
+
+with col_voice:
+    audio_value = st.audio_input("🎤", label_visibility="collapsed", key="voice_input")
+
+# 处理用户输入
+if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -127,4 +141,9 @@ if prompt := st.chat_input("Ask anything..."):
         
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-st.caption("由中国主流大模型驱动 · 海外部署\nPowered by Chinese LLMs · Deployed Overseas")
+# 处理附件和语音（占位，未来可扩展）
+if uploaded_file is not None:
+    st.info(f"📎 已上传: {uploaded_file.name} （功能开发中）")
+
+if audio_value is not None:
+    st.info("🎤 已录制语音 （功能开发中）")
