@@ -10,14 +10,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 加强版 PWA 配置（针对 iOS）
+# PWA 配置
 st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/s6108/ai-chat-tool/main/微信图片_20260416184349_146_13.png">
     """, unsafe_allow_html=True)
 
 # ====================== 安全读取 API Key ======================
@@ -41,21 +40,19 @@ Multi-Model AI Chat Tool · Low Cost · High Performance
 # 付费按钮
 col1, col2 = st.columns(2)
 with col1:
-    st.link_button(
-        "🚀 Upgrade Basic ($9.99/month)", 
-        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en",
-        use_container_width=True
-    )
+    st.link_button("🚀 Upgrade Basic ($9.99/month)", 
+                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/4e54840f-f7b5-4ccb-9051-f193b3a5ea87?lang=en", 
+                   use_container_width=True)
 with col2:
-    st.link_button(
-        "⭐ Upgrade Premium ($14.99/month)", 
-        "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en",
-        use_container_width=True
-    )
+    st.link_button("⭐ Upgrade Premium ($14.99/month)", 
+                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", 
+                   use_container_width=True)
 
 st.divider()
 
-# 模型选择（默认 DeepSeek）
+# ====================== 模型选择（主页面按钮） ======================
+st.subheader("选择模型 / Select Model")
+
 model_options = {
     "DeepSeek": ("https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY),
     "智谱 GLM-4": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY),
@@ -65,17 +62,32 @@ model_options = {
     "通义千问": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", DASHSCOPE_API_KEY)
 }
 
-selected_model_name = st.sidebar.radio(
-    "选择模型 / Select Model", 
-    list(model_options.keys()), 
-    index=0   # 默认选中 DeepSeek
-)
+# 使用 columns 显示模型按钮
+cols = st.columns(len(model_options))
+for idx, (name, (url, mdl, key)) in enumerate(model_options.items()):
+    with cols[idx]:
+        if st.button(name, use_container_width=True, key=f"model_{idx}"):
+            st.session_state.selected_model_name = name
+            st.session_state.base_url = url
+            st.session_state.model_name = mdl
+            st.session_state.api_key = key
+            st.rerun()
 
-base_url, model_name, api_key = model_options[selected_model_name]
+# 默认选择 DeepSeek
+if "selected_model_name" not in st.session_state:
+    st.session_state.selected_model_name = "DeepSeek"
+    st.session_state.base_url = model_options["DeepSeek"][0]
+    st.session_state.model_name = model_options["DeepSeek"][1]
+    st.session_state.api_key = model_options["DeepSeek"][2]
 
 # ====================== 聊天逻辑 ======================
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+# 清空聊天按钮
+if st.button("🗑️ 清空聊天记录 / Clear Chat"):
+    st.session_state.messages = []
+    st.rerun()
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -91,11 +103,10 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
         full_response = ""
         
         try:
-            client = OpenAI(base_url=base_url, api_key=api_key)
+            client = OpenAI(base_url=st.session_state.base_url, api_key=st.session_state.api_key)
             
-            # Streaming 逐字输出（打字机效果）
             stream = client.chat.completions.create(
-                model=model_name,
+                model=st.session_state.model_name,
                 messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
                 stream=True,
                 temperature=0.7,
@@ -104,8 +115,7 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
             
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content is not None:
-                    delta = chunk.choices[0].delta.content
-                    full_response += delta
+                    full_response += chunk.choices[0].delta.content
                     message_placeholder.markdown(full_response + "▌")
             
             message_placeholder.markdown(full_response)
@@ -114,7 +124,6 @@ if prompt := st.chat_input("输入你的问题... / Ask anything..."):
             message_placeholder.error(f"调用失败: {str(e)}")
             full_response = "抱歉，模型调用出现错误，请稍后重试。"
         
-    # 保存助手回复到历史
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 st.caption("由中国主流大模型驱动 · 海外部署\nPowered by Chinese LLMs · Deployed Overseas")
