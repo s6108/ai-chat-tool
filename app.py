@@ -23,7 +23,7 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
 # ====================== 界面 ======================
 st.title("🥭 Mango AI")
-st.markdown("**Multi-Model AI Chat** · Low Cost · High Performance")
+st.markdown("**Multi-Model AI Chat** · Vision Supported")
 
 # 付费按钮
 c1, c2 = st.columns(2)
@@ -47,7 +47,7 @@ model_options = {
 }
 
 if "selected_model_name" not in st.session_state:
-    st.session_state.selected_model_name = "GLM-4V"   # 默认使用视觉模型
+    st.session_state.selected_model_name = "GLM-4V"   # 默认视觉模型
     st.session_state.base_url = model_options["GLM-4V"][0]
     st.session_state.model_name = model_options["GLM-4V"][1]
     st.session_state.api_key = model_options["GLM-4V"][2]
@@ -81,56 +81,57 @@ for msg in st.session_state.messages:
         content = msg.get("content")
         if isinstance(content, list):
             for part in content:
-                if isinstance(part, dict) and part.get("type") == "text":
-                    st.markdown(part.get("text"))
-                elif isinstance(part, dict) and "image_url" in part:
-                    st.image(part["image_url"]["url"])
+                if isinstance(part, dict):
+                    if part.get("type") == "text":
+                        st.markdown(part.get("text"))
+                    elif "image_url" in part:
+                        st.image(part["image_url"]["url"])
         else:
             st.markdown(content)
 
-# ====================== 输入区域（小圆按钮） ======================
+# ====================== 输入区域 ======================
 prompt = st.chat_input("Ask anything...")
 
 col_attach, col_voice = st.columns([1, 1])
-
 with col_attach:
-    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg"], label_visibility="collapsed", key="attach_key")
+    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg"], label_visibility="collapsed", key="attach")
 
 with col_voice:
-    audio_value = st.audio_input("🎤", label_visibility="collapsed", key="voice_key")
+    audio_value = st.audio_input("🎤", label_visibility="collapsed", key="voice")
 
-# 显示上传内容
 if uploaded_file is not None:
     st.image(uploaded_file, width=300)
-    st.success("✅ Image uploaded")
 
 if audio_value is not None:
     st.audio(audio_value)
-    st.success("✅ Voice recorded")
 
-# ====================== 发送消息 ======================
+# ====================== 发送消息（优化版） ======================
 if prompt or uploaded_file is not None:
+    model_name = st.session_state.selected_model_name
+    
     if uploaded_file is not None:
         bytes_data = uploaded_file.getvalue()
         base64_image = base64.b64encode(bytes_data).decode('utf-8')
         
-        if st.session_state.selected_model_name in ["GLM-4V", "Qwen-VL"]:
-            if st.session_state.selected_model_name == "GLM-4V":
-                content = [
-                    {"type": "text", "text": prompt or "Describe this image"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                ]
-            else:
-                content = [
-                    {"type": "text", "text": prompt or "Describe this image"},
-                    {"image": f"data:image/jpeg;base64,{base64_image}"}
-                ]
+        if model_name == "GLM-4V":
+            content = [
+                {"type": "text", "text": prompt or "Describe this image in detail."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+            ]
+        elif model_name == "Qwen-VL":
+            content = prompt or "Describe this image."
+            # Qwen-VL 特殊处理：图片和文字分开
+            st.session_state.messages.append({"role": "user", "content": content})
+            st.session_state.messages.append({"role": "user", "content": [{"image": f"data:image/jpeg;base64,{base64_image}"}]})
+            user_content_for_display = content
         else:
-            content = prompt or "I uploaded an image, please describe it."   # 非视觉模型fallback
+            content = prompt or "I sent an image, please describe it."
     else:
         content = prompt
 
-    st.session_state.messages.append({"role": "user", "content": content})
+    if model_name != "Qwen-VL":
+        st.session_state.messages.append({"role": "user", "content": content})
+        user_content_for_display = content
 
     with st.chat_message("user"):
         if prompt:
@@ -138,7 +139,7 @@ if prompt or uploaded_file is not None:
         if uploaded_file is not None:
             st.image(uploaded_file, width=300)
 
-    # AI回复
+    # AI 回复
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
@@ -158,7 +159,7 @@ if prompt or uploaded_file is not None:
             placeholder.markdown(full_response)
         except Exception as e:
             placeholder.error(f"Error: {str(e)}")
-            full_response = "Sorry, something went wrong."
+            full_response = "Sorry, the model cannot process this request."
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
