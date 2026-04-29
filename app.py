@@ -29,15 +29,15 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 st.title("🥭 Mango AI")
 st.markdown("**Multi-Model AI Chat Tool** · Vision Supported")
 
-# ====================== 付费按钮（已更新最新链接） ======================
+# ====================== 付费按钮（已强制英文） ======================
 col1, col2 = st.columns(2)
 with col1:
     st.link_button("🚀 Basic $9.99/month", 
-                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en", 
+                   "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en&locale=en", 
                    use_container_width=True)
 with col2:
     st.link_button("⭐ Premium $14.99/month", 
-                   "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en", 
+                   "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en&locale=en", 
                    use_container_width=True)
 
 st.divider()
