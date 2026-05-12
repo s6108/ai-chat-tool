@@ -22,12 +22,13 @@ DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DOUBAO_APPID = get_key("DOUBAO_APPID")
 DOUBAO_TOKEN = get_key("DOUBAO_TOKEN")
 
-# ====================== 模型 ======================
+# ====================== 模型配置 ======================
 model_options = {
     "DeepSeek": {"base_url": "https://api.deepseek.com", "model": "deepseek-chat", "key": DEEPSEEK_API_KEY},
     "GLM-4V": {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus", "key": ZHIPU_API_KEY},
 }
 
+# ====================== 自动选择模型 ======================
 def auto_select_model(has_image=False):
     return "GLM-4V" if has_image else "DeepSeek"
 
@@ -55,6 +56,8 @@ def doubao_asr(audio_bytes):
 # ====================== 初始化 ======================
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "current_model" not in st.session_state:
+    st.session_state.current_model = "DeepSeek"
 
 # ====================== 界面 ======================
 st.title("🥭 Mango AI")
@@ -91,7 +94,7 @@ with col3:
 # ====================== 处理输入 ======================
 if prompt or uploaded_file is not None or audio_value is not None:
     has_image = uploaded_file is not None
-    selected_model = auto_select_model(has_image)
+    st.session_state.current_model = auto_select_model(has_image)
     
     user_content = []
     display_text = prompt or ""
@@ -117,13 +120,13 @@ if prompt or uploaded_file is not None or audio_value is not None:
     with st.chat_message("user"):
         st.markdown(display_text)
 
-    # ====================== 调用AI ======================
+    # 调用AI
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
 
         try:
-            cfg = model_options[selected_model]
+            cfg = model_options[st.session_state.current_model]
             client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
             
             stream = client.chat.completions.create(
@@ -147,4 +150,6 @@ if prompt or uploaded_file is not None or audio_value is not None:
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-st.caption(f"当前模型: **{selected_model}**（自动选择）")
+# 底部信息（使用 session_state 避免 NameError）
+st.caption(f"当前模型: **{st.session_state.current_model}**（自动选择）\n"
+           "由中国主流大模型驱动 · 支持语音识别与图像理解")
