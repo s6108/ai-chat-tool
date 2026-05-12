@@ -4,11 +4,7 @@ import base64
 from openai import OpenAI
 
 # ==================== PWA 配置 ====================
-st.set_page_config(
-    page_title="Mango AI",
-    page_icon="🥭",
-    layout="centered",
-)
+st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 st.markdown("""
     <link rel="manifest" href="/manifest.json">
@@ -25,25 +21,15 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 智能模型路由 ======================
+# ====================== 智能路由 ======================
 def auto_select_model(prompt: str, has_image: bool = False):
-    text = prompt.lower() if prompt else ""
-    
-    # 1. 图像任务 - 优先使用 GLM-4V
-    if has_image or any(k in text for k in ["图片", "图像", "照片", "describe", "看图", "what is in"]):
+    if has_image:
         return "GLM-4V", "https://open.bigmodel.cn/api/paas/v4/", "glm-4v", ZHIPU_API_KEY
-    
-    # 2. 复杂推理、编程、数学、深度分析
-    if any(k in text for k in ["代码", "编程", "写代码", "算法", "reason", "分析", "总结", "数学", "prove"]):
-        return "DeepSeek", "https://api.deepseek.com", "deepseek-chat", DEEPSEEK_API_KEY
-    
-    # 3. 通用对话、创意写作、日常问题
     return "GLM-4", "https://open.bigmodel.cn/api/paas/v4/", "glm-4", ZHIPU_API_KEY
-
 
 # ====================== 界面 ======================
 st.title("🥭 Mango AI")
-st.markdown("**Intelligent Multi-Model AI** · Smart Routing")
+st.markdown("**Voice + Vision AI** · 语音对话 · 图像识别")
 
 # 付费按钮
 col1, col2 = st.columns(2)
@@ -82,40 +68,51 @@ prompt = st.chat_input("Ask anything...")
 
 col_attach, col_voice = st.columns([1, 1])
 with col_attach:
-    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
+    uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
 
 with col_voice:
-    audio_value = st.audio_input("🎤", label_visibility="collapsed")
+    audio_value = st.audio_input("🎤 按住说话", label_visibility="collapsed")
 
 if uploaded_file is not None:
     st.image(uploaded_file, width=300)
 
+# ====================== 处理语音输入 ======================
 if audio_value is not None:
     st.audio(audio_value)
+    st.info("🎤 语音已录制，正在识别...")
 
-# ====================== 发送消息（智能路由） ======================
-if prompt or uploaded_file is not None:
-    # 自动选择模型
-    model_name, base_url, api_model, api_key = auto_select_model(prompt, has_image=uploaded_file is not None)
+# ====================== 发送消息 ======================
+if prompt or uploaded_file is not None or audio_value is not None:
+    user_text = prompt
+    
+    # 如果有语音，暂时用 placeholder（后续可接入 ASR）
+    if audio_value is not None:
+        user_text = user_text or "（语音消息）"
 
     # 构建消息
+    if uploaded_file is not None and st.session_state.get("selected_model_name") != "GLM-4V":
+        st.warning("当前模型不支持图像，已自动切换到 GLM-4V")
+        st.session_state.selected_model_name = "GLM-4V"
+
+    model_name, base_url, api_model, api_key = auto_select_model(user_text, uploaded_file is not None)
+
     if uploaded_file is not None and model_name == "GLM-4V":
         bytes_data = uploaded_file.getvalue()
         base64_image = base64.b64encode(bytes_data).decode('utf-8')
         content = [
-            {"type": "text", "text": prompt or "请详细描述这张图片"},
+            {"type": "text", "text": user_text or "请描述这张图片"},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
         ]
     else:
-        content = prompt or "请描述这张图片"
+        content = user_text
 
     st.session_state.messages.append({"role": "user", "content": content})
 
     with st.chat_message("user"):
-        if prompt: st.markdown(prompt)
+        if user_text: st.markdown(user_text)
         if uploaded_file: st.image(uploaded_file, width=300)
 
-    # AI 回复
+    # AI回复
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
@@ -135,8 +132,8 @@ if prompt or uploaded_file is not None:
             placeholder.markdown(full_response)
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
-            full_response = "抱歉，当前模型处理出现问题，请稍后再试。"
+            full_response = "抱歉，模型调用出现问题。"
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-st.caption("由中国主流大模型驱动 · 智能路由 · 海外部署\nPowered by Chinese LLMs · Smart Routing")
+st.caption("由中国主流大模型驱动 · 支持语音输入 + 图像识别\nSmart Routing · Voice + Vision")
