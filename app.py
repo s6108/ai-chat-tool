@@ -5,6 +5,11 @@ from openai import OpenAI
 
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
+st.markdown("""
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ff9800">
+""", unsafe_allow_html=True)
+
 # ====================== 密钥 ======================
 def get_key(name: str):
     return os.getenv(name) or st.secrets.get(name)
@@ -12,12 +17,28 @@ def get_key(name: str):
 ZHIPU_API_KEY = get_key("ZHIPU_API_KEY")
 DEEPSEEK_API_KEY = get_key("DEEPSEEK_API_KEY")
 KIMI_API_KEY = get_key("KIMI_API_KEY")
+DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
+DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
+# ====================== 所有模型（6个） ======================
 model_options = {
-    "DeepSeek": {"base_url": "https://api.deepseek.com", "model": "deepseek-chat", "key": DEEPSEEK_API_KEY},
-    "GLM-4V":   {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus", "key": ZHIPU_API_KEY},
-    "Kimi":     {"base_url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k", "key": KIMI_API_KEY},
+    "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
+    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
+    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus",      "key": ZHIPU_API_KEY},
+    "Kimi":      {"base_url": "https://api.moonshot.cn/v1",        "model": "moonshot-v1-8k",     "key": KIMI_API_KEY},
+    "Doubao-Pro":{"base_url": "https://ark.cn-beijing.volces.com/api/v3", "model": "ep-20260415022601-jm5b7", "key": DOUBAO_API_KEY},
+    "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
+
+# ====================== 自动选择 ======================
+def auto_select_model(has_image=False, text_length=0):
+    if has_image:
+        return "GLM-4V"
+    if text_length > 800:
+        return "Kimi"
+    if text_length > 300:
+        return "Doubao-Pro"
+    return "DeepSeek"
 
 # ====================== 初始化 ======================
 if "messages" not in st.session_state:
@@ -25,24 +46,25 @@ if "messages" not in st.session_state:
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 
-# ====================== 侧边栏 ======================
+# ====================== 侧边栏模型选择（隐藏导航条） ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
     st.markdown("### 模型选择")
     for name in model_options.keys():
-        if st.button("🔴 " + name if st.session_state.selected_model == name else "⚪ " + name, 
-                     key=f"btn_{name}", use_container_width=True):
+        label = "🔴 " + name if st.session_state.selected_model == name else "⚪ " + name
+        if st.button(label, key=f"btn_{name}", use_container_width=True):
             st.session_state.selected_model = name
             st.rerun()
 
 # ====================== 主界面 ======================
 st.title("🥭 Mango AI")
+st.markdown("**支持全部主流模型 · 图片与长文本优化**")
 
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
     st.rerun()
 
-# 显示历史消息
+# 显示聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], str):
@@ -54,58 +76,57 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# 输入
+# 输入区域
 prompt = st.chat_input("输入你的问题...")
 uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"])
 
 # ====================== 处理 ======================
-if prompt or uploaded_file:
-    # 自动选择模型
-    if uploaded_file:
-        st.session_state.selected_model = "GLM-4V"
-    elif len(prompt) > 800:
-        st.session_state.selected_model = "Kimi"
+if prompt or uploaded_file is not None:
+    text_length = len(prompt) if prompt else 0
+    has_image = uploaded_file is not None
     
-    # 构建用户消息
+    st.session_state.selected_model = auto_select_model(has_image, text_length)
+
+    user_content = []
+    display_text = prompt or ""
+
     if uploaded_file:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
-        content = [
-            {"type": "text", "text": prompt or "请描述这张图片"},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
-        ]
+        user_content.append({"type": "text", "text": display_text or "请描述这张图片"})
+        user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
         st.image(uploaded_file, caption="✅ 图片已上传")
-    else:
-        content = prompt
 
-    st.session_state.messages.append({"role": "user", "content": content})
+    if prompt and not uploaded_file:
+        user_content.append({"type": "text", "text": prompt})
+
+    st.session_state.messages.append({"role": "user", "content": user_content or display_text})
 
     with st.chat_message("user"):
-        st.markdown(prompt or "已上传图片")
+        st.markdown(display_text)
 
-    # 调用AI
+    # 调用模型
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
         try:
             cfg = model_options[st.session_state.selected_model]
             client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
-            
             stream = client.chat.completions.create(
                 model=cfg["model"],
-                messages=st.session_state.messages,
+                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
                 stream=True,
                 temperature=0.7,
                 max_tokens=2000
             )
             for chunk in stream:
-                if chunk.choices[0].delta.content:
+                if chunk.choices and chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
                     placeholder.markdown(full_response + "▌")
             placeholder.markdown(full_response)
         except Exception as e:
-            placeholder.error(f"错误: {str(e)}")
-            full_response = "抱歉，调用失败，请重试。"
+            placeholder.error(f"调用失败: {str(e)}")
+            full_response = "抱歉，出错了，请重试。"
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-st.caption(f"当前模型: **{st.session_state.selected_model}**")
+st.caption(f"当前模型: **{st.session_state.selected_model}**（侧边栏切换）")
