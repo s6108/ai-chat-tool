@@ -20,12 +20,12 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 模型配置 ======================
+# ====================== 所有模型 ======================
 model_options = {
-    "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
-    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
-    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus",      "key": ZHIPU_API_KEY},
-    "Kimi":      {"base_url": "https://api.moonshot.cn/v1",        "model": "moonshot-v1-8k",     "key": KIMI_API_KEY},
+    "DeepSeek":  {"base_url": "https://api.deepseek.com", "model": "deepseek-chat", "key": DEEPSEEK_API_KEY},
+    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus", "key": ZHIPU_API_KEY},
+    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus", "key": ZHIPU_API_KEY},
+    "Kimi":      {"base_url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k", "key": KIMI_API_KEY},
     "Doubao-Pro":{"base_url": "https://ark.cn-beijing.volces.com/api/v3", "model": "ep-20260415022601-jm5b7", "key": DOUBAO_API_KEY},
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
@@ -57,7 +57,7 @@ with st.sidebar:
 
 # ====================== 主界面 ======================
 st.title("🥭 Mango AI")
-st.markdown("**智能多模型聊天 · 支持图片与长文本**")
+st.markdown("**智能多模型 · 支持图片与长文本**")
 
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
@@ -66,17 +66,16 @@ if st.button("🗑️ 清空对话"):
 # 显示聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        content = msg["content"]
-        if isinstance(content, str):
-            st.markdown(content)
-        elif isinstance(content, list):
-            for part in content:
+        if isinstance(msg["content"], str):
+            st.markdown(msg["content"])
+        elif isinstance(msg["content"], list):
+            for part in msg["content"]:
                 if part.get("type") == "text":
                     st.markdown(part.get("text", ""))
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# ====================== 输入 ======================
+# 输入区域
 prompt = st.chat_input("输入你的问题...")
 uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"])
 
@@ -85,7 +84,6 @@ if prompt or uploaded_file is not None:
     text_length = len(prompt) if prompt else 0
     has_image = uploaded_file is not None
     
-    # 自动选择模型
     st.session_state.selected_model = auto_select_model(has_image, text_length)
 
     user_content = []
@@ -100,5 +98,4 @@ if prompt or uploaded_file is not None:
     if prompt and not uploaded_file:
         user_content.append({"type": "text", "text": prompt})
 
-    # 添加用户消息
-    st.session_state.messages.append({"role": "user
+    st.session_state.messages
