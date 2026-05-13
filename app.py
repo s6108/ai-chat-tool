@@ -30,7 +30,6 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 自动选择 ======================
 def auto_select_model(has_image=False, text_length=0):
     if has_image:
         return "GLM-4V"
@@ -58,7 +57,7 @@ with st.sidebar:
 
 # ====================== 主界面 ======================
 st.title("🥭 Mango AI")
-st.markdown("**智能多模型 · 支持图片与长文本**")
+st.markdown("**智能多模型聊天 · 支持图片与长文本**")
 
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
@@ -67,28 +66,39 @@ if st.button("🗑️ 清空对话"):
 # 显示聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        if isinstance(msg["content"], str):
-            st.markdown(msg["content"])
-        elif isinstance(msg["content"], list):
-            for part in msg["content"]:
+        content = msg["content"]
+        if isinstance(content, str):
+            st.markdown(content)
+        elif isinstance(content, list):
+            for part in content:
                 if part.get("type") == "text":
                     st.markdown(part.get("text", ""))
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# 输入区域（语音已隐藏）
-col1, col2 = st.columns([7, 2])
-with col1:
-    prompt = st.chat_input("输入你的问题...")
-
-with col2:
-    uploaded_file = st.file_uploader("📎", type=["png","jpg","jpeg"], label_visibility="collapsed")
+# ====================== 输入 ======================
+prompt = st.chat_input("输入你的问题...")
+uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"])
 
 # ====================== 处理输入 ======================
 if prompt or uploaded_file is not None:
     text_length = len(prompt) if prompt else 0
     has_image = uploaded_file is not None
     
+    # 自动选择模型
     st.session_state.selected_model = auto_select_model(has_image, text_length)
 
     user_content = []
+    display_text = prompt or ""
+
+    if uploaded_file:
+        b64 = base64.b64encode(uploaded_file.getvalue()).decode()
+        user_content.append({"type": "text", "text": display_text or "请描述这张图片"})
+        user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+        st.image(uploaded_file, caption="✅ 图片已上传")
+
+    if prompt and not uploaded_file:
+        user_content.append({"type": "text", "text": prompt})
+
+    # 添加用户消息
+    st.session_state.messages.append({"role": "user
