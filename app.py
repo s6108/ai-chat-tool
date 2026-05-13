@@ -30,7 +30,7 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 自动选择模型 ======================
+# ====================== 自动选择 ======================
 def auto_select_model(has_image=False, text_length=0):
     if has_image:
         return "GLM-4V"
@@ -46,7 +46,7 @@ if "messages" not in st.session_state:
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 
-# ====================== 侧边栏模型选择（隐藏式导航条） ======================
+# ====================== 侧边栏模型选择 ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
     st.markdown("### 模型选择")
@@ -76,8 +76,8 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# ====================== 输入区域（语音栏已隐藏） ======================
-col1, col2 = st.columns([7, 2])   # 只保留文字和图片
+# 输入区域（语音已隐藏）
+col1, col2 = st.columns([7, 2])
 with col1:
     prompt = st.chat_input("输入你的问题...")
 
@@ -89,13 +89,6 @@ if prompt or uploaded_file is not None:
     text_length = len(prompt) if prompt else 0
     has_image = uploaded_file is not None
     
-    # 自动选择模型
-    auto_model = auto_select_model(has_image, text_length)
-    st.session_state.selected_model = auto_model
+    st.session_state.selected_model = auto_select_model(has_image, text_length)
 
     user_content = []
-    display_text = prompt or ""
-
-    if uploaded_file:
-        b64 = base64.b64encode(uploaded_file.getvalue()).decode()
-        user_content.append({"
