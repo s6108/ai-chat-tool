@@ -20,7 +20,7 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 模型配置 ======================
+# ====================== 所有模型 ======================
 model_options = {
     "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
     "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
@@ -30,7 +30,7 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 自动选择 ======================
+# ====================== 自动选择（仅在未手动选择时生效） ======================
 def auto_select_model(has_image=False, text_length=0):
     if has_image:
         return "GLM-4V"
@@ -45,30 +45,29 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
+if "manual_selected" not in st.session_state:
+    st.session_state.manual_selected = False
 
-# ====================== 侧边栏（付费按钮 + 模型选择） ======================
+# ====================== 侧边栏 ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
     
-        # === 升级会员按钮 ===
+    # 付费按钮
     st.markdown("### 💎 升级会员")
-    col_basic, col_premium = st.columns(2)
-    with col_basic:
-        st.link_button(
-            "🚀 基础版 $9.99/month", 
-            "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en"
-        )
-    with col_premium:
-        st.link_button(
-            "🔥 高级版 $14.99/month", 
-            "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en"
-        )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.link_button("🚀 基础版 $9.99", 
+                      "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en")
+    with col2:
+        st.link_button("🔥 高级版 $14.99", 
+                      "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
 
     st.markdown("### 模型选择")
     for name in model_options.keys():
         label = "🔴 " + name if st.session_state.selected_model == name else "⚪ " + name
         if st.button(label, key=f"btn_{name}", use_container_width=True):
             st.session_state.selected_model = name
+            st.session_state.manual_selected = True   # 标记已手动选择
             st.rerun()
 
 # ====================== 主界面 ======================
@@ -77,6 +76,7 @@ st.markdown("**智能多模型 · 支持图片与长文本**")
 
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
+    st.session_state.manual_selected = False
     st.rerun()
 
 # 显示聊天记录
@@ -99,8 +99,10 @@ uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"
 if prompt or uploaded_file is not None:
     text_length = len(prompt) if prompt else 0
     has_image = uploaded_file is not None
-    
-    st.session_state.selected_model = auto_select_model(has_image, text_length)
+
+    # 只有未手动选择时才自动切换
+    if not st.session_state.manual_selected:
+        st.session_state.selected_model = auto_select_model(has_image, text_length)
 
     user_content = []
     display_text = prompt or ""
@@ -144,4 +146,4 @@ if prompt or uploaded_file is not None:
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-st.caption(f"当前模型: **{st.session_state.selected_model}**（侧边栏切换）")
+st.caption(f"当前模型: **{st.session_state.selected_model}**（侧边栏手动切换优先）")
