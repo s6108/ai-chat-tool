@@ -20,12 +20,12 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 模型 ======================
+# ====================== 模型配置 ======================
 model_options = {
-    "DeepSeek":  {"base_url": "https://api.deepseek.com", "model": "deepseek-chat", "key": DEEPSEEK_API_KEY},
-    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus", "key": ZHIPU_API_KEY},
-    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus", "key": ZHIPU_API_KEY},
-    "Kimi":      {"base_url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k", "key": KIMI_API_KEY},
+    "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
+    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
+    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus",      "key": ZHIPU_API_KEY},
+    "Kimi":      {"base_url": "https://api.moonshot.cn/v1",        "model": "moonshot-v1-8k",     "key": KIMI_API_KEY},
     "Doubao-Pro":{"base_url": "https://ark.cn-beijing.volces.com/api/v3", "model": "ep-20260415022601-jm5b7", "key": DOUBAO_API_KEY},
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
@@ -71,7 +71,7 @@ if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
     st.rerun()
 
-# ====================== 显示聊天记录 ======================
+# 显示聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], str):
@@ -83,15 +83,25 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# ====================== 输入区域 ======================
-prompt = st.chat_input("输入你的问题...")
-uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
+# ====================== 输入区域（+号 + 文字输入整合） ======================
+col_input, col_upload = st.columns([7, 1])
+
+with col_input:
+    prompt = st.chat_input("输入你的问题...")
+
+with col_upload:
+    uploaded_file = st.file_uploader(
+        "📎", 
+        type=["png", "jpg", "jpeg"], 
+        label_visibility="collapsed",
+        key="image_upload"
+    )
 
 # ====================== 处理输入 ======================
 if prompt or uploaded_file is not None:
     text_length = len(prompt) if prompt else 0
     has_image = uploaded_file is not None
-
+    
     st.session_state.selected_model = auto_select_model(has_image, text_length)
 
     user_content = []
