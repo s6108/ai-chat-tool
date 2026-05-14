@@ -50,13 +50,19 @@ if "selected_model" not in st.session_state:
 with st.sidebar:
     st.title("🥭 Mango AI")
     
-    # === 升级会员按钮 ===
+        # === 升级会员按钮 ===
     st.markdown("### 💎 升级会员")
     col_basic, col_premium = st.columns(2)
     with col_basic:
-        st.link_button("🚀 基础版 $9.99", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en")
+        st.link_button(
+            "🚀 基础版 $9.99/month", 
+            "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en"
+        )
     with col_premium:
-        st.link_button("🔥 高级版 $14.99", "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
+        st.link_button(
+            "🔥 高级版 $14.99/month", 
+            "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en"
+        )
 
     st.markdown("### 模型选择")
     for name in model_options.keys():
