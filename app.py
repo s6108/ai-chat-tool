@@ -8,6 +8,19 @@ st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
+    <style>
+        /* 固定底部输入栏 */
+        .bottom-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 10px 15px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+    </style>
 """, unsafe_allow_html=True)
 
 # ====================== 密钥 ======================
@@ -48,7 +61,6 @@ if "selected_model" not in st.session_state:
 # ====================== 侧边栏 ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
-    
     st.markdown("### 💎 升级会员")
     col1, col2 = st.columns(2)
     with col1:
@@ -83,7 +95,9 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# ====================== 输入区域（+号 + 文字输入整合） ======================
+# ====================== 固定底部输入栏（+号 + 文字输入） ======================
+st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
+
 col_input, col_upload = st.columns([7, 1])
 
 with col_input:
@@ -96,6 +110,8 @@ with col_upload:
         label_visibility="collapsed",
         key="image_upload"
     )
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 # ====================== 处理输入 ======================
 if prompt or uploaded_file is not None:
