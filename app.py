@@ -20,7 +20,7 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 所有模型 ======================
+# ====================== 模型配置 ======================
 model_options = {
     "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
     "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
@@ -30,7 +30,6 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 自动选择（仅在未手动选择时生效） ======================
 def auto_select_model(has_image=False, text_length=0):
     if has_image:
         return "GLM-4V"
@@ -45,14 +44,11 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
-if "manual_selected" not in st.session_state:
-    st.session_state.manual_selected = False
 
 # ====================== 侧边栏 ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
     
-    # 付费按钮
     st.markdown("### 💎 升级会员")
     col1, col2 = st.columns(2)
     with col1:
@@ -67,16 +63,14 @@ with st.sidebar:
         label = "🔴 " + name if st.session_state.selected_model == name else "⚪ " + name
         if st.button(label, key=f"btn_{name}", use_container_width=True):
             st.session_state.selected_model = name
-            st.session_state.manual_selected = True   # 标记已手动选择
             st.rerun()
 
 # ====================== 主界面 ======================
 st.title("🥭 Mango AI")
-st.markdown("**智能多模型 · 支持图片与长文本**")
+st.markdown("**智能多模型 · 支持图片**")
 
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
-    st.session_state.manual_selected = False
     st.rerun()
 
 # 显示聊天记录
@@ -91,59 +85,4 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# 输入区域
-prompt = st.chat_input("输入你的问题...")
-uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"])
-
-# ====================== 处理输入 ======================
-if prompt or uploaded_file is not None:
-    text_length = len(prompt) if prompt else 0
-    has_image = uploaded_file is not None
-
-    # 只有未手动选择时才自动切换
-    if not st.session_state.manual_selected:
-        st.session_state.selected_model = auto_select_model(has_image, text_length)
-
-    user_content = []
-    display_text = prompt or ""
-
-    if uploaded_file:
-        b64 = base64.b64encode(uploaded_file.getvalue()).decode()
-        user_content.append({"type": "text", "text": display_text or "请描述这张图片"})
-        user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-        st.image(uploaded_file, caption="✅ 图片已上传")
-
-    if prompt and not uploaded_file:
-        user_content.append({"type": "text", "text": prompt})
-
-    st.session_state.messages.append({"role": "user", "content": user_content or display_text})
-
-    with st.chat_message("user"):
-        st.markdown(display_text)
-
-    # 调用AI
-    with st.chat_message("assistant"):
-        placeholder = st.empty()
-        full_response = ""
-        try:
-            cfg = model_options[st.session_state.selected_model]
-            client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
-            stream = client.chat.completions.create(
-                model=cfg["model"],
-                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                stream=True,
-                temperature=0.7,
-                max_tokens=2000
-            )
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    full_response += chunk.choices[0].delta.content
-                    placeholder.markdown(full_response + "▌")
-            placeholder.markdown(full_response)
-        except Exception as e:
-            placeholder.error(f"调用失败: {str(e)}")
-            full_response = "抱歉，出错了，请重试。"
-
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-st.caption(f"当前模型: **{st.session_state.selected_model}**（侧边栏手动切换优先）")
+# ====================== 输入栏（+号 +
