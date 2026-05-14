@@ -20,7 +20,7 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 所有模型（6个） ======================
+# ====================== 模型配置 ======================
 model_options = {
     "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
     "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
@@ -46,9 +46,18 @@ if "messages" not in st.session_state:
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 
-# ====================== 侧边栏模型选择（隐藏导航条） ======================
+# ====================== 侧边栏（付费按钮 + 模型选择） ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
+    
+    # === 升级会员按钮 ===
+    st.markdown("### 💎 升级会员")
+    col_basic, col_premium = st.columns(2)
+    with col_basic:
+        st.link_button("🚀 基础版 $9.99", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en")
+    with col_premium:
+        st.link_button("🔥 高级版 $14.99", "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
+
     st.markdown("### 模型选择")
     for name in model_options.keys():
         label = "🔴 " + name if st.session_state.selected_model == name else "⚪ " + name
@@ -58,7 +67,7 @@ with st.sidebar:
 
 # ====================== 主界面 ======================
 st.title("🥭 Mango AI")
-st.markdown("**支持全部主流模型 · 图片与长文本优化**")
+st.markdown("**智能多模型 · 支持图片与长文本**")
 
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
@@ -80,7 +89,7 @@ for msg in st.session_state.messages:
 prompt = st.chat_input("输入你的问题...")
 uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"])
 
-# ====================== 处理 ======================
+# ====================== 处理输入 ======================
 if prompt or uploaded_file is not None:
     text_length = len(prompt) if prompt else 0
     has_image = uploaded_file is not None
@@ -104,7 +113,7 @@ if prompt or uploaded_file is not None:
     with st.chat_message("user"):
         st.markdown(display_text)
 
-    # 调用模型
+    # 调用AI
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
