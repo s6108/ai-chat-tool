@@ -2,7 +2,6 @@ import streamlit as st
 import os
 import base64
 from openai import OpenAI
-import time
 
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
@@ -11,8 +10,8 @@ st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <style>
-        /* 隐藏 Streamlit 默认的 chat_input */
-        .stChatInput {
+        /* 隐藏 Streamlit 默认的 chat_input 和 file_uploader */
+        .stChatInput, .stFileUploader {
             display: none !important;
         }
         
@@ -46,6 +45,7 @@ st.markdown("""
         /* 输入框容器 */
         .input-container {
             flex: 1;
+            position: relative;
         }
         
         /* 自定义输入框 */
@@ -60,11 +60,41 @@ st.markdown("""
             outline: none;
             transition: all 0.2s ease;
             background: white;
+            padding-right: 50px;
         }
         
         .custom-textarea:focus {
             border-color: #ff9800;
             box-shadow: 0 0 0 3px rgba(255,152,0,0.1);
+        }
+        
+        /* 发送按钮 */
+        .send-btn {
+            position: absolute;
+            right: 8px;
+            bottom: 6px;
+            background: #ff9800;
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: white;
+            font-size: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .send-btn:hover {
+            background: #ff6b00;
+            transform: scale(1.05);
+        }
+        
+        .send-btn:active {
+            transform: scale(0.95);
         }
         
         /* + 号图片按钮 */
@@ -94,6 +124,42 @@ st.markdown("""
             transform: scale(0.95);
         }
         
+        /* 图片预览区域 */
+        .image-preview {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            border-radius: 12px;
+            padding: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            border: 1px solid #ff9800;
+        }
+        
+        .image-preview img {
+            max-height: 60px;
+            border-radius: 8px;
+        }
+        
+        .remove-image {
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
         @media (max-width: 768px) {
             .fixed-bottom-input {
                 padding: 10px 16px 20px 16px;
@@ -102,6 +168,11 @@ st.markdown("""
                 width: 44px;
                 height: 44px;
                 font-size: 24px;
+            }
+            .send-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
             }
         }
     </style>
@@ -142,13 +213,11 @@ if "messages" not in st.session_state:
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
-    st.session_state.auto_mode = True  # 默认自动模式
-if "pending_prompt" not in st.session_state:
-    st.session_state.pending_prompt = None
-if "pending_image" not in st.session_state:
-    st.session_state.pending_image = None
-if "process_input" not in st.session_state:
-    st.session_state.process_input = False
+    st.session_state.auto_mode = True
+if "uploaded_image" not in st.session_state:
+    st.session_state.uploaded_image = None
+if "uploaded_image_b64" not in st.session_state:
+    st.session_state.uploaded_image_b64 = None
 
 # ====================== 侧边栏 ======================
 with st.sidebar:
@@ -156,8 +225,10 @@ with st.sidebar:
     
     # 模型选择模式
     st.markdown("### 模型选择模式")
-    mode = st.radio("", ["自动选择", "手动选择"], index=0 if st.session_state.auto_mode else 1)
-    st.session_state.auto_mode = (mode == "自动选择")
+    mode = st.radio("", ["🤖 自动选择", "🎮 手动选择"], 
+                    index=0 if st.session_state.auto_mode else 1,
+                    label_visibility="collapsed")
+    st.session_state.auto_mode = (mode == "🤖 自动选择")
     
     if not st.session_state.auto_mode:
         st.markdown("### 手动选择模型")
@@ -167,15 +238,18 @@ with st.sidebar:
                 st.session_state.selected_model = name
                 st.rerun()
     else:
-        st.info("🤖 自动模式：\n• 有图片 → GLM-4V\n• 长文本(>800字) → Kimi\n• 默认 → DeepSeek")
+        st.info("📌 **自动选择规则**\n\n"
+                "• 🖼️ 有图片 → **GLM-4V**\n"
+                "• 📝 长文本(>800字) → **Kimi**\n"
+                "• ⭐ 默认 → **DeepSeek**")
     
     st.markdown("---")
     st.markdown("### 💎 升级会员")
     col1, col2 = st.columns(2)
     with col1:
-        st.link_button("🚀 基础版 $9.99", "#")
+        st.link_button("🚀 基础版", "#")
     with col2:
-        st.link_button("🔥 高级版 $14.99", "#")
+        st.link_button("🔥 高级版", "#")
 
 # ====================== 主界面 ======================
 st.title("🥭 Mango AI")
@@ -184,8 +258,8 @@ st.markdown("**智能多模型 · 支持图片**")
 # 清空对话按钮
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
-    st.session_state.pending_prompt = None
-    st.session_state.pending_image = None
+    st.session_state.uploaded_image = None
+    st.session_state.uploaded_image_b64 = None
     st.rerun()
 
 # 显示聊天记录
@@ -200,24 +274,40 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# ====================== 底部固定输入栏 ======================
-# 隐藏的文件上传器（用于 + 按钮触发）
-with st.expander("", expanded=False):
-    uploaded_file = st.file_uploader(
-        "上传图片", 
-        type=["png", "jpg", "jpeg"], 
-        label_visibility="collapsed",
-        key="image_uploader",
-        on_change=None
-    )
+# 显示图片预览（如果有）
+if st.session_state.uploaded_image:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image(st.session_state.uploaded_image, caption="📎 已选择图片", use_container_width=True)
+        if st.button("✖️ 移除图片", key="remove_img"):
+            st.session_state.uploaded_image = None
+            st.session_state.uploaded_image_b64 = None
+            st.rerun()
+
+# ====================== 底部固定输入栏（包含发送按钮和+号按钮）======================
+# 隐藏的文件上传器（完全隐藏，由+号按钮触发）
+uploaded_file = st.file_uploader(
+    "", 
+    type=["png", "jpg", "jpeg", "webp"], 
+    label_visibility="collapsed",
+    key="hidden_uploader"
+)
+
+# 处理图片上传
+if uploaded_file and uploaded_file != st.session_state.get("last_uploaded"):
+    st.session_state.uploaded_image = uploaded_file
+    st.session_state.last_uploaded = uploaded_file
+    st.session_state.uploaded_image_b64 = base64.b64encode(uploaded_file.getvalue()).decode()
+    st.rerun()
 
 # 使用 HTML + JavaScript 实现底部输入栏
-st.markdown('''
+st.markdown(f'''
 <div class="fixed-bottom-input">
     <div class="bottom-input-wrapper">
         <div class="input-container">
-            <textarea id="user-input" class="custom-textarea" rows="1" placeholder="输入你的问题..." 
-                      style="overflow-y: hidden;"></textarea>
+            <textarea id="user-input" class="custom-textarea" rows="1" 
+                      placeholder="输入你的问题..." style="overflow-y: hidden;"></textarea>
+            <button id="send-btn" class="send-btn" title="发送">➤</button>
         </div>
         <button id="plus-btn" class="plus-image-btn" title="上传图片">+</button>
     </div>
@@ -226,87 +316,72 @@ st.markdown('''
 <script>
     // 获取元素
     const textarea = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
     const plusBtn = document.getElementById('plus-btn');
     
     // 自动调整文本框高度
-    if (textarea) {
-        textarea.addEventListener('input', function() {
+    if (textarea) {{
+        textarea.addEventListener('input', function() {{
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-        });
+        }});
         
         // 回车发送消息
-        textarea.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
+        textarea.addEventListener('keypress', function(e) {{
+            if (e.key === 'Enter' && !e.shiftKey) {{
                 e.preventDefault();
                 const message = this.value.trim();
-                if (message) {
-                    // 通过 URL 参数传递消息
+                if (message) {{
                     const url = new URL(window.location.href);
                     url.searchParams.set('prompt', message);
                     window.location.href = url.toString();
-                }
-            }
-        });
-    }
+                }}
+            }}
+        }});
+    }}
+    
+    // 发送按钮点击事件
+    if (sendBtn) {{
+        sendBtn.addEventListener('click', function() {{
+            const message = textarea ? textarea.value.trim() : '';
+            if (message) {{
+                const url = new URL(window.location.href);
+                url.searchParams.set('prompt', message);
+                window.location.href = url.toString();
+            }}
+        }});
+    }}
     
     // + 号按钮触发文件上传
-    if (plusBtn) {
-        plusBtn.addEventListener('click', function() {
-            // 找到 Streamlit 的文件上传器并触发点击
+    if (plusBtn) {{
+        plusBtn.addEventListener('click', function() {{
+            // 找到隐藏的文件上传器
             const fileInput = document.querySelector('input[type="file"][data-testid="stFileUploader"]');
-            if (fileInput) {
+            if (fileInput) {{
                 fileInput.click();
-            } else {
-                // 备用方案：创建临时文件输入
-                const tempInput = document.createElement('input');
-                tempInput.type = 'file';
-                tempInput.accept = 'image/png,image/jpg,image/jpeg';
-                tempInput.onchange = function(e) {
-                    if (e.target.files && e.target.files[0]) {
-                        const formData = new FormData();
-                        formData.append('file', e.target.files[0]);
-                        // 触发 Streamlit 上传
-                        const uploadEvent = new Event('change', { bubbles: true });
-                        const hiddenInput = document.querySelector('input[type="file"]');
-                        if (hiddenInput) {
-                            hiddenInput.files = e.target.files;
-                            hiddenInput.dispatchEvent(uploadEvent);
-                        }
-                    }
-                };
-                tempInput.click();
-            }
-        });
-    }
+            }}
+        }});
+    }}
 </script>
 ''', unsafe_allow_html=True)
 
-# ====================== 处理输入（防止循环）======================
-# 从 URL 参数获取用户输入
+# ====================== 处理输入 ======================
 query_params = st.query_params
 url_prompt = query_params.get("prompt", "")
 if url_prompt:
-    st.session_state.pending_prompt = url_prompt
-    # 清除 URL 参数避免重复
+    # 清除 URL 参数
     st.query_params.clear()
+else:
+    url_prompt = None
 
-# 处理图片上传
-if uploaded_file and st.session_state.pending_image != uploaded_file:
-    st.session_state.pending_image = uploaded_file
-
-# 处理消息（使用标志位防止循环）
-if st.session_state.pending_prompt or st.session_state.pending_image:
-    prompt = st.session_state.pending_prompt
-    image = st.session_state.pending_image
+# 处理消息
+if url_prompt or st.session_state.uploaded_image:
+    prompt = url_prompt or ""
+    has_image = st.session_state.uploaded_image is not None
     
-    # 清空 pending 状态（立即清空，防止循环）
-    st.session_state.pending_prompt = None
-    
-    if prompt or image:
+    if prompt or has_image:
         # 计算文本长度
         text_length = len(prompt) if prompt else 0
-        has_image = image is not None
         
         # 自动选择模型
         if st.session_state.auto_mode:
@@ -316,29 +391,29 @@ if st.session_state.pending_prompt or st.session_state.pending_image:
             selected = st.session_state.selected_model
         
         # 构建用户消息内容
-        user_content = []
-        display_text = prompt or ""
-        
-        if image:
-            # 读取图片并编码
-            img_bytes = image.getvalue()
-            b64 = base64.b64encode(img_bytes).decode()
-            user_content.append({"type": "text", "text": display_text or "请描述这张图片"})
-            user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+        if has_image:
+            # 带图片的消息
+            user_content = [
+                {"type": "text", "text": prompt or "请描述这张图片"},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{st.session_state.uploaded_image_b64}"}}
+            ]
             
-            # 显示用户消息（包含图片）
+            # 显示用户消息
             with st.chat_message("user"):
-                if display_text:
-                    st.markdown(display_text)
-                st.image(image, caption="✅ 图片已上传")
+                if prompt:
+                    st.markdown(prompt)
+                st.image(st.session_state.uploaded_image, caption="📎 上传的图片")
             
             st.session_state.messages.append({"role": "user", "content": user_content})
-            st.session_state.pending_image = None  # 清空图片
+            
+            # 清空图片
+            st.session_state.uploaded_image = None
+            st.session_state.uploaded_image_b64 = None
         else:
             # 纯文本消息
             with st.chat_message("user"):
-                st.markdown(display_text)
-            st.session_state.messages.append({"role": "user", "content": display_text})
+                st.markdown(prompt)
+            st.session_state.messages.append({"role": "user", "content": prompt})
         
         # 调用 AI
         with st.chat_message("assistant"):
@@ -372,16 +447,15 @@ if st.session_state.pending_prompt or st.session_state.pending_image:
                     placeholder.markdown(full_response)
             except Exception as e:
                 error_msg = str(e)
-                placeholder.error(f"调用失败: {error_msg}")
-                full_response = f"抱歉，出错了：{error_msg}"
+                placeholder.error(f"调用失败: {error_msg[:200]}")
+                full_response = f"抱歉，出错了：{error_msg[:200]}"
             
             st.session_state.messages.append({"role": "assistant", "content": full_response})
         
-        # 刷新页面（使用 rerun 而不是重新加载）
         st.rerun()
 
-# 显示当前模型
+# 显示当前模型状态
 if st.session_state.auto_mode:
     st.caption(f"🤖 自动模式 | 当前模型: **{st.session_state.selected_model}**")
 else:
-    st.caption(f"🎮 手动模式 | 当前模型: **{st.session_state.selected_model}**（侧边栏切换）")
+    st.caption(f"🎮 手动模式 | 当前模型: **{st.session_state.selected_model}**（可在侧边栏切换）") 
