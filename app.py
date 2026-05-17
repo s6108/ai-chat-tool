@@ -7,17 +7,15 @@ st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 # 自定义 CSS 实现底部固定输入栏
 st.markdown("""
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#ff9800">
     <style>
-        /* 隐藏 Streamlit 默认的 chat_input 和多余元素 */
-        .stChatInput, .stFileUploader > div:first-child {
+        /* 隐藏 Streamlit 默认的 chat_input */
+        .stChatInput {
             display: none !important;
         }
         
         /* 主内容区域自动滚动，给底部留出空间 */
         .main .block-container {
-            padding-bottom: 120px !important;
+            padding-bottom: 100px !important;
         }
         
         /* 固定底部容器的外层包装 */
@@ -28,12 +26,12 @@ st.markdown("""
             right: 0;
             background: white;
             z-index: 999;
-            border-top: 1px solid rgba(0,0,0,0.05);
+            border-top: 1px solid rgba(0,0,0,0.08);
             box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-            padding: 12px 20px 25px 20px;
+            padding: 12px 20px 20px 20px;
         }
         
-        /* 底部输入栏内部布局 - 使用 flex */
+        /* 底部输入栏内部布局 */
         .bottom-input-row {
             display: flex;
             gap: 12px;
@@ -42,27 +40,14 @@ st.markdown("""
             margin: 0 auto;
         }
         
-        /* 输入框容器 - 占据剩余宽度 */
+        /* 输入框容器 */
         .input-field-container {
             flex: 1;
         }
         
         /* 自定义输入框样式 */
-        .custom-input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1.5px solid #e0e0e0;
-            border-radius: 28px;
-            font-size: 15px;
-            font-family: inherit;
-            background: white;
-            transition: all 0.2s ease;
-        }
-        
-        .custom-input:focus {
-            border-color: #ff9800;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(255,152,0,0.1);
+        .stTextInput > div {
+            margin-top: 0 !important;
         }
         
         /* 发送按钮样式 */
@@ -112,45 +97,14 @@ st.markdown("""
             transform: scale(1.02);
         }
         
-        /* 图片预览区域 */
-        .image-preview-container {
-            position: fixed;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: white;
-            border-radius: 12px;
-            padding: 8px 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            z-index: 1000;
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            border: 1px solid #ff9800;
-        }
-        
-        .image-preview-container img {
-            max-height: 50px;
-            border-radius: 8px;
-        }
-        
-        .remove-image-btn {
-            background: #ff4444;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 28px;
-            height: 28px;
-            cursor: pointer;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        /* 隐藏的文件上传器触发器 */
+        .hidden-uploader {
+            display: none;
         }
         
         @media (max-width: 768px) {
             .fixed-bottom-wrapper {
-                padding: 10px 16px 20px 16px;
+                padding: 10px 16px 16px 16px;
             }
             .send-button, .plus-button {
                 width: 44px;
@@ -202,6 +156,8 @@ if "uploaded_image" not in st.session_state:
     st.session_state.uploaded_image = None
 if "uploaded_image_b64" not in st.session_state:
     st.session_state.uploaded_image_b64 = None
+if "show_uploader" not in st.session_state:
+    st.session_state.show_uploader = False
 
 # ====================== 侧边栏 ======================
 with st.sidebar:
@@ -239,11 +195,13 @@ st.title("🥭 Mango AI")
 st.markdown("**智能多模型 · 支持图片**")
 
 # 清空对话按钮
-if st.button("🗑️ 清空对话"):
-    st.session_state.messages = []
-    st.session_state.uploaded_image = None
-    st.session_state.uploaded_image_b64 = None
-    st.rerun()
+col_clear, col_spacer = st.columns([1, 5])
+with col_clear:
+    if st.button("🗑️ 清空对话", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.uploaded_image = None
+        st.session_state.uploaded_image_b64 = None
+        st.rerun()
 
 # 显示聊天记录
 for msg in st.session_state.messages:
@@ -257,76 +215,68 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# ====================== 图片上传和预览 ======================
-# 使用 columns 来放置文件上传器和预览
-col_upload, col_preview = st.columns([2, 3])
-
-with col_upload:
-    # 隐藏的文件上传器（通过 + 按钮触发）
-    uploaded_file = st.file_uploader(
-        "上传图片", 
-        type=["png", "jpg", "jpeg", "webp"], 
-        label_visibility="collapsed",
-        key="image_uploader"
-    )
-    
-    # 处理图片上传
-    if uploaded_file:
-        st.session_state.uploaded_image = uploaded_file
-        st.session_state.uploaded_image_b64 = base64.b64encode(uploaded_file.getvalue()).decode()
-        st.rerun()
-
-# 显示图片预览
+# 显示图片预览（如果有）
 if st.session_state.uploaded_image:
-    with col_preview:
-        st.image(st.session_state.uploaded_image, caption="📎 已选择图片", width=100)
-        if st.button("✖️ 移除", key="remove_img"):
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image(st.session_state.uploaded_image, caption="📎 已选择图片", use_container_width=True)
+        if st.button("✖️ 移除图片", key="remove_img", use_container_width=True):
             st.session_state.uploaded_image = None
             st.session_state.uploaded_image_b64 = None
             st.rerun()
+    st.markdown("---")
 
 # ====================== 底部固定输入栏 ======================
-# 使用 st.form 来确保提交行为正确
-with st.container():
-    st.markdown('<div class="fixed-bottom-wrapper">', unsafe_allow_html=True)
-    st.markdown('<div class="bottom-input-row">', unsafe_allow_html=True)
-    
-    # 第一列：输入框（占据大部分空间）
-    col1, col2, col3 = st.columns([6, 1, 1])
-    
-    with col1:
-        # 使用 st.text_input 代替 textarea，更容易处理
-        user_input = st.text_input(
-            "消息",
-            placeholder="输入你的问题...",
-            label_visibility="collapsed",
-            key="user_message_input"
-        )
-    
-    with col2:
-        # 发送按钮
-        send_clicked = st.button("➤", key="send_btn", use_container_width=True)
-    
-    with col3:
-        # + 号按钮 - 触发文件上传
-        plus_clicked = st.button("+", key="plus_btn", use_container_width=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+# 使用 HTML + CSS 布局，但使用 Streamlit 组件
+st.markdown('<div class="fixed-bottom-wrapper">', unsafe_allow_html=True)
+st.markdown('<div class="bottom-input-row">', unsafe_allow_html=True)
 
-# ====================== 处理 + 按钮点击 - 触发文件上传 ======================
+# 创建三列布局
+col_input, col_send, col_plus = st.columns([6, 1, 1])
+
+with col_input:
+    user_input = st.text_input(
+        "",
+        placeholder="输入你的问题...",
+        label_visibility="collapsed",
+        key="user_message_input"
+    )
+
+with col_send:
+    send_clicked = st.button("➤", key="send_btn", use_container_width=True)
+
+with col_plus:
+    plus_clicked = st.button("+", key="plus_btn", use_container_width=True)
+
+st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ====================== 处理 + 按钮点击 - 显示文件上传器 ======================
 if plus_clicked:
-    # 使用 JavaScript 触发文件上传
-    st.markdown("""
-        <script>
-            setTimeout(function() {
-                const fileInput = document.querySelector('input[type="file"]');
-                if (fileInput) {
-                    fileInput.click();
-                }
-            }, 100);
-        </script>
-    """, unsafe_allow_html=True)
+    # 切换显示状态
+    st.session_state.show_uploader = not st.session_state.show_uploader
+
+# 显示文件上传器（当 + 按钮被点击时）
+if st.session_state.show_uploader:
+    with st.expander("📎 选择图片", expanded=True):
+        uploaded_file = st.file_uploader(
+            "点击或拖拽上传图片", 
+            type=["png", "jpg", "jpeg", "webp"], 
+            label_visibility="collapsed",
+            key="image_uploader"
+        )
+        
+        if uploaded_file:
+            st.session_state.uploaded_image = uploaded_file
+            st.session_state.uploaded_image_b64 = base64.b64encode(uploaded_file.getvalue()).decode()
+            st.session_state.show_uploader = False  # 上传后关闭
+            st.rerun()
+        
+        # 取消按钮
+        if st.button("取消", key="cancel_upload"):
+            st.session_state.show_uploader = False
+            st.rerun()
 
 # ====================== 处理发送消息 ======================
 if send_clicked and user_input:
@@ -363,6 +313,7 @@ if send_clicked and user_input:
             st.session_state.uploaded_image = None
             st.session_state.uploaded_image_b64 = None
         else:
+            # 纯文本消息
             with st.chat_message("user"):
                 st.markdown(prompt)
             st.session_state.messages.append({"role": "user", "content": prompt})
@@ -380,6 +331,7 @@ if send_clicked and user_input:
                 else:
                     client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
                     
+                    # 准备消息历史
                     api_messages = []
                     for m in st.session_state.messages:
                         api_messages.append({"role": m["role"], "content": m["content"]})
@@ -408,6 +360,7 @@ if send_clicked and user_input:
         st.rerun()
 
 # 显示当前模型状态
+st.markdown("---")
 if st.session_state.auto_mode:
     st.caption(f"🤖 自动模式 | 当前模型: **{st.session_state.selected_model}**")
 else:
