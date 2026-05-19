@@ -9,15 +9,60 @@ st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <style>
+        /* 隐藏 Streamlit 默认的 chat_input 避免重复 */
+        .stChatInput {
+            display: none !important;
+        }
+        
+        /* 给主内容区域添加底部内边距，防止被固定栏遮挡 */
+        .main .block-container {
+            padding-bottom: 100px !important;
+        }
+        
+        /* 固定底部输入栏 */
         .bottom-bar {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background: white;
-            padding: 10px 15px;
+            padding: 12px 20px 25px 20px;
             box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
             z-index: 100;
+            border-top: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        /* 底部栏内部布局优化 */
+        .bottom-bar > div {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        /* 调整上传按钮样式 */
+        .stFileUploader button {
+            background: linear-gradient(135deg, #ff9800, #ff6b00);
+            border: none;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .bottom-bar {
+                padding: 10px 16px 20px 16px;
+            }
+            .stFileUploader button {
+                width: 44px;
+                height: 44px;
+                font-size: 20px;
+            }
         }
     </style>
 """, unsafe_allow_html=True)
