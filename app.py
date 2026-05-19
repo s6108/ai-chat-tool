@@ -9,36 +9,34 @@ st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <style>
-        /* 固定底部输入栏 */
+        /* 强制固定底部输入栏 */
         .bottom-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
             background: white;
-            padding: 12px 15px 20px 15px;
-            box-shadow: 0 -3px 15px rgba(0,0,0,0.12);
-            z-index: 1000;
-            border-top: 1px solid #f0f0f0;
+            padding: 10px 15px 25px 15px;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.15);
+            z-index: 10000;
+            border-top: 1px solid #eee;
         }
-        /* 给聊天内容留出底部空间 */
+        /* 给聊天内容留出足够底部空间 */
         .main .block-container {
-            padding-bottom: 110px !important;
+            padding-bottom: 130px !important;
         }
         /* +号按钮样式 */
         .stButton button {
             border-radius: 50% !important;
-            width: 48px;
-            height: 48px;
-            font-size: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            font-weight: bold;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# ====================== 密钥 ======================
+# ====================== 密钥和模型配置（保持不变） ======================
 def get_key(name: str):
     return os.getenv(name) or st.secrets.get(name)
 
@@ -48,7 +46,6 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 模型配置 ======================
 model_options = {
     "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
     "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
@@ -78,7 +75,6 @@ if "auto_mode" not in st.session_state:
 # ====================== 侧边栏 ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
-    
     st.markdown("### 💎 升级会员")
     col1, col2 = st.columns(2)
     with col1:
@@ -128,12 +124,7 @@ with col_input:
     prompt = st.chat_input("输入你的问题...")
 
 with col_plus:
-    uploaded_file = st.file_uploader(
-        "📎", 
-        type=["png", "jpg", "jpeg"], 
-        label_visibility="collapsed",
-        key="img_upload"
-    )
+    uploaded_file = st.file_uploader("📎", type=["png", "jpg", "jpeg"], label_visibility="collapsed", key="img_upload")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
