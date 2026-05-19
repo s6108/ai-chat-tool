@@ -9,15 +9,32 @@ st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <style>
+        /* 强制固定底部输入栏 */
         .bottom-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
             background: white;
-            padding: 10px 15px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-            z-index: 100;
+            padding: 12px 15px 25px 15px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            z-index: 10000;
+            border-top: 1px solid #f0f0f0;
+        }
+        /* 给聊天内容留出底部空间，避免被遮挡 */
+        .main .block-container {
+            padding-bottom: 140px !important;
+        }
+        /* +号按钮样式 */
+        .stButton button {
+            border-radius: 50% !important;
+            width: 52px;
+            height: 52px;
+            font-size: 26px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -57,13 +74,12 @@ if "messages" not in st.session_state:
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
-    st.session_state.auto_mode = True   # 默认开启自动选择
+    st.session_state.auto_mode = True
 
 # ====================== 侧边栏 ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
     
-    # 付费按钮
     st.markdown("### 💎 升级会员")
     col1, col2 = st.columns(2)
     with col1:
@@ -71,13 +87,11 @@ with st.sidebar:
     with col2:
         st.link_button("🔥 高级版 $14.99", "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
 
-    # 自动/手动选择开关
     st.markdown("### 模式选择")
     if st.button("🔄 自动选择模式" if st.session_state.auto_mode else "🔧 手动选择模式", use_container_width=True):
         st.session_state.auto_mode = not st.session_state.auto_mode
         st.rerun()
 
-    # 手动选择模型
     if not st.session_state.auto_mode:
         st.markdown("### 手动选择模型")
         for name in model_options.keys():
@@ -108,12 +122,13 @@ for msg in st.session_state.messages:
 
 # ====================== 固定底部输入栏 ======================
 st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
-col_input, col_upload = st.columns([7, 1])
+
+col_input, col_plus = st.columns([7, 1])
 
 with col_input:
     prompt = st.chat_input("输入你的问题...")
 
-with col_upload:
+with col_plus:
     uploaded_file = st.file_uploader("📎", type=["png","jpg","jpeg"], label_visibility="collapsed", key="img_upload")
 
 st.markdown('</div>', unsafe_allow_html=True)
