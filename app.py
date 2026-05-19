@@ -9,14 +9,9 @@ st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <style>
-        /* 隐藏 Streamlit 默认的 chat_input 避免重复 */
-        .stChatInput {
-            display: none !important;
-        }
-        
         /* 给主内容区域添加底部内边距，防止被固定栏遮挡 */
         .main .block-container {
-            padding-bottom: 100px !important;
+            padding-bottom: 120px !important;
         }
         
         /* 固定底部输入栏 */
@@ -32,25 +27,45 @@ st.markdown("""
             border-top: 1px solid rgba(0,0,0,0.05);
         }
         
-        /* 底部栏内部布局优化 */
-        .bottom-bar > div {
+        /* 底部栏内部布局 */
+        .bottom-bar .row-widget {
             max-width: 800px;
             margin: 0 auto;
         }
         
-        /* 调整上传按钮样式 */
-        .stFileUploader button {
+        /* 输入框样式 */
+        .bottom-bar .stTextInput input {
+            border-radius: 25px !important;
+            border: 1.5px solid #e0e0e0 !important;
+            padding: 10px 16px !important;
+        }
+        
+        .bottom-bar .stTextInput input:focus {
+            border-color: #ff9800 !important;
+            box-shadow: 0 0 0 2px rgba(255,152,0,0.2) !important;
+        }
+        
+        /* 发送按钮样式 */
+        .bottom-bar .stButton button {
             background: linear-gradient(135deg, #ff9800, #ff6b00);
             border: none;
-            border-radius: 50%;
-            width: 48px;
-            height: 48px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            font-weight: bold;
+            border-radius: 25px;
             color: white;
+            font-weight: bold;
+            padding: 8px 20px;
+            white-space: nowrap;
+        }
+        
+        .bottom-bar .stButton button:hover {
+            background: linear-gradient(135deg, #ff6b00, #e65c00);
+            border-color: #ff6b00;
+        }
+        
+        /* + 号按钮样式 */
+        .bottom-bar .stButton button:has(span:contains("+")) {
+            border-radius: 25px;
+            font-size: 18px;
+            font-weight: bold;
         }
         
         /* 移动端适配 */
@@ -58,10 +73,9 @@ st.markdown("""
             .bottom-bar {
                 padding: 10px 16px 20px 16px;
             }
-            .stFileUploader button {
-                width: 44px;
-                height: 44px;
-                font-size: 20px;
+            .bottom-bar .stButton button {
+                padding: 6px 12px;
+                font-size: 14px;
             }
         }
     </style>
@@ -102,7 +116,9 @@ if "messages" not in st.session_state:
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
-    st.session_state.auto_mode = True   # 默认开启自动选择
+    st.session_state.auto_mode = True
+if "user_input" not in st.session_state:
+    st.session_state.user_input = ""
 
 # ====================== 侧边栏 ======================
 with st.sidebar:
@@ -135,9 +151,11 @@ with st.sidebar:
 st.title("🥭 Mango AI")
 st.markdown("**智能多模型 · 支持图片**")
 
-if st.button("🗑️ 清空对话"):
-    st.session_state.messages = []
-    st.rerun()
+col1, col2 = st.columns([1, 5])
+with col1:
+    if st.button("🗑️ 清空对话", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
 # 显示聊天记录
 for msg in st.session_state.messages:
@@ -153,42 +171,85 @@ for msg in st.session_state.messages:
 
 # ====================== 固定底部输入栏 ======================
 st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
-col_input, col_upload = st.columns([7, 1])
+
+# 使用三列布局：输入框、发送按钮、+按钮
+col_input, col_send, col_plus = st.columns([6, 1, 1])
 
 with col_input:
-    prompt = st.chat_input("输入你的问题...")
+    user_input = st.text_input(
+        "", 
+        placeholder="输入你的问题...", 
+        label_visibility="collapsed",
+        key="message_input",
+        value=st.session_state.user_input
+    )
 
-with col_upload:
-    uploaded_file = st.file_uploader("📎", type=["png","jpg","jpeg"], label_visibility="collapsed", key="img_upload")
+with col_send:
+    send_clicked = st.button("发送", key="send_btn", use_container_width=True)
+
+with col_plus:
+    plus_clicked = st.button("+", key="plus_btn", use_container_width=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
+# 隐藏的文件上传器（由+按钮触发）
+uploaded_file = st.file_uploader(
+    "上传图片", 
+    type=["png", "jpg", "jpeg"], 
+    label_visibility="collapsed",
+    key="img_upload",
+    help="点击+按钮上传图片"
+)
+
+# ====================== 处理+按钮点击 ======================
+if plus_clicked:
+    # 使用JavaScript触发文件上传
+    st.markdown("""
+        <script>
+            setTimeout(function() {
+                const fileInput = document.querySelector('input[type="file"]');
+                if (fileInput) {
+                    fileInput.click();
+                }
+            }, 100);
+        </script>
+    """, unsafe_allow_html=True)
+
 # ====================== 处理输入 ======================
-if prompt or uploaded_file is not None:
-    text_length = len(prompt) if prompt else 0
+if send_clicked and user_input:
+    prompt = user_input.strip()
     has_image = uploaded_file is not None
+    
+    if prompt or has_image:
+        text_length = len(prompt) if prompt else 0
+        
+        if st.session_state.auto_mode:
+            st.session_state.selected_model = auto_select_model(has_image, text_length)
+        
+        user_content = []
+        display_text = prompt or ""
+        
+        if uploaded_file:
+            b64 = base64.b64encode(uploaded_file.getvalue()).decode()
+            user_content.append({"type": "text", "text": display_text or "请描述这张图片"})
+            user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+        
+        if prompt and not uploaded_file:
+            user_content = display_text
+        
+        # 添加到消息记录
+        st.session_state.messages.append({"role": "user", "content": user_content or display_text})
+        
+        # 清空输入框
+        st.session_state.user_input = ""
+        
+        # 刷新页面显示消息
+        st.rerun()
 
-    if st.session_state.auto_mode:
-        st.session_state.selected_model = auto_select_model(has_image, text_length)
-
-    user_content = []
-    display_text = prompt or ""
-
-    if uploaded_file:
-        b64 = base64.b64encode(uploaded_file.getvalue()).decode()
-        user_content.append({"type": "text", "text": display_text or "请描述这张图片"})
-        user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-        st.image(uploaded_file, caption="✅ 图片已上传")
-
-    if prompt and not uploaded_file:
-        user_content.append({"type": "text", "text": prompt})
-
-    st.session_state.messages.append({"role": "user", "content": user_content or display_text})
-
-    with st.chat_message("user"):
-        st.markdown(display_text)
-
-    # 调用AI
+# 显示AI回复（在rerun后处理）
+if st.session_state.messages and isinstance(st.session_state.messages[-1], dict) and st.session_state.messages[-1]["role"] == "user":
+    last_message = st.session_state.messages[-1]
+    
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
@@ -210,7 +271,8 @@ if prompt or uploaded_file is not None:
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
             full_response = "抱歉，出错了，请重试。"
-
+        
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.rerun()
 
 st.caption(f"当前模型: **{st.session_state.selected_model}** | 自动模式: {'✅' if st.session_state.auto_mode else '❌'}")
