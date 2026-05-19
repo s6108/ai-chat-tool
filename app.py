@@ -5,77 +5,115 @@ from openai import OpenAI
 
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
+# 自定义CSS - 完全隐藏所有不需要的默认组件
 st.markdown("""
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#ff9800">
     <style>
-        /* 给主内容区域添加底部内边距，防止被固定栏遮挡 */
-        .main .block-container {
-            padding-bottom: 120px !important;
+        /* 隐藏默认的 chat input 和 file uploader 的默认显示 */
+        .stChatInput, .stFileUploader > div:first-child {
+            display: none !important;
         }
         
-        /* 固定底部输入栏 */
-        .bottom-bar {
+        /* 隐藏stTextInput的默认标签 */
+        .stTextInput label {
+            display: none !important;
+        }
+        
+        /* 给主内容区域添加底部内边距 */
+        .main .block-container {
+            padding-bottom: 100px !important;
+        }
+        
+        /* 固定底部栏 - 简洁版本 */
+        .fixed-bottom-bar {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background: white;
-            padding: 12px 20px 25px 20px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-            z-index: 100;
-            border-top: 1px solid rgba(0,0,0,0.05);
+            padding: 12px 20px 20px 20px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
+            z-index: 1000;
+            border-top: 1px solid #eee;
         }
         
-        /* 底部栏内部布局 */
-        .bottom-bar .row-widget {
+        /* 底部栏内部容器 */
+        .bottom-bar-container {
             max-width: 800px;
             margin: 0 auto;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        /* 输入框容器 - 占据剩余宽度 */
+        .input-wrapper {
+            flex: 1;
         }
         
         /* 输入框样式 */
-        .bottom-bar .stTextInput input {
-            border-radius: 25px !important;
-            border: 1.5px solid #e0e0e0 !important;
-            padding: 10px 16px !important;
+        .input-wrapper input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 28px;
+            font-size: 15px;
+            outline: none;
+            transition: all 0.2s;
         }
         
-        .bottom-bar .stTextInput input:focus {
-            border-color: #ff9800 !important;
-            box-shadow: 0 0 0 2px rgba(255,152,0,0.2) !important;
+        .input-wrapper input:focus {
+            border-color: #ff9800;
+            box-shadow: 0 0 0 2px rgba(255,152,0,0.1);
         }
         
-        /* 发送按钮样式 */
-        .bottom-bar .stButton button {
-            background: linear-gradient(135deg, #ff9800, #ff6b00);
+        /* 按钮通用样式 */
+        .btn-send, .btn-image {
             border: none;
-            border-radius: 25px;
-            color: white;
-            font-weight: bold;
-            padding: 8px 20px;
+            border-radius: 28px;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
             white-space: nowrap;
         }
         
-        .bottom-bar .stButton button:hover {
+        /* 发送按钮 */
+        .btn-send {
+            background: linear-gradient(135deg, #ff9800, #ff6b00);
+            color: white;
+            min-width: 70px;
+        }
+        
+        .btn-send:hover {
             background: linear-gradient(135deg, #ff6b00, #e65c00);
-            border-color: #ff6b00;
+            transform: translateY(-1px);
         }
         
-        /* + 号按钮样式 */
-        .bottom-bar .stButton button:has(span:contains("+")) {
-            border-radius: 25px;
-            font-size: 18px;
-            font-weight: bold;
+        /* 图片按钮 */
+        .btn-image {
+            background: #f5f5f5;
+            color: #ff9800;
+            font-size: 20px;
+            padding: 8px 16px;
+            min-width: 60px;
         }
         
-        /* 移动端适配 */
+        .btn-image:hover {
+            background: #ff9800;
+            color: white;
+        }
+        
         @media (max-width: 768px) {
-            .bottom-bar {
-                padding: 10px 16px 20px 16px;
+            .fixed-bottom-bar {
+                padding: 10px 16px 16px 16px;
             }
-            .bottom-bar .stButton button {
-                padding: 6px 12px;
-                font-size: 14px;
+            .btn-send, .btn-image {
+                padding: 8px 12px;
+                min-width: 55px;
+            }
+            .btn-image {
+                font-size: 18px;
             }
         }
     </style>
@@ -117,28 +155,27 @@ if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
-if "user_input" not in st.session_state:
-    st.session_state.user_input = ""
+if "pending_message" not in st.session_state:
+    st.session_state.pending_message = None
+if "pending_image" not in st.session_state:
+    st.session_state.pending_image = None
 
 # ====================== 侧边栏 ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
     
-    # 付费按钮
     st.markdown("### 💎 升级会员")
     col1, col2 = st.columns(2)
     with col1:
-        st.link_button("🚀 基础版 $9.99", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en")
+        st.link_button("🚀 基础版 $9.99", "#")
     with col2:
-        st.link_button("🔥 高级版 $14.99", "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
+        st.link_button("🔥 高级版 $14.99", "#")
 
-    # 自动/手动选择开关
     st.markdown("### 模式选择")
     if st.button("🔄 自动选择模式" if st.session_state.auto_mode else "🔧 手动选择模式", use_container_width=True):
         st.session_state.auto_mode = not st.session_state.auto_mode
         st.rerun()
 
-    # 手动选择模型
     if not st.session_state.auto_mode:
         st.markdown("### 手动选择模型")
         for name in model_options.keys():
@@ -151,11 +188,9 @@ with st.sidebar:
 st.title("🥭 Mango AI")
 st.markdown("**智能多模型 · 支持图片**")
 
-col1, col2 = st.columns([1, 5])
-with col1:
-    if st.button("🗑️ 清空对话", use_container_width=True):
-        st.session_state.messages = []
-        st.rerun()
+if st.button("🗑️ 清空对话"):
+    st.session_state.messages = []
+    st.rerun()
 
 # 显示聊天记录
 for msg in st.session_state.messages:
@@ -169,87 +204,105 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# ====================== 固定底部输入栏 ======================
-st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
-
-# 使用三列布局：输入框、发送按钮、+按钮
-col_input, col_send, col_plus = st.columns([6, 1, 1])
-
-with col_input:
-    user_input = st.text_input(
-        "", 
-        placeholder="输入你的问题...", 
-        label_visibility="collapsed",
-        key="message_input",
-        value=st.session_state.user_input
-    )
-
-with col_send:
-    send_clicked = st.button("发送", key="send_btn", use_container_width=True)
-
-with col_plus:
-    plus_clicked = st.button("+", key="plus_btn", use_container_width=True)
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# 隐藏的文件上传器（由+按钮触发）
+# ====================== 隐藏的文件上传器 ======================
 uploaded_file = st.file_uploader(
-    "上传图片", 
+    "", 
     type=["png", "jpg", "jpeg"], 
     label_visibility="collapsed",
-    key="img_upload",
-    help="点击+按钮上传图片"
+    key="img_uploader"
 )
 
-# ====================== 处理+按钮点击 ======================
-if plus_clicked:
-    # 使用JavaScript触发文件上传
-    st.markdown("""
-        <script>
-            setTimeout(function() {
-                const fileInput = document.querySelector('input[type="file"]');
-                if (fileInput) {
-                    fileInput.click();
-                }
-            }, 100);
-        </script>
-    """, unsafe_allow_html=True)
+# 处理图片上传
+if uploaded_file:
+    st.session_state.pending_image = uploaded_file
+    st.rerun()
 
-# ====================== 处理输入 ======================
-if send_clicked and user_input:
-    prompt = user_input.strip()
-    has_image = uploaded_file is not None
-    
-    if prompt or has_image:
-        text_length = len(prompt) if prompt else 0
-        
-        if st.session_state.auto_mode:
-            st.session_state.selected_model = auto_select_model(has_image, text_length)
-        
-        user_content = []
-        display_text = prompt or ""
-        
-        if uploaded_file:
-            b64 = base64.b64encode(uploaded_file.getvalue()).decode()
-            user_content.append({"type": "text", "text": display_text or "请描述这张图片"})
-            user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-        
-        if prompt and not uploaded_file:
-            user_content = display_text
-        
-        # 添加到消息记录
-        st.session_state.messages.append({"role": "user", "content": user_content or display_text})
-        
-        # 清空输入框
-        st.session_state.user_input = ""
-        
-        # 刷新页面显示消息
-        st.rerun()
+# ====================== 底部固定栏 (HTML + 原生input) ======================
+# 使用HTML原生元素来避免Streamlit组件的冲突
+import streamlit.components.v1 as components
 
-# 显示AI回复（在rerun后处理）
-if st.session_state.messages and isinstance(st.session_state.messages[-1], dict) and st.session_state.messages[-1]["role"] == "user":
-    last_message = st.session_state.messages[-1]
+components.html("""
+    <div class="fixed-bottom-bar">
+        <div class="bottom-bar-container">
+            <div class="input-wrapper">
+                <input type="text" id="message-input" placeholder="输入你的问题..." autocomplete="off">
+            </div>
+            <button class="btn-send" id="send-btn">发送</button>
+            <button class="btn-image" id="image-btn">📷</button>
+        </div>
+    </div>
     
+    <script>
+        const inputEl = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const imageBtn = document.getElementById('image-btn');
+        
+        // 发送消息
+        function sendMessage() {
+            const message = inputEl.value.trim();
+            if (message) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('msg', message);
+                window.location.href = url.toString();
+            }
+        }
+        
+        sendBtn.addEventListener('click', sendMessage);
+        
+        inputEl.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // 触发图片上传
+        imageBtn.addEventListener('click', function() {
+            const fileInput = document.querySelector('input[type="file"]');
+            if (fileInput) {
+                fileInput.click();
+            }
+        });
+    </script>
+""", height=80)
+
+# ====================== 处理消息 ======================
+import time
+
+# 获取URL参数中的消息
+query_params = st.query_params
+msg = query_params.get("msg", "")
+
+if msg:
+    # 清除URL参数
+    st.query_params.clear()
+    
+    prompt = msg
+    has_image = st.session_state.pending_image is not None
+    
+    # 显示用户消息
+    with st.chat_message("user"):
+        st.markdown(prompt)
+        if has_image:
+            st.image(st.session_state.pending_image, caption="✅ 图片已上传")
+    
+    # 添加到消息历史
+    if has_image:
+        b64 = base64.b64encode(st.session_state.pending_image.getvalue()).decode()
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+        ]
+        st.session_state.messages.append({"role": "user", "content": user_content})
+        st.session_state.pending_image = None
+    else:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # 自动选择模型
+    if st.session_state.auto_mode:
+        st.session_state.selected_model = auto_select_model(has_image, len(prompt))
+    
+    # 获取AI回复
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
@@ -273,6 +326,8 @@ if st.session_state.messages and isinstance(st.session_state.messages[-1], dict)
             full_response = "抱歉，出错了，请重试。"
         
         st.session_state.messages.append({"role": "assistant", "content": full_response})
-        st.rerun()
+    
+    st.rerun()
 
+# 显示当前模型
 st.caption(f"当前模型: **{st.session_state.selected_model}** | 自动模式: {'✅' if st.session_state.auto_mode else '❌'}")
