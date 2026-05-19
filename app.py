@@ -9,18 +9,31 @@ st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <style>
+        /* 固定底部输入栏 */
         .bottom-bar {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background: white;
-            padding: 10px 15px 20px 15px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-            z-index: 100;
+            padding: 12px 15px 20px 15px;
+            box-shadow: 0 -3px 15px rgba(0,0,0,0.12);
+            z-index: 1000;
+            border-top: 1px solid #f0f0f0;
         }
+        /* 给聊天内容留出底部空间 */
         .main .block-container {
-            padding-bottom: 100px !important;
+            padding-bottom: 110px !important;
+        }
+        /* +号按钮样式 */
+        .stButton button {
+            border-radius: 50% !important;
+            width: 48px;
+            height: 48px;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -106,7 +119,7 @@ for msg in st.session_state.messages:
                 elif part.get("type") == "image_url":
                     st.image(part["image_url"]["url"])
 
-# ====================== 固定底部输入栏（+号 + 输入框） ======================
+# ====================== 固定底部输入栏 ======================
 st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
 
 col_input, col_plus = st.columns([7, 1])
