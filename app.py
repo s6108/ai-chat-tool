@@ -9,7 +9,6 @@ st.markdown("""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff9800">
     <style>
-        /* 强制固定底部输入栏 */
         .bottom-bar {
             position: fixed !important;
             bottom: 0 !important;
@@ -19,22 +18,16 @@ st.markdown("""
             padding: 12px 15px 25px 15px;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
             z-index: 10000;
-            border-top: 1px solid #f0f0f0;
+            border-top: 1px solid #eee;
         }
-        /* 给聊天内容留出底部空间，避免被遮挡 */
         .main .block-container {
-            padding-bottom: 140px !important;
+            padding-bottom: 150px !important;
         }
-        /* +号按钮样式 */
         .stButton button {
             border-radius: 50% !important;
             width: 52px;
             height: 52px;
-            font-size: 26px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            font-size: 24px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -49,12 +42,12 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 模型配置 ======================
+# ====================== 模型 ======================
 model_options = {
-    "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
-    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
-    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus",      "key": ZHIPU_API_KEY},
-    "Kimi":      {"base_url": "https://api.moonshot.cn/v1",        "model": "moonshot-v1-8k",     "key": KIMI_API_KEY},
+    "DeepSeek":  {"base_url": "https://api.deepseek.com", "model": "deepseek-chat", "key": DEEPSEEK_API_KEY},
+    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus", "key": ZHIPU_API_KEY},
+    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus", "key": ZHIPU_API_KEY},
+    "Kimi":      {"base_url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k", "key": KIMI_API_KEY},
     "Doubao-Pro":{"base_url": "https://ark.cn-beijing.volces.com/api/v3", "model": "ep-20260415022601-jm5b7", "key": DOUBAO_API_KEY},
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
@@ -87,18 +80,22 @@ with st.sidebar:
     with col2:
         st.link_button("🔥 高级版 $14.99", "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
 
-    st.markdown("### 模式选择")
-    if st.button("🔄 自动选择模式" if st.session_state.auto_mode else "🔧 手动选择模式", use_container_width=True):
+    st.markdown("### 模式")
+    if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
         st.session_state.auto_mode = not st.session_state.auto_mode
         st.rerun()
 
     if not st.session_state.auto_mode:
-        st.markdown("### 手动选择模型")
-        for name in model_options.keys():
-            label = "🔴 " + name if st.session_state.selected_model == name else "⚪ " + name
-            if st.button(label, key=f"btn_{name}", use_container_width=True):
-                st.session_state.selected_model = name
-                st.rerun()
+        st.markdown("### 选择模型")
+        selected = st.selectbox(
+            "当前模型", 
+            options=list(model_options.keys()),
+            index=list(model_options.keys()).index(st.session_state.selected_model),
+            label_visibility="collapsed"
+        )
+        if selected != st.session_state.selected_model:
+            st.session_state.selected_model = selected
+            st.rerun()
 
 # ====================== 主界面 ======================
 st.title("🥭 Mango AI")
@@ -158,7 +155,6 @@ if prompt or uploaded_file is not None:
     with st.chat_message("user"):
         st.markdown(display_text)
 
-    # 调用AI
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
