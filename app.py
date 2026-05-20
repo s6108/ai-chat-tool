@@ -2,27 +2,18 @@ import streamlit as st
 import os
 import base64
 from openai import OpenAI
+from supabase import create_client, Client
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
-st.markdown("""
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#ff9800">
-    <style>
-        .bottom-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: white;
-            padding: 10px 15px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-            z-index: 100;
-        }
-    </style>
-""", unsafe_allow_html=True)
+# ====================== Supabase 配置 ======================
+SUPABASE_URL = "https://oeiomraxpgmirnubtrug.supabase.co"
+SUPABASE_KEY = "sb_publishable_oQ6lNrM38kY1F_xWnzQI6w_LK86YMpi"
 
-# ====================== 密钥 ======================
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ====================== API Keys ======================
 def get_key(name: str):
     return os.getenv(name) or st.secrets.get(name)
 
@@ -34,138 +25,160 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
 # ====================== 模型配置 ======================
 model_options = {
-    "DeepSeek":  {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",      "key": DEEPSEEK_API_KEY},
-    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus",     "key": ZHIPU_API_KEY},
-    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus",      "key": ZHIPU_API_KEY},
-    "Kimi":      {"base_url": "https://api.moonshot.cn/v1",        "model": "moonshot-v1-8k",     "key": KIMI_API_KEY},
+    "DeepSeek":  {"base_url": "https://api.deepseek.com", "model": "deepseek-chat", "key": DEEPSEEK_API_KEY},
+    "GLM-4V":    {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus", "key": ZHIPU_API_KEY},
+    "GLM-4":     {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus", "key": ZHIPU_API_KEY},
+    "Kimi":      {"base_url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k", "key": KIMI_API_KEY},
     "Doubao-Pro":{"base_url": "https://ark.cn-beijing.volces.com/api/v3", "model": "ep-20260415022601-jm5b7", "key": DOUBAO_API_KEY},
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-def auto_select_model(has_image=False, text_length=0):
-    if has_image:
-        return "GLM-4V"
-    if text_length > 800:
-        return "Kimi"
-    if text_length > 300:
-        return "Doubao-Pro"
-    return "DeepSeek"
+MONTHLY_LIMIT = 2_000_000
 
-# ====================== 初始化 ======================
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "selected_model" not in st.session_state:
-    st.session_state.selected_model = "DeepSeek"
-if "auto_mode" not in st.session_state:
-    st.session_state.auto_mode = True   # 默认开启自动选择
+# ====================== 用户登录 ======================
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if not st.session_state.user:
+    st.title("🥭 Mango AI")
+    st.subheader("请登录或注册")
+    
+    tab1, tab2 = st.tabs(["登录", "注册"])
+    with tab1:
+        email = st.text_input("邮箱地址")
+        password = st.text_input("密码", type="password")
+        if st.button("登录", use_container_width=True):
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                st.session_state.user = res.user
+                st.success("登录成功！")
+                st.rerun()
+            except Exception as e:
+                st.error(f"登录失败: {e}")
+
+    with tab2:
+        email_reg = st.text_input("注册邮箱")
+        password_reg = st.text_input("设置密码 (至少6位)", type="password")
+        if st.button("注册", use_container_width=True):
+            try:
+                res = supabase.auth.sign_up({"email": email_reg, "password": password_reg})
+                st.success("注册成功！请查收邮箱验证邮件")
+            except Exception as e:
+                st.error(f"注册失败: {e}")
+    st.stop()
+
+# ====================== 已登录 ======================
+user = st.session_state.user
+user_id = user.id
+
+# 获取用户使用量
+def get_usage():
+    data = supabase.table("user_usage").select("*").eq("user_id", user_id).execute()
+    if data.data:
+        return data.data[0]
+    else:
+        supabase.table("user_usage").insert({
+            "user_id": user_id,
+            "total_tokens": 0,
+            "reset_date": (datetime.utcnow() + timedelta(days=30)).isoformat()
+        }).execute()
+        return get_usage()
+
+usage = get_usage()
+total_tokens = usage.get("total_tokens", 0)
 
 # ====================== 侧边栏 ======================
 with st.sidebar:
     st.title("🥭 Mango AI")
+    st.write(f"👤 {user.email}")
     
-    # 付费按钮
-    st.markdown("### 💎 升级会员")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.link_button("🚀 基础版 $9.99", "https://yufan-ai-chat.lemonsqueezy.com/checkout/buy/18622988-9cb4-436f-a106-e3db06f8741a?lang=en")
-    with col2:
-        st.link_button("🔥 高级版 $14.99", "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
-
-    # 自动/手动选择开关
-    st.markdown("### 模式选择")
-    if st.button("🔄 自动选择模式" if st.session_state.auto_mode else "🔧 手动选择模式", use_container_width=True):
-        st.session_state.auto_mode = not st.session_state.auto_mode
+    if st.button("退出登录"):
+        supabase.auth.sign_out()
+        st.session_state.user = None
         st.rerun()
 
-    # 手动选择模型
-    if not st.session_state.auto_mode:
-        st.markdown("### 手动选择模型")
-        for name in model_options.keys():
-            label = "🔴 " + name if st.session_state.selected_model == name else "⚪ " + name
-            if st.button(label, key=f"btn_{name}", use_container_width=True):
-                st.session_state.selected_model = name
-                st.rerun()
+    st.metric("本月 Token 用量", f"{total_tokens:,} / {MONTHLY_LIMIT:,}")
+
+    if total_tokens > MONTHLY_LIMIT * 0.85:
+        st.warning("⚠️ 已接近上限，建议合理使用")
+
+    st.link_button("💎 升级高级会员 $7.99/月", 
+                   "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
 
 # ====================== 主界面 ======================
 st.title("🥭 Mango AI")
-st.markdown("**智能多模型 · 支持图片**")
+st.markdown("**6大顶级模型 · 支持图片识别**")
 
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
     st.rerun()
 
-# 显示聊天记录
-for msg in st.session_state.messages:
+# 显示历史消息
+for msg in st.session_state.get("messages", []):
     with st.chat_message(msg["role"]):
-        if isinstance(msg["content"], str):
-            st.markdown(msg["content"])
-        elif isinstance(msg["content"], list):
-            for part in msg["content"]:
-                if part.get("type") == "text":
-                    st.markdown(part.get("text", ""))
-                elif part.get("type") == "image_url":
-                    st.image(part["image_url"]["url"])
+        st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"][0]["text"])
 
-# ====================== 固定底部输入栏 ======================
-st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
-col_input, col_upload = st.columns([7, 1])
+# 输入
+prompt = st.chat_input("输入你的问题...")
+uploaded_file = st.file_uploader("📎 上传图片", type=["png", "jpg", "jpeg"])
 
-with col_input:
-    prompt = st.chat_input("输入你的问题...")
-
-with col_upload:
-    uploaded_file = st.file_uploader("📎", type=["png","jpg","jpeg"], label_visibility="collapsed", key="img_upload")
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# ====================== 处理输入 ======================
+# 处理输入
 if prompt or uploaded_file is not None:
-    text_length = len(prompt) if prompt else 0
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
     has_image = uploaded_file is not None
+    text_length = len(prompt) if prompt else 0
 
-    if st.session_state.auto_mode:
-        st.session_state.selected_model = auto_select_model(has_image, text_length)
+    selected_model = "GLM-4V" if has_image else "DeepSeek"
 
-    user_content = []
-    display_text = prompt or ""
+    # 超限处理
+    if total_tokens > MONTHLY_LIMIT * 0.9:
+        selected_model = "Doubao-Pro"
+        st.warning("⚠️ 已接近上限，已切换至最省钱模型")
 
+    # 构建消息
+    user_content = prompt or "请描述这张图片"
     if uploaded_file:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
-        user_content.append({"type": "text", "text": display_text or "请描述这张图片"})
-        user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-        st.image(uploaded_file, caption="✅ 图片已上传")
+        user_content = [{"type": "text", "text": prompt or "请描述这张图片"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]
 
-    if prompt and not uploaded_file:
-        user_content.append({"type": "text", "text": prompt})
-
-    st.session_state.messages.append({"role": "user", "content": user_content or display_text})
+    st.session_state.messages.append({"role": "user", "content": user_content})
 
     with st.chat_message("user"):
-        st.markdown(display_text)
+        st.markdown(prompt if prompt else "📸 图片已上传")
 
-    # 调用AI
+    # 调用模型
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
         try:
-            cfg = model_options[st.session_state.selected_model]
+            cfg = model_options[selected_model]
             client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
+            
             stream = client.chat.completions.create(
                 model=cfg["model"],
-                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                messages=st.session_state.messages,
                 stream=True,
                 temperature=0.7,
                 max_tokens=2000
             )
+            
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
                     placeholder.markdown(full_response + "▌")
+            
             placeholder.markdown(full_response)
+
+            # 更新 Token 用量
+            estimated = int(len(full_response) * 1.5 + text_length)
+            new_total = total_tokens + estimated
+            supabase.table("user_usage").update({"total_tokens": new_total}).eq("user_id", user_id).execute()
+
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
-            full_response = "抱歉，出错了，请重试。"
+            full_response = "抱歉，模型调用出现错误。"
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-st.caption(f"当前模型: **{st.session_state.selected_model}** | 自动模式: {'✅' if st.session_state.auto_mode else '❌'}")
