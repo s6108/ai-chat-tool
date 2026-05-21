@@ -31,13 +31,23 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 固定底部CSS ======================
+# ====================== 固定底部输入框 CSS ======================
 st.markdown("""
     <style>
-        .bottom-bar { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important;
-                      background: white; padding: 10px 15px 25px; box-shadow: 0 -4px 15px rgba(0,0,0,0.1);
-                      z-index: 10000; border-top: 1px solid #eee; }
-        .main .block-container { padding-bottom: 180px !important; }
+        .bottom-bar {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            background: white;
+            padding: 12px 15px 25px 15px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            z-index: 10000;
+            border-top: 1px solid #eee;
+        }
+        .main .block-container {
+            padding-bottom: 180px !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -51,13 +61,11 @@ if "selected_model" not in st.session_state:
 if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
 
-# ====================== 未登录页面 ======================
+# ====================== 未登录 ======================
 if not st.session_state.user:
     st.title("🥭 Mango AI")
     st.subheader("请登录或注册")
-
     tab1, tab2 = st.tabs(["🔑 登录", "📝 注册"])
-
     with tab1:
         email = st.text_input("邮箱地址", key="login_email")
         password = st.text_input("密码", type="password", key="login_pass")
@@ -69,14 +77,13 @@ if not st.session_state.user:
                 st.rerun()
             except Exception as e:
                 st.error(f"登录失败: {e}")
-
     with tab2:
         email_reg = st.text_input("注册邮箱", key="reg_email")
         password_reg = st.text_input("设置密码（至少6位）", type="password", key="reg_pass")
         if st.button("注册", use_container_width=True):
             try:
                 res = supabase.auth.sign_up({"email": email_reg, "password": password_reg})
-                st.success("注册成功！请查收邮箱验证邮件")
+                st.success("注册成功！请查收邮箱验证")
             except Exception as e:
                 st.error(f"注册失败: {e}")
     st.stop()
@@ -108,7 +115,6 @@ with st.sidebar:
                 st.session_state.selected_model = name
                 st.rerun()
 
-# 清空对话
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
     st.rerun()
@@ -127,12 +133,35 @@ with col2:
     uploaded_file = st.file_uploader("📎", type=["png","jpg","jpeg"], label_visibility="collapsed")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# ====================== 处理输入（简化版） ======================
+# ====================== 处理输入 ======================
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
+
     with st.chat_message("assistant"):
-        st.info("🤖 模型调用功能正常（待后续完善）")
+        placeholder = st.empty()
+        full_response = ""
+        try:
+            cfg = model_options[st.session_state.selected_model]
+            client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
+            
+            stream = client.chat.completions.create(
+                model=cfg["model"],
+                messages=st.session_state.messages,
+                stream=True,
+                temperature=0.7,
+                max_tokens=2000
+            )
+            
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    full_response += chunk.choices[0].delta.content
+                    placeholder.markdown(full_response + "▌")
+            
+            placeholder.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+        except Exception as e:
+            placeholder.error(f"调用失败: {str(e)}")
 
 st.caption(f"当前模型: **{st.session_state.selected_model}** | 自动模式: {'✅' if st.session_state.auto_mode else '❌'}")
