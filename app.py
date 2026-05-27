@@ -31,7 +31,7 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 加强固定底部CSS ======================
+# ====================== 固定底部CSS ======================
 st.markdown("""
     <style>
         .bottom-bar {
@@ -48,11 +48,6 @@ st.markdown("""
         .main .block-container {
             padding-bottom: 240px !important;
         }
-        div[data-testid="stChatInput"] {
-            position: fixed !important;
-            bottom: 0 !important;
-            width: 100% !important;
-        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,8 +62,6 @@ if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
 if "guest_count" not in st.session_state:
     st.session_state.guest_count = 0
-if "current_image" not in st.session_state:
-    st.session_state.current_image = None   # 只保存当前问题的图片
 
 DAILY_GUEST_LIMIT = 20
 
@@ -76,29 +69,71 @@ DAILY_GUEST_LIMIT = 20
 if not st.session_state.user:
     st.title("🥭 Mango AI")
     st.info(f"🔓 游客模式（今日已用 {st.session_state.guest_count}/{DAILY_GUEST_LIMIT} 条）")
+    
     if st.button("登录 / 注册", use_container_width=True):
         st.session_state.show_login = True
-    # 登录注册代码（省略，与之前一致）
-    # ...
+
+    if st.session_state.get("show_login", False):
+        with st.expander("登录 / 注册", expanded=True):
+            tab1, tab2 = st.tabs(["登录", "注册"])
+            with tab1:
+                email = st.text_input("邮箱地址", key="login_email")
+                password = st.text_input("密码", type="password", key="login_pass")
+                if st.button("登录", use_container_width=True, key="login_btn"):
+                    try:
+                        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                        st.session_state.user = res.user
+                        st.success("登录成功！")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"登录失败: {e}")
+            with tab2:
+                email_reg = st.text_input("注册邮箱", key="reg_email")
+                password_reg = st.text_input("设置密码", type="password", key="reg_pass")
+                if st.button("注册", use_container_width=True, key="reg_btn"):
+                    try:
+                        res = supabase.auth.sign_up({"email": email_reg, "password": password_reg})
+                        st.success("注册成功！请查收邮箱验证")
+                    except Exception as e:
+                        st.error(f"注册失败: {e}")
 
 # ====================== 已登录主界面 ======================
 if st.session_state.user:
     st.title("🥭 Mango AI")
     st.write(f"欢迎回来，**{st.session_state.user.email}**")
 
-# 侧边栏（省略，与之前一致）
+# 侧边栏
 with st.sidebar:
-    # ... 保持你之前的侧边栏代码 ...
+    if st.session_state.user and st.button("退出登录"):
+        supabase.auth.sign_out()
+        st.session_state.user = None
+        st.rerun()
 
+    st.link_button("💎 升级高级会员 $7.99/月", 
+                   "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
+
+    st.markdown("### 模式选择")
+    if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
+        st.session_state.auto_mode = not st.session_state.auto_mode
+        st.rerun()
+
+    if not st.session_state.auto_mode:
+        st.markdown("### 选择模型")
+        for name in model_options.keys():
+            label = "🔴 " + name if st.session_state.selected_model == name else "⚪ " + name
+            if st.button(label, key=f"btn_{name}", use_container_width=True):
+                st.session_state.selected_model = name
+                st.rerun()
+
+# 清空对话
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
-    st.session_state.current_image = None
     st.rerun()
 
 # 显示聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"] if isinstance(msg["content"], str) else "📸 图片")
+        st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
 
 # ====================== 固定底部输入 ======================
 st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
@@ -117,20 +152,19 @@ if prompt or uploaded_file is not None:
             st.stop()
         st.session_state.guest_count += 1
 
-    # 处理图片（只用于当前问题）
-    current_image = None
+    user_content = prompt
     if uploaded_file:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
-        current_image = [{"type": "text", "text": prompt or "请描述这张图片"},
-                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]
+        user_content = [
+            {"type": "text", "text": prompt or "请描述这张图片"},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+        ]
         st.image(uploaded_file, caption="✅ 图片已上传")
-        st.session_state.current_image = current_image
 
-    user_message = current_image if current_image else prompt
-    st.session_state.messages.append({"role": "user", "content": user_message})
+    st.session_state.messages.append({"role": "user", "content": user_content})
 
     with st.chat_message("user"):
-        st.markdown(prompt if prompt else "📸 图片已上传")
+        st.markdown(prompt if prompt else "📸 图片")
 
     # 自动模式
     if st.session_state.auto_mode:
@@ -143,7 +177,6 @@ if prompt or uploaded_file is not None:
         else:
             st.session_state.selected_model = "DeepSeek"
 
-    # 调用模型
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
