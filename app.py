@@ -125,15 +125,22 @@ with st.sidebar:
                 st.session_state.selected_model = name
                 st.rerun()
 
-# 清空对话
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
     st.rerun()
 
-# 显示聊天记录
+# 显示聊天记录（修复图片显示）
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
+        content = msg["content"]
+        if isinstance(content, list):  # 包含图片
+            for part in content:
+                if part.get("type") == "text":
+                    st.markdown(part.get("text", ""))
+                elif part.get("type") == "image_url":
+                    st.image(part["image_url"]["url"], use_column_width=True)
+        else:
+            st.markdown(content)
 
 # ====================== 固定底部输入 ======================
 st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
@@ -152,6 +159,7 @@ if prompt or uploaded_file is not None:
             st.stop()
         st.session_state.guest_count += 1
 
+    # 处理图片
     user_content = prompt
     if uploaded_file:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
@@ -164,7 +172,7 @@ if prompt or uploaded_file is not None:
     st.session_state.messages.append({"role": "user", "content": user_content})
 
     with st.chat_message("user"):
-        st.markdown(prompt if prompt else "📸 图片")
+        st.markdown(prompt if prompt else "📸 图片已上传")
 
     # 自动模式
     if st.session_state.auto_mode:
@@ -177,6 +185,7 @@ if prompt or uploaded_file is not None:
         else:
             st.session_state.selected_model = "DeepSeek"
 
+    # 调用模型
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
