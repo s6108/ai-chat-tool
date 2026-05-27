@@ -69,17 +69,17 @@ DAILY_GUEST_LIMIT = 20
 if not st.session_state.user:
     st.title("🥭 Mango AI")
     st.info(f"🔓 游客模式（今日已用 {st.session_state.guest_count}/{DAILY_GUEST_LIMIT} 条）")
-    
+
     if st.button("登录 / 注册", use_container_width=True):
         st.session_state.show_login = True
 
-    if st.session_state.get("show_login"):
-        with st.expander("登录 / 注册", expanded=True):
+    if st.session_state.get("show_login", False):
+        with st.expander("🔑 登录 / 注册", expanded=True):
             tab1, tab2 = st.tabs(["登录", "注册"])
             with tab1:
-                email = st.text_input("邮箱")
-                password = st.text_input("密码", type="password")
-                if st.button("登录"):
+                email = st.text_input("邮箱地址", key="login_email_unique")
+                password = st.text_input("密码", type="password", key="login_pass_unique")
+                if st.button("登录", use_container_width=True, key="login_btn"):
                     try:
                         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                         st.session_state.user = res.user
@@ -88,22 +88,20 @@ if not st.session_state.user:
                     except Exception as e:
                         st.error(f"登录失败: {e}")
             with tab2:
-                email_reg = st.text_input("注册邮箱")
-                password_reg = st.text_input("密码", type="password")
-                if st.button("注册"):
+                email_reg = st.text_input("注册邮箱", key="reg_email_unique")
+                password_reg = st.text_input("设置密码（至少6位）", type="password", key="reg_pass_unique")
+                if st.button("注册", use_container_width=True, key="reg_btn"):
                     try:
                         res = supabase.auth.sign_up({"email": email_reg, "password": password_reg})
-                        st.success("注册成功！请查收邮箱验证")
+                        st.success("注册成功！请查收邮箱验证邮件")
                     except Exception as e:
                         st.error(f"注册失败: {e}")
-    # st.stop()  # 注释掉，允许游客使用
+    # 游客可继续使用
+else:
+    st.title("🥭 Mango AI")
+    st.write(f"欢迎回来，**{st.session_state.user.email}**")
 
-# ====================== 主界面 ======================
-st.title("🥭 Mango AI")
-if st.session_state.user:
-    st.write(f"欢迎，**{st.session_state.user.email}**")
-
-# 侧边栏
+# ====================== 侧边栏 ======================
 with st.sidebar:
     if st.session_state.user and st.button("退出登录"):
         supabase.auth.sign_out()
@@ -113,7 +111,7 @@ with st.sidebar:
     st.link_button("💎 升级高级会员 $7.99/月", 
                    "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
 
-    st.markdown("### 模式")
+    st.markdown("### 模式选择")
     if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
         st.session_state.auto_mode = not st.session_state.auto_mode
         st.rerun()
@@ -126,11 +124,12 @@ with st.sidebar:
                 st.session_state.selected_model = name
                 st.rerun()
 
+# 清空对话
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
     st.rerun()
 
-# 显示历史
+# 显示聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
@@ -160,11 +159,8 @@ if prompt:
         placeholder = st.empty()
         full_response = ""
         try:
-            # 自动模式逻辑
             if st.session_state.auto_mode:
-                if uploaded_file:
-                    st.session_state.selected_model = "GLM-4V"
-                elif len(prompt) > 800:
+                if len(prompt) > 800:
                     st.session_state.selected_model = "Kimi"
                 elif len(prompt) > 300:
                     st.session_state.selected_model = "Doubao-Pro"
@@ -173,7 +169,7 @@ if prompt:
 
             cfg = model_options[st.session_state.selected_model]
             client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
-
+            
             stream = client.chat.completions.create(
                 model=cfg["model"],
                 messages=st.session_state.messages,
