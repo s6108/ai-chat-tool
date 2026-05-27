@@ -31,7 +31,7 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 固定底部输入框 CSS ======================
+# ====================== 固定底部CSS ======================
 st.markdown("""
     <style>
         .bottom-bar {
@@ -40,13 +40,13 @@ st.markdown("""
             left: 0 !important;
             right: 0 !important;
             background: white;
-            padding: 12px 15px 25px 15px;
+            padding: 12px 15px 30px 15px;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
             z-index: 10000;
             border-top: 1px solid #eee;
         }
         .main .block-container {
-            padding-bottom: 180px !important;
+            padding-bottom: 200px !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -60,41 +60,52 @@ if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
+if "guest_count" not in st.session_state:
+    st.session_state.guest_count = 0
 
-# ====================== 未登录 ======================
+DAILY_GUEST_LIMIT = 20
+
+# ====================== 未登录（游客模式） ======================
 if not st.session_state.user:
     st.title("🥭 Mango AI")
-    st.subheader("请登录或注册")
-    tab1, tab2 = st.tabs(["🔑 登录", "📝 注册"])
-    with tab1:
-        email = st.text_input("邮箱地址", key="login_email")
-        password = st.text_input("密码", type="password", key="login_pass")
-        if st.button("登录", use_container_width=True):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                st.session_state.user = res.user
-                st.success("登录成功！")
-                st.rerun()
-            except Exception as e:
-                st.error(f"登录失败: {e}")
-    with tab2:
-        email_reg = st.text_input("注册邮箱", key="reg_email")
-        password_reg = st.text_input("设置密码（至少6位）", type="password", key="reg_pass")
-        if st.button("注册", use_container_width=True):
-            try:
-                res = supabase.auth.sign_up({"email": email_reg, "password": password_reg})
-                st.success("注册成功！请查收邮箱验证")
-            except Exception as e:
-                st.error(f"注册失败: {e}")
-    st.stop()
+    st.info(f"🔓 游客模式（今日已用 {st.session_state.guest_count}/{DAILY_GUEST_LIMIT} 条）")
+    
+    if st.button("登录 / 注册", use_container_width=True):
+        st.session_state.show_login = True
 
-# ====================== 已登录主界面 ======================
+    if st.session_state.get("show_login"):
+        with st.expander("登录 / 注册", expanded=True):
+            tab1, tab2 = st.tabs(["登录", "注册"])
+            with tab1:
+                email = st.text_input("邮箱")
+                password = st.text_input("密码", type="password")
+                if st.button("登录"):
+                    try:
+                        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                        st.session_state.user = res.user
+                        st.success("登录成功！")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"登录失败: {e}")
+            with tab2:
+                email_reg = st.text_input("注册邮箱")
+                password_reg = st.text_input("密码", type="password")
+                if st.button("注册"):
+                    try:
+                        res = supabase.auth.sign_up({"email": email_reg, "password": password_reg})
+                        st.success("注册成功！请查收邮箱验证")
+                    except Exception as e:
+                        st.error(f"注册失败: {e}")
+    # st.stop()  # 注释掉，允许游客使用
+
+# ====================== 主界面 ======================
 st.title("🥭 Mango AI")
-st.write(f"欢迎回来，**{st.session_state.user.email}**")
+if st.session_state.user:
+    st.write(f"欢迎，**{st.session_state.user.email}**")
 
 # 侧边栏
 with st.sidebar:
-    if st.button("退出登录"):
+    if st.session_state.user and st.button("退出登录"):
         supabase.auth.sign_out()
         st.session_state.user = None
         st.rerun()
@@ -102,7 +113,7 @@ with st.sidebar:
     st.link_button("💎 升级高级会员 $7.99/月", 
                    "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en")
 
-    st.markdown("### 模式选择")
+    st.markdown("### 模式")
     if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
         st.session_state.auto_mode = not st.session_state.auto_mode
         st.rerun()
@@ -119,7 +130,7 @@ if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
     st.rerun()
 
-# 显示聊天记录
+# 显示历史
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
@@ -135,6 +146,12 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 # ====================== 处理输入 ======================
 if prompt:
+    if not st.session_state.user:
+        if st.session_state.guest_count >= DAILY_GUEST_LIMIT:
+            st.error("游客每日限额已用完，请登录")
+            st.stop()
+        st.session_state.guest_count += 1
+
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -143,9 +160,20 @@ if prompt:
         placeholder = st.empty()
         full_response = ""
         try:
+            # 自动模式逻辑
+            if st.session_state.auto_mode:
+                if uploaded_file:
+                    st.session_state.selected_model = "GLM-4V"
+                elif len(prompt) > 800:
+                    st.session_state.selected_model = "Kimi"
+                elif len(prompt) > 300:
+                    st.session_state.selected_model = "Doubao-Pro"
+                else:
+                    st.session_state.selected_model = "DeepSeek"
+
             cfg = model_options[st.session_state.selected_model]
             client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
-            
+
             stream = client.chat.completions.create(
                 model=cfg["model"],
                 messages=st.session_state.messages,
@@ -153,12 +181,10 @@ if prompt:
                 temperature=0.7,
                 max_tokens=2000
             )
-            
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
                     placeholder.markdown(full_response + "▌")
-            
             placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
         except Exception as e:
