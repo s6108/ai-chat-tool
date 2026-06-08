@@ -1,4 +1,5 @@
-streamlit
-openai
-supabase
-python-dotenv
+streamlit>=1.42.0
+openai>=1.70.0
+supabase>=2.15.0
+python-dotenv>=1.0.1
+streamlit-cookies-manager>=0.2.0
