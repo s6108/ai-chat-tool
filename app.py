@@ -31,7 +31,7 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 固定底部输入框（加强版） ======================
+# ====================== 固定底部输入框 ======================
 st.markdown("""
     <style>
         .bottom-bar {
@@ -41,12 +41,12 @@ st.markdown("""
             right: 0 !important;
             background: white;
             padding: 12px 15px 30px 15px;
-            box-shadow: 0 -4px 30px rgba(0,0,0,0.25);
+            box-shadow: 0 -4px 25px rgba(0,0,0,0.2);
             z-index: 10000;
             border-top: 1px solid #ddd;
         }
         .main .block-container {
-            padding-bottom: 260px !important;
+            padding-bottom: 240px !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -60,51 +60,44 @@ if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
-if "guest_count" not in st.session_state:
-    st.session_state.guest_count = 0
 
-DAILY_GUEST_LIMIT = 20
-
-# ====================== 未登录 - 游客模式 ======================
+# ====================== 未登录页面 ======================
 if not st.session_state.user:
     st.title("🥭 Mango AI")
-    st.info(f"🔓 游客模式（今日已用 {st.session_state.guest_count}/{DAILY_GUEST_LIMIT} 条）")
-    
-    if st.button("登录 / 注册", use_container_width=True):
-        st.session_state.show_login = True
+    st.subheader("请登录或注册才能继续使用")
 
-    if st.session_state.get("show_login", False):
-        with st.expander("登录 / 注册", expanded=True):
-            tab1, tab2 = st.tabs(["登录", "注册"])
-            with tab1:
-                email = st.text_input("邮箱地址", key="login_email")
-                password = st.text_input("密码", type="password", key="login_pass")
-                if st.button("登录", use_container_width=True, key="login_btn"):
-                    try:
-                        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                        st.session_state.user = res.user
-                        st.success("登录成功！")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"登录失败: {e}")
-            with tab2:
-                email_reg = st.text_input("注册邮箱", key="reg_email")
-                password_reg = st.text_input("设置密码", type="password", key="reg_pass")
-                if st.button("注册", use_container_width=True, key="reg_btn"):
-                    try:
-                        res = supabase.auth.sign_up({"email": email_reg, "password": password_reg})
-                        st.success("注册成功！请查收邮箱验证")
-                    except Exception as e:
-                        st.error(f"注册失败: {e}")
+    tab1, tab2 = st.tabs(["🔑 登录", "📝 注册"])
+
+    with tab1:
+        email = st.text_input("邮箱地址", key="login_email")
+        password = st.text_input("密码", type="password", key="login_pass")
+        if st.button("登录", use_container_width=True, key="login_btn"):
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                st.session_state.user = res.user
+                st.success("登录成功！")
+                st.rerun()
+            except Exception as e:
+                st.error(f"登录失败: {e}")
+
+    with tab2:
+        email_reg = st.text_input("注册邮箱", key="reg_email")
+        password_reg = st.text_input("设置密码（至少6位）", type="password", key="reg_pass")
+        if st.button("注册", use_container_width=True, key="reg_btn"):
+            try:
+                res = supabase.auth.sign_up({"email": email_reg, "password": password_reg})
+                st.success("注册成功！请查收邮箱验证邮件")
+            except Exception as e:
+                st.error(f"注册失败: {e}")
+    st.stop()
 
 # ====================== 已登录主界面 ======================
-if st.session_state.user:
-    st.title("🥭 Mango AI")
-    st.write(f"欢迎回来，**{st.session_state.user.email}**")
+st.title("🥭 Mango AI")
+st.write(f"欢迎回来，**{st.session_state.user.email}**")
 
 # 侧边栏
 with st.sidebar:
-    if st.session_state.user and st.button("退出登录"):
+    if st.button("退出登录"):
         supabase.auth.sign_out()
         st.session_state.user = None
         st.rerun()
@@ -132,14 +125,7 @@ if st.button("🗑️ 清空对话"):
 # 显示聊天记录
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        if isinstance(msg["content"], list):
-            for part in msg["content"]:
-                if part.get("type") == "text":
-                    st.markdown(part.get("text"))
-                elif part.get("type") == "image_url":
-                    st.image(part["image_url"]["url"], use_column_width=True)
-        else:
-            st.markdown(msg["content"])
+        st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
 
 # ====================== 固定底部输入 ======================
 st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
@@ -152,13 +138,6 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 # ====================== 处理输入 ======================
 if prompt or uploaded_file is not None:
-    if not st.session_state.user:
-        if st.session_state.guest_count >= DAILY_GUEST_LIMIT:
-            st.error("游客每日限额已用完，请登录")
-            st.stop()
-        st.session_state.guest_count += 1
-
-    # 只为当前问题处理图片
     user_content = prompt
     if uploaded_file:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
@@ -184,7 +163,6 @@ if prompt or uploaded_file is not None:
         else:
             st.session_state.selected_model = "DeepSeek"
 
-    # 调用模型
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
