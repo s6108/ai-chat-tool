@@ -3,12 +3,12 @@ import os
 import base64
 from openai import OpenAI
 from supabase import create_client, Client
-
+from streamlit_cookies_manager import EncryptedCookieManager
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 # ====================== Supabase 配置 ======================
-SUPABASE_URL = "https://oeiomraxpgmirnubtrug.supabase.co"
-SUPABASE_KEY = "sb_publishable_oQ6lNrM38kY1F_xWnzQI6w_LK86YMpi"
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ====================== API Keys ======================
@@ -31,25 +31,7 @@ model_options = {
     "Qwen":      {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
-# ====================== 固定底部输入框 ======================
-st.markdown("""
-    <style>
-        .bottom-bar {
-            position: fixed !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            background: white;
-            padding: 12px 15px 30px 15px;
-            box-shadow: 0 -4px 25px rgba(0,0,0,0.2);
-            z-index: 10000;
-            border-top: 1px solid #ddd;
-        }
-        .main .block-container {
-            padding-bottom: 240px !important;
-        }
-    </style>
-""", unsafe_allow_html=True)
+
 
 # ====================== 会话初始化 ======================
 if "user" not in st.session_state:
@@ -60,7 +42,8 @@ if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
-
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 # ====================== 未登录页面 ======================
 if not st.session_state.user:
     st.title("🥭 Mango AI")
@@ -120,6 +103,7 @@ with st.sidebar:
 
 if st.button("🗑️ 清空对话"):
     st.session_state.messages = []
+    st.session_state.uploader_key += 1
     st.rerun()
 
 # 显示聊天记录
@@ -128,13 +112,17 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
 
 # ====================== 固定底部输入 ======================
-st.markdown('<div class="bottom-bar">', unsafe_allow_html=True)
+
 col1, col2 = st.columns([7, 1])
 with col1:
     prompt = st.chat_input("输入你的问题...")
 with col2:
-    uploaded_file = st.file_uploader("📎", type=["png","jpg","jpeg"], label_visibility="collapsed")
-st.markdown('</div>', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader(
+    "📎",
+    type=["png","jpg","jpeg"],
+    label_visibility="collapsed",
+    key=f"upload_{st.session_state.uploader_key}"
+)
 
 # ====================== 处理输入 ======================
 if prompt or uploaded_file is not None:
@@ -148,7 +136,8 @@ if prompt or uploaded_file is not None:
         st.image(uploaded_file, caption="✅ 图片已上传")
 
     st.session_state.messages.append({"role": "user", "content": user_content})
-
+if uploaded_file:
+    st.session_state.uploader_key += 1
     with st.chat_message("user"):
         st.markdown(prompt if prompt else "📸 图片已上传")
 
