@@ -7,8 +7,14 @@ from streamlit_cookies_manager import EncryptedCookieManager
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 # ====================== Supabase 配置 ======================
+# ====================== Supabase 配置 ======================
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    st.error("Supabase 环境变量未配置，请检查 Render Environment Variables。")
+    st.stop()
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ====================== API Keys ======================
