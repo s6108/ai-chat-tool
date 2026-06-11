@@ -19,7 +19,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ====================== API Keys ======================
 def get_key(name: str):
-    return os.getenv(name) or st.secrets.get(name)
+    return os.getenv(name)
 
 ZHIPU_API_KEY = get_key("ZHIPU_API_KEY")
 DEEPSEEK_API_KEY = get_key("DEEPSEEK_API_KEY")
@@ -116,38 +116,22 @@ if st.button("🗑️ 清空对话"):
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
-
-# ====================== 固定底部输入 ======================
-
-col1, col2 = st.columns([7, 1])
-with col1:
-    prompt = st.chat_input("输入你的问题...")
-with col2:
-    uploaded_file = st.file_uploader(
-    "📎",
-    type=["png","jpg","jpeg"],
-    label_visibility="collapsed",
-    key=f"upload_{st.session_state.uploader_key}"
-)
-
 # ====================== 处理输入 ======================
 if prompt or uploaded_file is not None:
-    user_content = prompt
+    user_content = prompt or ""
+
     if uploaded_file:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
         user_content = [
             {"type": "text", "text": prompt or "请描述这张图片"},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
         ]
-        st.image(uploaded_file, caption="✅ 图片已上传")
 
     st.session_state.messages.append({"role": "user", "content": user_content})
-if uploaded_file:
-    st.session_state.uploader_key += 1
+
     with st.chat_message("user"):
         st.markdown(prompt if prompt else "📸 图片已上传")
 
-    # 自动模式
     if st.session_state.auto_mode:
         if uploaded_file:
             st.session_state.selected_model = "GLM-4V"
@@ -161,10 +145,16 @@ if uploaded_file:
     with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
+
         try:
             cfg = model_options[st.session_state.selected_model]
+
+            if not cfg["key"]:
+                placeholder.error(f"{st.session_state.selected_model} 的 API Key 未配置。")
+                st.stop()
+
             client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
-            
+
             stream = client.chat.completions.create(
                 model=cfg["model"],
                 messages=st.session_state.messages,
@@ -172,13 +162,34 @@ if uploaded_file:
                 temperature=0.7,
                 max_tokens=2000
             )
+
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
                     placeholder.markdown(full_response + "▌")
+
             placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+            if uploaded_file:
+                st.session_state.uploader_key += 1
+                st.rerun()
+
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
+# ====================== 固定底部输入 ======================
+
+col1, col2 = st.columns([7, 1])
+with col1:
+    prompt = st.chat_input("输入你的问题...")
+with col2:
+    uploaded_file = st.file_uploader(
+    "📎",
+    type=["png","jpg","jpeg"],
+    label_visibility="collapsed",
+    key=f"upload_{st.session_state.uploader_key}"
+)
+
+
 
 st.caption(f"当前模型: **{st.session_state.selected_model}** | 自动模式: {'✅' if st.session_state.auto_mode else '❌'}")
