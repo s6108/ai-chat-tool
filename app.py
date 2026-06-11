@@ -7,8 +7,8 @@ from streamlit_cookies_manager import EncryptedCookieManager
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 # ====================== Supabase 配置 ======================
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ====================== API Keys ======================
