@@ -3,7 +3,7 @@ import os
 import base64
 from openai import OpenAI
 from supabase import create_client, Client
-from streamlit_cookies_manager import EncryptedCookieManager
+
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 # ====================== Supabase 配置 ======================
@@ -185,18 +185,7 @@ if prompt or uploaded_file is not None:
 
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
-# ====================== 固定底部输入 ======================
 
-col1, col2 = st.columns([7, 1])
-with col1:
-    prompt = st.chat_input("输入你的问题...")
-with col2:
-    uploaded_file = st.file_uploader(
-    "📎",
-    type=["png","jpg","jpeg"],
-    label_visibility="collapsed",
-    key=f"upload_{st.session_state.uploader_key}"
-)
 
 
 
