@@ -164,20 +164,33 @@ if prompt or uploaded_file is not None:
             if not cfg["key"]:
                 placeholder.error(f"{st.session_state.selected_model} 的 API Key 未配置。")
                 st.stop()
+        
+        client = OpenAI(
+            base_url=cfg["base_url"],
+            api_key=cfg["key"]
+        )
 
-            client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
+        # 图片模型保留图片消息
+        if st.session_state.selected_model == "GLM-4V":
+            api_messages = st.session_state.messages
+        else:
+            # 文字模型过滤图片消息
+            api_messages = [
+                m for m in st.session_state.messages
+                if isinstance(m["content"], str)       
+            ]
 
-            stream = client.chat.completions.create(
-                model=cfg["model"],
-                messages=st.session_state.messages,
-                stream=True,
-                temperature=0.7,
-                max_tokens=2000
-            )
+        stream = client.chat.completions.create(
+            model=cfg["model"],
+            messages=api_messages,
+            stream=True,
+            temperature=0.7,
+            max_tokens=2000
+        )           
 
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    full_response += chunk.choices[0].delta.content
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
                     placeholder.markdown(full_response + "▌")
 
             placeholder.markdown(full_response)
