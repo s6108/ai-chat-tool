@@ -116,6 +116,14 @@ if st.button("🗑️ 清空对话"):
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
+# ====================== 输入框和图片上传 ======================
+uploaded_file = st.file_uploader(
+    "上传图片",
+    type=["png", "jpg", "jpeg"],
+    key=f"upload_{st.session_state.uploader_key}"
+)
+
+prompt = st.chat_input("输入你的问题...")        
 # ====================== 处理输入 ======================
 if prompt or uploaded_file is not None:
     user_content = prompt or ""
