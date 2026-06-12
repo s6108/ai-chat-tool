@@ -181,13 +181,18 @@ if prompt or uploaded_file is not None:
                     placeholder.markdown(full_response + "▌")
 
             placeholder.markdown(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-           if uploaded_file:
-    st.session_state.uploader_key += 1
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": full_response
+            })
+
+            if uploaded_file:
+                st.session_state.uploader_key += 1
+                st.rerun() 
+
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
-
 
 
 
