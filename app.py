@@ -113,9 +113,13 @@ if st.button("🗑️ 清空对话"):
     st.rerun()
 
 # 显示聊天记录
+
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"] if isinstance(msg["content"], str) else msg["content"])
+        if isinstance(msg["content"], str):
+            st.markdown(msg["content"])
+        else:
+            st.markdown("📸 图片已上传")
 # ====================== 输入框和图片上传 ======================
 uploaded_file = st.file_uploader(
     "上传图片",
@@ -179,10 +183,8 @@ if prompt or uploaded_file is not None:
             placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            if uploaded_file:
-                st.session_state.uploader_key += 1
-                st.rerun()
-
+           if uploaded_file:
+    st.session_state.uploader_key += 1
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
 
