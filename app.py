@@ -158,12 +158,12 @@ if prompt or uploaded_file is not None:
         placeholder = st.empty()
         full_response = ""
 
-        try:
-            cfg = model_options[st.session_state.selected_model]
+    try:
+        cfg = model_options[st.session_state.selected_model]
 
-            if not cfg["key"]:
-                placeholder.error(f"{st.session_state.selected_model} 的 API Key 未配置。")
-                st.stop()
+        if not cfg["key"]:
+            placeholder.error(f"{st.session_state.selected_model} 的 API Key 未配置。")
+            st.stop()
         
         client = OpenAI(
             base_url=cfg["base_url"],
