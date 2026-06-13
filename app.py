@@ -88,10 +88,13 @@ if st.session_state.user is None:
         try:
             supabase.auth.set_session(access_token, refresh_token)
             user_res = supabase.auth.get_user()
-            st.session_state.user = user_res.user
-        except Exception:
+            if user_res and user_res.user:
+                st.session_state.user = user_res.user
+        except Exception as e:
+            st.warning(f"自动登录失败：{e}")
             cookies["access_token"] = ""
             cookies["refresh_token"] = ""
+            cookies["user_email"] = ""
             cookies.save()
 # ====================== 未登录页面 ======================
 if not st.session_state.user:
@@ -112,7 +115,9 @@ if not st.session_state.user:
                 if res.session:
                     cookies["access_token"] = res.session.access_token
                     cookies["refresh_token"] = res.session.refresh_token
-                    cookies.save() 
+                    cookies["user_email"] = res.user.email
+                    cookies.save()
+                    st.session_state.user = res.user
                 st.success("登录成功！")
                 st.rerun()
             except Exception as e:
