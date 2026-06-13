@@ -3,7 +3,7 @@ import os
 import base64
 from openai import OpenAI
 from supabase import create_client
-
+from streamlit_cookies_manager import EncryptedCookieManager
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 # ====================== Supabase 配置 ======================
@@ -15,7 +15,15 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     st.stop()
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+COOKIE_PASSWORD = os.getenv("COOKIE_PASSWORD", "mango-ai-default-password")
 
+cookies = EncryptedCookieManager(
+    prefix="mango_ai_",
+    password=COOKIE_PASSWORD,
+)
+
+if not cookies.ready():
+    st.stop()
 # ====================== API Keys ======================
 def get_key(name: str):
     return os.getenv(name)
@@ -71,7 +79,20 @@ if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
+# ====================== 自动恢复登录 ======================
+if st.session_state.user is None:
+    access_token = cookies.get("access_token")
+    refresh_token = cookies.get("refresh_token")
 
+    if access_token and refresh_token:
+        try:
+            supabase.auth.set_session(access_token, refresh_token)
+            user_res = supabase.auth.get_user()
+            st.session_state.user = user_res.user
+        except Exception:
+            cookies["access_token"] = ""
+            cookies["refresh_token"] = ""
+            cookies.save()
 # ====================== 未登录页面 ======================
 if not st.session_state.user:
     st.title("🥭 Mango AI")
@@ -85,10 +106,13 @@ if not st.session_state.user:
 
         if st.button("登录", use_container_width=True, key="login_btn"):
             try:
-                res = supabase.auth.sign_in_with_password(
-                    {"email": email, "password": password}
-                )
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 st.session_state.user = res.user
+
+                if res.session:
+                    cookies["access_token"] = res.session.access_token
+                    cookies["refresh_token"] = res.session.refresh_token
+                    cookies.save() 
                 st.success("登录成功！")
                 st.rerun()
             except Exception as e:
@@ -117,6 +141,10 @@ st.write(f"欢迎回来，**{st.session_state.user.email}**")
 with st.sidebar:
     if st.button("退出登录"):
         supabase.auth.sign_out()
+        cookies["access_token"] = ""
+        cookies["refresh_token"] = ""
+        cookies.save()
+
         st.session_state.user = None
         st.session_state.messages = []
         st.rerun()
