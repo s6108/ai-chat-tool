@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import base64
-import time
+
 from openai import OpenAI
 from supabase import create_client
 from streamlit_cookies_manager import EncryptedCookieManager
@@ -118,9 +118,10 @@ if not st.session_state.user:
                     cookies["refresh_token"] = res.session.refresh_token
                     cookies["user_email"] = res.user.email
                     cookies.save()
-                    time.sleep(1)
+                    st.write("Cookie Saved")
+                    st.write(cookies.get("access_token"))
 
-                st.session_state.user = res.user
+               
                 st.success("登录成功！")
                 st.rerun()
             except Exception as e:
