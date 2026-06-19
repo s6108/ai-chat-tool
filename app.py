@@ -1,30 +1,40 @@
 import streamlit as st
 import os
 import base64
-
 from openai import OpenAI
 from supabase import create_client
-from streamlit_cookies_manager import EncryptedCookieManager
+from streamlit_js_eval import streamlit_js_eval
+
 st.set_page_config(page_title="Mango AI", page_icon="🥭", layout="centered")
 
 # ====================== Supabase 配置 ======================
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("Supabase 环境变量未配置，请检查 Render Environment Variables。")
+if not SUPABASE_URL or not SUPABASE_KEY or not SUPABASE_SERVICE_KEY:
+    st.error("Supabase 环境变量未配置完整，请检查 Render Environment Variables。")
     st.stop()
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-COOKIE_PASSWORD = os.getenv("COOKIE_PASSWORD", "mango-ai-default-password")
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-cookies = EncryptedCookieManager(
-    prefix="mango_ai_",
-    password=COOKIE_PASSWORD,
+# ====================== 获取设备ID ======================
+device_id = streamlit_js_eval(
+    js_expressions="""
+    let id = localStorage.getItem("mango_device_id");
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem("mango_device_id", id);
+    }
+    id;
+    """,
+    key="get_device_id"
 )
 
-if not cookies.ready():
+if not device_id:
     st.stop()
+
 # ====================== API Keys ======================
 def get_key(name: str):
     return os.getenv(name)
@@ -35,38 +45,13 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 
-# ====================== 模型配置 ======================
 model_options = {
-    "DeepSeek": {
-        "base_url": "https://api.deepseek.com",
-        "model": "deepseek-chat",
-        "key": DEEPSEEK_API_KEY,
-    },
-    "GLM-4V": {
-        "base_url": "https://open.bigmodel.cn/api/paas/v4/",
-        "model": "glm-4v-plus",
-        "key": ZHIPU_API_KEY,
-    },
-    "GLM-4": {
-        "base_url": "https://open.bigmodel.cn/api/paas/v4/",
-        "model": "glm-4-plus",
-        "key": ZHIPU_API_KEY,
-    },
-    "Kimi": {
-        "base_url": "https://api.moonshot.cn/v1",
-        "model": "moonshot-v1-8k",
-        "key": KIMI_API_KEY,
-    },
-    "Doubao-Pro": {
-        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-        "model": "ep-20260415022601-jm5b7",
-        "key": DOUBAO_API_KEY,
-    },
-    "Qwen": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "model": "qwen-plus",
-        "key": DASHSCOPE_API_KEY,
-    },
+    "DeepSeek": {"base_url": "https://api.deepseek.com", "model": "deepseek-chat", "key": DEEPSEEK_API_KEY},
+    "GLM-4V": {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4v-plus", "key": ZHIPU_API_KEY},
+    "GLM-4": {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4-plus", "key": ZHIPU_API_KEY},
+    "Kimi": {"base_url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k", "key": KIMI_API_KEY},
+    "Doubao-Pro": {"base_url": "https://ark.cn-beijing.volces.com/api/v3", "model": "ep-20260415022601-jm5b7", "key": DOUBAO_API_KEY},
+    "Qwen": {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
 # ====================== 会话初始化 ======================
@@ -80,23 +65,38 @@ if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
+
 # ====================== 自动恢复登录 ======================
 if st.session_state.user is None:
-    access_token = cookies.get("access_token")
-    refresh_token = cookies.get("refresh_token")
+    try:
+        result = (
+            supabase_admin.table("device_sessions")
+            .select("*")
+            .eq("device_id", device_id)
+            .limit(1)
+            .execute()
+        )
 
-    if access_token and refresh_token:
-        try:
-            supabase.auth.set_session(access_token, refresh_token)
-            user_res = supabase.auth.get_user()
-            if user_res and user_res.user:
-                st.session_state.user = user_res.user
-        except Exception as e:
-            st.warning(f"自动登录失败：{e}")
-            cookies["access_token"] = ""
-            cookies["refresh_token"] = ""
-            cookies["user_email"] = ""
-            cookies.save()
+        if result.data:
+            refresh_token = result.data[0]["refresh_token"]
+            auth_res = supabase.auth.refresh_session(refresh_token)
+
+            if auth_res and auth_res.user:
+                st.session_state.user = auth_res.user
+
+                if auth_res.session:
+                    supabase_admin.table("device_sessions").upsert(
+                        {
+                            "device_id": device_id,
+                            "user_id": auth_res.user.id,
+                            "email": auth_res.user.email,
+                            "refresh_token": auth_res.session.refresh_token,
+                        },
+                        on_conflict="device_id",
+                    ).execute()
+    except Exception:
+        pass
+
 # ====================== 未登录页面 ======================
 if not st.session_state.user:
     st.title("🥭 Mango AI")
@@ -110,20 +110,26 @@ if not st.session_state.user:
 
         if st.button("登录", use_container_width=True, key="login_btn"):
             try:
-                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                res = supabase.auth.sign_in_with_password(
+                    {"email": email, "password": password}
+                )
+
                 st.session_state.user = res.user
 
                 if res.session:
-                    cookies["access_token"] = res.session.access_token
-                    cookies["refresh_token"] = res.session.refresh_token
-                    cookies["user_email"] = res.user.email
-                    cookies.save()
-                    st.write("Cookie Saved")
-                    st.write(cookies.get("access_token"))
+                    supabase_admin.table("device_sessions").upsert(
+                        {
+                            "device_id": device_id,
+                            "user_id": res.user.id,
+                            "email": res.user.email,
+                            "refresh_token": res.session.refresh_token,
+                        },
+                        on_conflict="device_id",
+                    ).execute()
 
-               
                 st.success("登录成功！")
                 st.rerun()
+
             except Exception as e:
                 st.error(f"登录失败: {e}")
 
@@ -133,9 +139,7 @@ if not st.session_state.user:
 
         if st.button("注册", use_container_width=True, key="reg_btn"):
             try:
-                supabase.auth.sign_up(
-                    {"email": email_reg, "password": password_reg}
-                )
+                supabase.auth.sign_up({"email": email_reg, "password": password_reg})
                 st.success("注册成功！请查收邮箱验证邮件")
             except Exception as e:
                 st.error(f"注册失败: {e}")
@@ -149,10 +153,11 @@ st.write(f"欢迎回来，**{st.session_state.user.email}**")
 # ====================== 侧边栏 ======================
 with st.sidebar:
     if st.button("退出登录"):
-        supabase.auth.sign_out()
-        cookies["access_token"] = ""
-        cookies["refresh_token"] = ""
-        cookies.save()
+        try:
+            supabase_admin.table("device_sessions").delete().eq("device_id", device_id).execute()
+            supabase.auth.sign_out()
+        except Exception:
+            pass
 
         st.session_state.user = None
         st.session_state.messages = []
@@ -164,10 +169,7 @@ with st.sidebar:
     )
 
     st.markdown("### 模式选择")
-    if st.button(
-        "🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式",
-        use_container_width=True,
-    ):
+    if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
         st.session_state.auto_mode = not st.session_state.auto_mode
         st.rerun()
 
@@ -210,20 +212,14 @@ if prompt or uploaded_file is not None:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
         user_content = [
             {"type": "text", "text": prompt or "请描述这张图片"},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-            },
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
         ]
 
-    st.session_state.messages.append(
-        {"role": "user", "content": user_content}
-    )
+    st.session_state.messages.append({"role": "user", "content": user_content})
 
     with st.chat_message("user"):
         st.markdown(prompt if prompt else "📸 图片已上传")
 
-    # 自动模式
     if st.session_state.auto_mode:
         if uploaded_file:
             st.session_state.selected_model = "GLM-4V"
@@ -242,17 +238,11 @@ if prompt or uploaded_file is not None:
             cfg = model_options[st.session_state.selected_model]
 
             if not cfg["key"]:
-                placeholder.error(
-                    f"{st.session_state.selected_model} 的 API Key 未配置。"
-                )
+                placeholder.error(f"{st.session_state.selected_model} 的 API Key 未配置。")
                 st.stop()
 
-            client = OpenAI(
-                base_url=cfg["base_url"],
-                api_key=cfg["key"],
-            )
+            client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
 
-            # 图片模型保留图片消息；文字模型过滤图片消息
             if st.session_state.selected_model == "GLM-4V":
                 api_messages = st.session_state.messages
             else:
