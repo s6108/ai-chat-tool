@@ -65,7 +65,8 @@ if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
-
+if "current_session_id" not in st.session_state:
+    st.session_state.current_session_id = None
 # ====================== 自动恢复登录 ======================
 if st.session_state.user is None:
     try:
@@ -96,7 +97,46 @@ if st.session_state.user is None:
                     ).execute()
     except Exception:
         pass
+# ====================== 加载或创建聊天会话 ======================
+if st.session_state.user and st.session_state.current_session_id is None:
+    try:
+        sessions = (
+            supabase_admin.table("chat_sessions")
+            .select("*")
+            .eq("user_id", st.session_state.user.id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
 
+        if sessions.data:
+            st.session_state.current_session_id = sessions.data[0]["id"]
+
+            msgs = (
+                supabase_admin.table("messages")
+                .select("*")
+                .eq("session_id", st.session_state.current_session_id)
+                .order("created_at")
+                .execute()
+            )
+
+            st.session_state.messages = [
+                {"role": m["role"], "content": m["content"]}
+                for m in msgs.data
+            ]
+        else:
+            new_session = (
+                supabase_admin.table("chat_sessions")
+                .insert({
+                    "user_id": st.session_state.user.id,
+                    "title": "新对话"
+                })
+                .execute()
+            )
+            st.session_state.current_session_id = new_session.data[0]["id"]
+
+    except Exception as e:
+        st.warning(f"加载历史会话失败：{e}")
 # ====================== 未登录页面 ======================
 if not st.session_state.user:
     st.title("🥭 Mango AI")
@@ -216,7 +256,12 @@ if prompt or uploaded_file is not None:
         ]
 
     st.session_state.messages.append({"role": "user", "content": user_content})
-
+if st.session_state.current_session_id:
+    supabase_admin.table("messages").insert({
+        "session_id": st.session_state.current_session_id,
+        "role": "user",
+        "content": prompt or "📸 图片已上传"
+    }).execute()
     with st.chat_message("user"):
         st.markdown(prompt if prompt else "📸 图片已上传")
 
@@ -269,7 +314,12 @@ if prompt or uploaded_file is not None:
             st.session_state.messages.append(
                 {"role": "assistant", "content": full_response}
             )
-
+            if st.session_state.current_session_id:
+                supabase_admin.table("messages").insert({
+                    "session_id": st.session_state.current_session_id,
+                    "role": "assistant",
+                    "content": full_response
+                }).execute()
             if uploaded_file:
                 st.session_state.uploader_key += 1
                 st.session_state.selected_model = "DeepSeek"
