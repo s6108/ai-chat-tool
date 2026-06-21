@@ -248,6 +248,7 @@ with st.form("chat_form", clear_on_submit=True):
 
     submitted = st.form_submit_button("发送")
 
+
 # ====================== 处理输入 ======================
 if submitted and (prompt.strip() or uploaded_file is not None):
     user_content = prompt or ""
@@ -260,12 +261,14 @@ if submitted and (prompt.strip() or uploaded_file is not None):
         ]
 
     st.session_state.messages.append({"role": "user", "content": user_content})
-if st.session_state.current_session_id:
-    supabase_admin.table("messages").insert({
-        "session_id": st.session_state.current_session_id,
-        "role": "user",
-        "content": prompt or "📸 图片已上传"
-    }).execute()
+
+    if st.session_state.current_session_id:
+        supabase_admin.table("messages").insert({
+            "session_id": st.session_state.current_session_id,
+            "role": "user",
+            "content": prompt or "📸 图片已上传"
+        }).execute()
+
     with st.chat_message("user"):
         st.markdown(prompt if prompt else "📸 图片已上传")
 
@@ -318,12 +321,14 @@ if st.session_state.current_session_id:
             st.session_state.messages.append(
                 {"role": "assistant", "content": full_response}
             )
+
             if st.session_state.current_session_id:
                 supabase_admin.table("messages").insert({
                     "session_id": st.session_state.current_session_id,
                     "role": "assistant",
                     "content": full_response
                 }).execute()
+
             if uploaded_file:
                 st.session_state.uploader_key += 1
                 st.session_state.selected_model = "DeepSeek"
@@ -332,6 +337,7 @@ if st.session_state.current_session_id:
                     if isinstance(m["content"], str)
                 ]
                 st.rerun()
+
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
 
