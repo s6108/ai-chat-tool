@@ -246,7 +246,7 @@ uploaded_file = st.file_uploader(
 prompt = st.chat_input("输入你的问题...")
 
 # ====================== 处理输入 ======================
-if prompt or uploaded_file is not None:
+if prompt:
     user_content = prompt or ""
 
     if uploaded_file:
