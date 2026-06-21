@@ -65,8 +65,7 @@ if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
-if "last_uploaded_file_name" not in st.session_state:
-    st.session_state.last_uploaded_file_name = None
+
 if "current_session_id" not in st.session_state:
     st.session_state.current_session_id = None
 # ====================== 自动恢复登录 ======================
@@ -247,15 +246,10 @@ uploaded_file = st.file_uploader(
 prompt = st.chat_input("输入你的问题...")
 
 # ====================== 处理输入 ======================
-is_new_upload = (
-    uploaded_file is not None
-    and uploaded_file.name != st.session_state.last_uploaded_file_name
-)
-
-if prompt or is_new_upload:
+if prompt or uploaded_file is not None:
     user_content = prompt or ""
 
-    if is_new_upload:
+    if uploaded_file:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
         user_content = [
             {"type": "text", "text": prompt or "请描述这张图片"},
@@ -273,7 +267,7 @@ if st.session_state.current_session_id:
         st.markdown(prompt if prompt else "📸 图片已上传")
 
     if st.session_state.auto_mode:
-        if is_new_upload:
+        if uploaded_file:
             st.session_state.selected_model = "GLM-4V"
         elif len(prompt or "") > 800:
             st.session_state.selected_model = "Kimi"
@@ -327,12 +321,14 @@ if st.session_state.current_session_id:
                     "role": "assistant",
                     "content": full_response
                 }).execute()
-            if is_new_upload:
+            if uploaded_file:
                 st.session_state.uploader_key += 1
-                st.session_state.last_uploaded_file_name = uploaded_file.name
                 st.session_state.selected_model = "DeepSeek"
+                st.session_state.messages = [
+                    m for m in st.session_state.messages
+                    if isinstance(m["content"], str)
+                ]
                 st.rerun()
-
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
 
