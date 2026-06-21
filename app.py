@@ -237,16 +237,19 @@ for msg in st.session_state.messages:
             st.markdown("📸 图片已上传")
 
 # ====================== 输入框和图片上传 ======================
-uploaded_file = st.file_uploader(
-    "上传图片",
-    type=["png", "jpg", "jpeg"],
-    key=f"upload_{st.session_state.uploader_key}",
-)
+with st.form("chat_form", clear_on_submit=True):
+    uploaded_file = st.file_uploader(
+        "上传图片",
+        type=["png", "jpg", "jpeg"],
+        key=f"upload_{st.session_state.uploader_key}",
+    )
 
-prompt = st.chat_input("输入你的问题...")
+    prompt = st.text_input("输入你的问题...")
+
+    submitted = st.form_submit_button("发送")
 
 # ====================== 处理输入 ======================
-if prompt:
+if submitted and (prompt.strip() or uploaded_file is not None):
     user_content = prompt or ""
 
     if uploaded_file:
