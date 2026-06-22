@@ -271,7 +271,7 @@ with st.sidebar:
     sessions = load_sessions(st.session_state.user.id)
 
     for s in sessions:
-        title = s.get("title") or "新对话"
+        title = s.get("title", "新对话")
         session_id = s["id"]
 
         label = title[:22]
@@ -327,7 +327,30 @@ if st.session_state.processing:
         ]
 
     st.session_state.messages.append({"role": "user", "content": user_content})
+# 自动生成会话标题（第一次提问）
+if (
+    st.session_state.current_session_id
+    and prompt
+):
+    current = (
+        supabase_admin.table("chat_sessions")
+        .select("title")
+        .eq("id", st.session_state.current_session_id)
+        .execute()
+    )
 
+    if current.data:
+        title = current.data[0]["title"]
+
+        if title == "新对话":
+            new_title = prompt[:20]
+
+            supabase_admin.table("chat_sessions").update(
+                {"title": new_title}
+            ).eq(
+                "id",
+                st.session_state.current_session_id
+            ).execute()
     if st.session_state.current_session_id:
         supabase_admin.table("messages").insert(
             {
