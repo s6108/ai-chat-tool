@@ -243,7 +243,7 @@ with st.sidebar:
         "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
     )
 
-        st.markdown("### 模式选择")
+    st.markdown("### 模式选择")
     if st.button(
         "🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式",
         use_container_width=True,
