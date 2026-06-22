@@ -263,12 +263,15 @@ with st.sidebar:
     st.markdown("### 最近")
 
     if st.button("✏️ 新建聊天", use_container_width=True):
-        st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
+        st.session_state.current_session_id = None
         st.session_state.messages = []
         st.session_state.uploader_key += 1
         st.rerun()
 
-    sessions = load_sessions(st.session_state.user.id)
+    sessions = [
+        s for s in load_sessions(st.session_state.user.id)
+        if s.get("title") != "新对话"
+    ]
 
     for s in sessions:
         title = s.get("title", "新对话")
@@ -315,7 +318,11 @@ prompt = st.chat_input("输入你的问题...")
 # ====================== 处理输入 ======================
 if prompt:
     st.session_state.processing = True
-
+# 如果是新聊天，第一次提问时才创建会话
+if prompt and st.session_state.current_session_id is None:
+    st.session_state.current_session_id = create_new_chat(
+        st.session_state.user.id
+    )
 if st.session_state.processing:
     user_content = prompt or ""
 
