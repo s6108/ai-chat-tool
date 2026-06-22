@@ -260,7 +260,7 @@ with st.sidebar:
                 st.rerun()
 
     st.markdown("---")
-    st.markdown("### 最近")
+    st.markdown("### 历史会话")
 
     if st.button("✏️ 新建聊天", use_container_width=True):
         st.session_state.current_session_id = None
@@ -279,7 +279,7 @@ with st.sidebar:
 
         label = title[:22]
         if session_id == st.session_state.current_session_id:
-            label = "▌ " + label
+            label = "🔴 " + label
 
         if st.button(label, key=f"open_{session_id}", use_container_width=True):
             st.session_state.current_session_id = session_id
