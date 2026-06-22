@@ -19,7 +19,7 @@ if not SUPABASE_URL or not SUPABASE_KEY or not SUPABASE_SERVICE_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-# ====================== 获取设备ID ======================
+# ====================== 获取设备 ID ======================
 device_id = streamlit_js_eval(
     js_expressions="""
     let id = localStorage.getItem("mango_device_id");
@@ -29,7 +29,7 @@ device_id = streamlit_js_eval(
     }
     id;
     """,
-    key="get_device_id"
+    key="get_device_id",
 )
 
 if not device_id:
@@ -38,6 +38,7 @@ if not device_id:
 # ====================== API Keys ======================
 def get_key(name: str):
     return os.getenv(name)
+
 
 ZHIPU_API_KEY = get_key("ZHIPU_API_KEY")
 DEEPSEEK_API_KEY = get_key("DEEPSEEK_API_KEY")
@@ -54,6 +55,60 @@ model_options = {
     "Qwen": {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "key": DASHSCOPE_API_KEY},
 }
 
+# ====================== 工具函数 ======================
+def load_messages(session_id):
+    msgs = (
+        supabase_admin.table("messages")
+        .select("*")
+        .eq("session_id", session_id)
+        .order("created_at", desc=True)
+        .limit(100)
+        .execute()
+    )
+
+    return [
+        {"role": m["role"], "content": m["content"]}
+        for m in reversed(msgs.data)
+    ]
+
+
+def create_new_chat(user_id):
+    new_session = (
+        supabase_admin.table("chat_sessions")
+        .insert({"user_id": user_id, "title": "新对话"})
+        .execute()
+    )
+    return new_session.data[0]["id"]
+
+
+def load_sessions(user_id):
+    return (
+        supabase_admin.table("chat_sessions")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .limit(30)
+        .execute()
+    ).data
+
+
+def delete_chat(session_id):
+    supabase_admin.table("messages").delete().eq("session_id", session_id).execute()
+    supabase_admin.table("chat_sessions").delete().eq("id", session_id).execute()
+
+
+def update_chat_title_if_needed(session_id, prompt):
+    if not prompt:
+        return
+
+    title = prompt.strip()[:20]
+
+    if title:
+        supabase_admin.table("chat_sessions").update(
+            {"title": title}
+        ).eq("id", session_id).execute()
+
+
 # ====================== 会话初始化 ======================
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -68,7 +123,8 @@ if "uploader_key" not in st.session_state:
 if "current_session_id" not in st.session_state:
     st.session_state.current_session_id = None
 if "processing" not in st.session_state:
-    st.session_state.processing = False    
+    st.session_state.processing = False
+
 # ====================== 自动恢复登录 ======================
 if st.session_state.user is None:
     try:
@@ -99,46 +155,22 @@ if st.session_state.user is None:
                     ).execute()
     except Exception:
         pass
+
 # ====================== 加载或创建聊天会话 ======================
 if st.session_state.user and st.session_state.current_session_id is None:
     try:
-        sessions = (
-            supabase_admin.table("chat_sessions")
-            .select("*")
-            .eq("user_id", st.session_state.user.id)
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
+        sessions = load_sessions(st.session_state.user.id)
 
-        if sessions.data:
-            st.session_state.current_session_id = sessions.data[0]["id"]
-
-            msgs = (
-                supabase_admin.table("messages")
-                .select("*")
-                .eq("session_id", st.session_state.current_session_id)
-                .order("created_at")
-                .execute()
-            )
-
-            st.session_state.messages = [
-                {"role": m["role"], "content": m["content"]}
-                for m in msgs.data
-            ]
+        if sessions:
+            st.session_state.current_session_id = sessions[0]["id"]
+            st.session_state.messages = load_messages(st.session_state.current_session_id)
         else:
-            new_session = (
-                supabase_admin.table("chat_sessions")
-                .insert({
-                    "user_id": st.session_state.user.id,
-                    "title": "新对话"
-                })
-                .execute()
-            )
-            st.session_state.current_session_id = new_session.data[0]["id"]
+            st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
+            st.session_state.messages = []
 
     except Exception as e:
         st.warning(f"加载历史会话失败：{e}")
+
 # ====================== 未登录页面 ======================
 if not st.session_state.user:
     st.title("🥭 Mango AI")
@@ -194,7 +226,7 @@ st.write(f"欢迎回来，**{st.session_state.user.email}**")
 
 # ====================== 侧边栏 ======================
 with st.sidebar:
-    if st.button("退出登录"):
+    if st.button("退出登录", use_container_width=True):
         try:
             supabase_admin.table("device_sessions").delete().eq("device_id", device_id).execute()
             supabase.auth.sign_out()
@@ -203,6 +235,7 @@ with st.sidebar:
 
         st.session_state.user = None
         st.session_state.messages = []
+        st.session_state.current_session_id = None
         st.rerun()
 
     st.link_button(
@@ -210,8 +243,53 @@ with st.sidebar:
         "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
     )
 
+    st.markdown("### 💬 历史会话")
+
+    if st.button("➕ 新建对话", use_container_width=True):
+        st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
+        st.session_state.messages = []
+        st.session_state.uploader_key += 1
+        st.rerun()
+
+    sessions = load_sessions(st.session_state.user.id)
+
+    for s in sessions:
+        title = s.get("title") or "新对话"
+        session_id = s["id"]
+
+        col1, col2 = st.columns([4, 1])
+
+        with col1:
+            label = title[:18]
+            if session_id == st.session_state.current_session_id:
+                label = "🔴 " + label
+
+            if st.button(label, key=f"open_{session_id}", use_container_width=True):
+                st.session_state.current_session_id = session_id
+                st.session_state.messages = load_messages(session_id)
+                st.session_state.uploader_key += 1
+                st.rerun()
+
+        with col2:
+            if st.button("🗑️", key=f"delete_{session_id}"):
+                delete_chat(session_id)
+
+                if session_id == st.session_state.current_session_id:
+                    remaining = load_sessions(st.session_state.user.id)
+                    if remaining:
+                        st.session_state.current_session_id = remaining[0]["id"]
+                        st.session_state.messages = load_messages(remaining[0]["id"])
+                    else:
+                        st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
+                        st.session_state.messages = []
+
+                st.rerun()
+
     st.markdown("### 模式选择")
-    if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
+    if st.button(
+        "🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式",
+        use_container_width=True,
+    ):
         st.session_state.auto_mode = not st.session_state.auto_mode
         st.rerun()
 
@@ -223,8 +301,13 @@ with st.sidebar:
                 st.session_state.selected_model = name
                 st.rerun()
 
-# ====================== 清空对话 ======================
-if st.button("🗑️ 清空对话"):
+# ====================== 清空当前对话 ======================
+if st.button("🗑️ 清空当前对话"):
+    if st.session_state.current_session_id:
+        supabase_admin.table("messages").delete().eq(
+            "session_id", st.session_state.current_session_id
+        ).execute()
+
     st.session_state.messages = []
     st.session_state.uploader_key += 1
     st.rerun()
@@ -263,11 +346,24 @@ if st.session_state.processing:
     st.session_state.messages.append({"role": "user", "content": user_content})
 
     if st.session_state.current_session_id:
-        supabase_admin.table("messages").insert({
-            "session_id": st.session_state.current_session_id,
-            "role": "user",
-            "content": prompt or "📸 图片已上传"
-        }).execute()
+        supabase_admin.table("messages").insert(
+            {
+                "session_id": st.session_state.current_session_id,
+                "role": "user",
+                "content": prompt or "📸 图片已上传",
+            }
+        ).execute()
+
+        current_session = (
+            supabase_admin.table("chat_sessions")
+            .select("title")
+            .eq("id", st.session_state.current_session_id)
+            .limit(1)
+            .execute()
+        )
+
+        if current_session.data and current_session.data[0]["title"] == "新对话":
+            update_chat_title_if_needed(st.session_state.current_session_id, prompt)
 
     with st.chat_message("user"):
         st.markdown(prompt if prompt else "📸 图片已上传")
@@ -323,11 +419,13 @@ if st.session_state.processing:
             )
 
             if st.session_state.current_session_id:
-                supabase_admin.table("messages").insert({
-                    "session_id": st.session_state.current_session_id,
-                    "role": "assistant",
-                    "content": full_response
-                }).execute()
+                supabase_admin.table("messages").insert(
+                    {
+                        "session_id": st.session_state.current_session_id,
+                        "role": "assistant",
+                        "content": full_response,
+                    }
+                ).execute()
 
             st.session_state.processing = False
 
@@ -342,6 +440,7 @@ if st.session_state.processing:
 
         except Exception as e:
             placeholder.error(f"调用失败: {str(e)}")
+            st.session_state.processing = False
 
 st.caption(
     f"当前模型: **{st.session_state.selected_model}** | 自动模式: {'✅' if st.session_state.auto_mode else '❌'}"
