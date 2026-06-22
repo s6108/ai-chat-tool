@@ -243,49 +243,7 @@ with st.sidebar:
         "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
     )
 
-    st.markdown("### 💬 历史会话")
-
-    if st.button("➕ 新建对话", use_container_width=True):
-        st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
-        st.session_state.messages = []
-        st.session_state.uploader_key += 1
-        st.rerun()
-
-    sessions = load_sessions(st.session_state.user.id)
-
-    for s in sessions:
-        title = s.get("title") or "新对话"
-        session_id = s["id"]
-
-        col1, col2 = st.columns([4, 1])
-
-        with col1:
-            label = title[:18]
-            if session_id == st.session_state.current_session_id:
-                label = "🔴 " + label
-
-            if st.button(label, key=f"open_{session_id}", use_container_width=True):
-                st.session_state.current_session_id = session_id
-                st.session_state.messages = load_messages(session_id)
-                st.session_state.uploader_key += 1
-                st.rerun()
-
-        with col2:
-            if st.button("🗑️", key=f"delete_{session_id}"):
-                delete_chat(session_id)
-
-                if session_id == st.session_state.current_session_id:
-                    remaining = load_sessions(st.session_state.user.id)
-                    if remaining:
-                        st.session_state.current_session_id = remaining[0]["id"]
-                        st.session_state.messages = load_messages(remaining[0]["id"])
-                    else:
-                        st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
-                        st.session_state.messages = []
-
-                st.rerun()
-
-    st.markdown("### 模式选择")
+        st.markdown("### 模式选择")
     if st.button(
         "🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式",
         use_container_width=True,
@@ -300,6 +258,31 @@ with st.sidebar:
             if st.button(label, key=f"btn_{name}", use_container_width=True):
                 st.session_state.selected_model = name
                 st.rerun()
+
+    st.markdown("---")
+    st.markdown("### 最近")
+
+    if st.button("✏️ 新建聊天", use_container_width=True):
+        st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
+        st.session_state.messages = []
+        st.session_state.uploader_key += 1
+        st.rerun()
+
+    sessions = load_sessions(st.session_state.user.id)
+
+    for s in sessions:
+        title = s.get("title") or "新对话"
+        session_id = s["id"]
+
+        label = title[:22]
+        if session_id == st.session_state.current_session_id:
+            label = "▌ " + label
+
+        if st.button(label, key=f"open_{session_id}", use_container_width=True):
+            st.session_state.current_session_id = session_id
+            st.session_state.messages = load_messages(session_id)
+            st.session_state.uploader_key += 1
+            st.rerun()
 
 # ====================== 清空当前对话 ======================
 if st.button("🗑️ 清空当前对话"):
