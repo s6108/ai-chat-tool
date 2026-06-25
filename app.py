@@ -287,9 +287,13 @@ if st.session_state.user and st.session_state.current_session_id is None:
 
 # ====================== Login / Register Page ======================
 # ====================== Main Page ======================
-st.title("🥭 Mango AI")
-st.write(f"欢迎回来，**{st.session_state.user.email}**")
+if st.session_state.user is None:
+    st.stop()
 
+st.title("🥭 Mango AI")
+
+user_email = getattr(st.session_state.user, "email", "用户")
+st.write(f"欢迎回来，**{user_email}**")
 
 # ====================== Sidebar ======================
 with st.sidebar:
