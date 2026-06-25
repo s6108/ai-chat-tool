@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import base64
+from datetime import datetime, timezone
 from openai import OpenAI
 from supabase import create_client
 from streamlit_js_eval import streamlit_js_eval
@@ -95,7 +96,32 @@ def load_sessions(user_id):
 def delete_chat(session_id):
     supabase_admin.table("messages").delete().eq("session_id", session_id).execute()
     supabase_admin.table("chat_sessions").delete().eq("id", session_id).execute()
+def now_utc():
+    return datetime.now(timezone.utc).isoformat()
 
+
+def enforce_device_limit(user_id, current_device_id, plan="free"):
+    max_devices = 3 if plan == "premium" else 1
+
+    devices = (
+        supabase_admin.table("device_sessions")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("last_seen", desc=True)
+        .execute()
+    )
+
+    old_devices = [
+        d for d in devices.data
+        if d["device_id"] != current_device_id
+    ]
+
+    if len(old_devices) >= max_devices:
+        for d in old_devices[max_devices - 1:]:
+            supabase_admin.table("device_sessions") \
+                .delete() \
+                .eq("id", d["id"]) \
+                .execute()
 
 def update_chat_title_if_needed(session_id, prompt):
     if not prompt:
@@ -129,12 +155,19 @@ if "processing" not in st.session_state:
 if st.session_state.user is None:
     try:
         result = (
-            supabase_admin.table("device_sessions")
-            .select("*")
-            .eq("device_id", device_id)
-            .limit(1)
-            .execute()
-        )
+            supabase_admin.table("device_sessions").upsert(
+                {
+                    "device_id": device_id,
+                    "user_id": res.user.id,
+                    "email": res.user.email,
+                    "refresh_token": res.session.refresh_token,
+                    "last_seen": now_utc(),
+                    "plan": "free",
+                },
+                on_conflict="device_id",
+            ).execute()
+
+            enforce_device_limit(res.user.id, device_id, "free")
 
         if result.data:
             refresh_token = result.data[0]["refresh_token"]
@@ -150,9 +183,13 @@ if st.session_state.user is None:
                             "user_id": auth_res.user.id,
                             "email": auth_res.user.email,
                             "refresh_token": auth_res.session.refresh_token,
+                            "last_seen": now_utc(),
+                            "plan": "free",
                         },
                         on_conflict="device_id",
                     ).execute()
+
+                    enforce_device_limit(auth_res.user.id, device_id, "free")
     except Exception:
         pass
 
