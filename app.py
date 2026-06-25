@@ -286,10 +286,51 @@ if st.session_state.user and st.session_state.current_session_id is None:
 
 
 # ====================== Login / Register Page ======================
-# ====================== Main Page ======================
-if st.session_state.user is None:
+if not st.session_state.user:
+    st.title("🥭 Mango AI")
+    st.subheader("请登录或注册才能继续使用")
+
+    tab1, tab2 = st.tabs(["🔑 登录", "📝 注册"])
+
+    with tab1:
+        email = st.text_input("邮箱地址", key="login_email")
+        password = st.text_input("密码", type="password", key="login_pass")
+
+        if st.button("登录", use_container_width=True, key="login_btn"):
+            try:
+                res = supabase.auth.sign_in_with_password(
+                    {"email": email, "password": password}
+                )
+
+                st.session_state.user = res.user
+
+                if res.session:
+                    plan = get_user_plan(res.user.id)
+                    save_device_session(res.user, res.session, plan)
+
+                st.success("登录成功！")
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"登录失败: {e}")
+
+    with tab2:
+        email_reg = st.text_input("注册邮箱", key="reg_email")
+        password_reg = st.text_input("设置密码（至少6位）", type="password", key="reg_pass")
+
+        if st.button("注册", use_container_width=True, key="reg_btn"):
+            try:
+                supabase.auth.sign_up(
+                    {"email": email_reg, "password": password_reg}
+                )
+                st.success("注册成功！请查收邮箱验证邮件")
+            except Exception as e:
+                st.error(f"注册失败: {e}")
+
     st.stop()
 
+
+# ====================== Main Page ======================
 st.title("🥭 Mango AI")
 
 user_email = getattr(st.session_state.user, "email", "用户")
