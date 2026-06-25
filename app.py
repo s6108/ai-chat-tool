@@ -296,7 +296,8 @@ if "current_session_id" not in st.session_state:
     st.session_state.current_session_id = None
 if "processing" not in st.session_state:
     st.session_state.processing = False
-
+if "new_chat_mode" not in st.session_state:
+    st.session_state.new_chat_mode = False
 
 # ====================== Auto Login ======================
 if st.session_state.user is None:
@@ -306,7 +307,11 @@ if st.session_state.user is None:
 
 
 # ====================== Load Current Chat ======================
-if st.session_state.user and st.session_state.current_session_id is None:
+if (
+    st.session_state.user
+    and st.session_state.current_session_id is None
+    and not st.session_state.new_chat_mode
+):
     try:
         sessions = [s for s in load_sessions(st.session_state.user.id) if s.get("title") != "新对话"]
         if sessions:
@@ -408,6 +413,7 @@ with st.sidebar:
     st.markdown("### 历史会话")
 
     if st.button("✏️ 新建聊天", use_container_width=True):
+        st.session_state.new_chat_mode = True
         st.session_state.current_session_id = None
         st.session_state.messages = []
         st.session_state.uploader_key += 1
@@ -494,7 +500,7 @@ if st.session_state.processing:
     if st.session_state.current_session_id is None:
         st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
         st.session_state.messages = []
-
+        st.session_state.new_chat_mode = False
     user_content = prompt
 
     if uploaded_file:
