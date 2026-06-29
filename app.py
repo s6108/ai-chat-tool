@@ -210,7 +210,7 @@ def get_user_plan(user_id: str) -> str:
 
 
 def enforce_device_limit(user_id: str, current_device_id: str, plan: str = "free"):
-    max_devices = 3 if plan == "premium" else 1
+    max_devices = 3 if plan == "premium" else 2
 
     result = (
         supabase_admin.table("device_sessions")
@@ -256,6 +256,7 @@ def restore_login_from_device():
             .limit(1)
             .execute()
         )
+
         if not result.data:
             return None
 
@@ -267,19 +268,18 @@ def restore_login_from_device():
             return None
 
         auth_res = supabase.auth.refresh_session(refresh_token)
+
         if auth_res and auth_res.user:
             if auth_res.session:
                 save_device_session(auth_res.user, auth_res.session, plan)
+
             return auth_res.user
 
-    except Exception:
-        try:
-            supabase_admin.table("device_sessions").delete().eq("device_id", device_id).execute()
-        except Exception:
-            pass
+    except Exception as e:
+        print(f"Auto login failed: {e}")
+        return None
 
     return None
-
 
 # ====================== Session State Init ======================
 if "user" not in st.session_state:
@@ -298,12 +298,16 @@ if "processing" not in st.session_state:
     st.session_state.processing = False
 if "new_chat_mode" not in st.session_state:
     st.session_state.new_chat_mode = False
-
+if "new_chat_mode" not in st.session_state:
+    st.session_state.new_chat_mode = True
 # ====================== Auto Login ======================
 if st.session_state.user is None:
     restored_user = restore_login_from_device()
     if restored_user:
         st.session_state.user = restored_user
+        st.session_state.current_session_id = None
+        st.session_state.messages = []
+        st.session_state.new_chat_mode = True
 
 
 # ====================== Load Current Chat ======================
@@ -342,7 +346,9 @@ if not st.session_state.user:
                 )
 
                 st.session_state.user = res.user
-
+                st.session_state.current_session_id = None
+                st.session_state.messages = []
+                st.session_state.new_chat_mode = True
                 if res.session:
                     plan = get_user_plan(res.user.id)
                     save_device_session(res.user, res.session, plan)
@@ -435,6 +441,7 @@ with st.sidebar:
         if st.button(label, key=f"open_session_{session_id}", use_container_width=True):
             st.session_state.current_session_id = session_id
             st.session_state.messages = load_messages(session_id)
+            st.session_state.new_chat_mode = False
             st.session_state.uploader_key += 1
             st.session_state.processing = False
             st.rerun()
