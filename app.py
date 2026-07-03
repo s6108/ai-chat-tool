@@ -1,12 +1,11 @@
 import os
 import base64
 from datetime import datetime, timezone
-
 import streamlit as st
 from openai import OpenAI
 from supabase import create_client
 from streamlit_js_eval import streamlit_js_eval
-
+from services.chat_service import save_message
 
 # ============================================================
 # Mango AI v2 Stable
@@ -187,12 +186,6 @@ def update_chat_title_if_needed(session_id: str, prompt: str):
             )
 
 
-def save_message(session_id: str, role: str, content: str):
-    if not session_id:
-        return
-    supabase_admin.table("messages").insert(
-        {"session_id": session_id, "role": role, "content": content}
-    ).execute()
 
 
 # ====================== Device / Login Management ======================
