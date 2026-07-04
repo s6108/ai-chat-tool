@@ -6,7 +6,7 @@ from openai import OpenAI
 from supabase import create_client
 from streamlit_js_eval import streamlit_js_eval
 from services.chat_service import save_message
-
+from services.device_service import get_device_id
 # ============================================================
 # Mango AI v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
@@ -44,18 +44,7 @@ def get_key(name: str):
 
 
 # ====================== Device ID ======================
-device_id = streamlit_js_eval(
-    js_expressions="""
-    let id = localStorage.getItem("mango_device_id");
-    if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem("mango_device_id", id);
-    }
-    id;
-    """,
-    key="get_device_id",
-)
-
+device_id = get_device_id()
 if not device_id:
     st.stop()
 
