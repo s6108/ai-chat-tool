@@ -230,6 +230,7 @@ def save_device_session(user, session, plan: str = "free"):
             "device_id": device_id,
             "user_id": user.id,
             "email": user.email,
+            "access_token": session.access_token,
             "refresh_token": session.refresh_token,
             "last_seen": now_utc(),
             "plan": plan,
@@ -254,13 +255,20 @@ def restore_login_from_device():
             return None
 
         saved = result.data[0]
+        access_token = saved.get("access_token")
         refresh_token = saved.get("refresh_token")
         plan = saved.get("plan") or "free"
 
         if not refresh_token:
             return None
 
-        auth_res = supabase.auth.refresh_session(refresh_token)
+        try:
+            if access_token:
+                auth_res = supabase.auth.set_session(access_token, refresh_token)
+            else:
+                auth_res = supabase.auth.refresh_session(refresh_token)
+        except Exception:
+            auth_res = supabase.auth.refresh_session(refresh_token)
 
         if auth_res and auth_res.user:
             if auth_res.session:
@@ -273,7 +281,6 @@ def restore_login_from_device():
         return None
 
     return None
-
 # ====================== Session State Init ======================
 if "user" not in st.session_state:
     st.session_state.user = None
