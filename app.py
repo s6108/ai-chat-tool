@@ -7,6 +7,7 @@ from supabase import create_client
 from streamlit_js_eval import streamlit_js_eval
 from services.chat_service import save_message
 from services.device_service import get_device_id
+from streamlit_cookies_manager import EncryptedCookieManager
 # ============================================================
 # Mango AI v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
@@ -32,7 +33,19 @@ if not SUPABASE_URL or not SUPABASE_KEY or not SUPABASE_SERVICE_KEY:
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+COOKIE_PASSWORD = os.getenv("COOKIE_PASSWORD")
 
+if not COOKIE_PASSWORD:
+    st.error("COOKIE_PASSWORD 环境变量未配置，请检查 Render Environment Variables。")
+    st.stop()
+
+cookies = EncryptedCookieManager(
+    prefix="mango_ai_",
+    password=COOKIE_PASSWORD,
+)
+
+if not cookies.ready():
+    st.stop()
 
 # ====================== Basic Utils ======================
 def now_utc() -> str:
@@ -41,8 +54,35 @@ def now_utc() -> str:
 
 def get_key(name: str):
     return os.getenv(name)
+def save_auth_cookies(session):
+    if not session:
+        return
 
+    cookies["access_token"] = session.access_token
+    cookies["refresh_token"] = session.refresh_token
+    cookies.save()
+def restore_login_from_cookies():
+    access_token = cookies.get("access_token")
+    refresh_token = cookies.get("refresh_token")
 
+    if not refresh_token:
+        return None
+
+    try:
+        if access_token:
+            res = supabase.auth.set_session(access_token, refresh_token)
+        else:
+            res = supabase.auth.refresh_session(refresh_token)
+
+        if res and res.user:
+            if res.session:
+                save_auth_cookies(res.session)
+            return res.user
+
+    except Exception:
+        pass
+
+    return None
 # ====================== Device ID ======================
 device_id = get_device_id()
 if not device_id:
@@ -291,7 +331,7 @@ if "new_chat_mode" not in st.session_state:
     st.session_state.new_chat_mode = True
 # ====================== Auto Login ======================
 if st.session_state.user is None:
-    restored_user = restore_login_from_device()
+    restored_user = restore_login_from_cookies() or restore_login_from_device()
     if restored_user:
         st.session_state.user = restored_user
         st.session_state.current_session_id = None
@@ -339,6 +379,8 @@ if not st.session_state.user:
                 st.session_state.messages = []
                 st.session_state.new_chat_mode = True
                 if res.session:
+                    save_auth_cookies(res.session)
+
                     plan = get_user_plan(res.user.id)
                     save_device_session(res.user, res.session, plan)
 
@@ -376,6 +418,9 @@ with st.sidebar:
         try:
             supabase_admin.table("device_sessions").delete().eq("device_id", device_id).execute()
             supabase.auth.sign_out()
+            cookies["access_token"] = ""
+            cookies["refresh_token"] = ""
+            cookies.save()
         except Exception:
             pass
 
