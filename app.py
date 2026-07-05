@@ -46,7 +46,8 @@ cookies = EncryptedCookieManager(
 
 if not cookies.ready():
     st.stop()
-
+# ====================== Debug ======================
+DEBUG = True
 # ====================== Basic Utils ======================
 def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -65,7 +66,8 @@ def save_auth_cookies(session):
 def restore_login_from_cookies():
     access_token = cookies.get("access_token")
     refresh_token = cookies.get("refresh_token")
-
+    print("Access exists:", bool(access_token))
+    print("Refresh exists:", bool(refresh_token))
     if not refresh_token:
         return None
 
@@ -307,8 +309,8 @@ def restore_login_from_device():
             return auth_res.user
 
     except Exception as e:
-        print(f"Auto login failed: {e}")
-        return None
+        st.error(f"Cookie restore failed: {e}")
+        print(e)
 
     return None
 # ====================== Session State Init ======================
@@ -497,7 +499,42 @@ with st.sidebar:
             st.session_state.uploader_key += 1
             st.session_state.processing = False
             st.rerun()
+        if DEBUG:
 
+            st.markdown("---")
+            st.subheader("🔧 Debug")
+
+            st.write("Device ID:", device_id)
+
+            st.write(
+                "Access Cookie:",
+                "✅" if cookies.get("access_token") else "❌"
+            )
+
+            st.write(
+                "Refresh Cookie:",
+                "✅" if cookies.get("refresh_token") else "❌"
+            )
+
+            st.write(
+                "Login Saved:",
+                cookies.get("login_saved_at")
+            )
+
+            st.write(
+                "User:",
+                getattr(st.session_state.user, "email", None)
+            )
+
+            st.write(
+                "Current Session:",
+                st.session_state.current_session_id
+            )
+
+            st.write(
+                "Processing:",
+                st.session_state.processing
+            )
 
 # ====================== Clear Current Messages ======================
 if st.button("🗑️ 清空当前对话"):
