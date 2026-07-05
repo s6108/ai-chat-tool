@@ -313,8 +313,7 @@ def restore_login_from_device():
             return auth_res.user
 
     except Exception as e:
-        st.error(f"Cookie restore failed: {e}")
-        print(e)
+        print(f"Cookie restore failed: {e}")
 
     return None
 # ====================== Session State Init ======================
