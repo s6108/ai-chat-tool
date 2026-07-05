@@ -82,8 +82,11 @@ def restore_login_from_cookies():
                 save_auth_cookies(res.session)
             return res.user
 
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"Cookie restore failed: {e}")
+        cookies["access_token"] = ""
+        cookies["refresh_token"] = ""
+        cookies.save()
 
     return None
 # ====================== Device ID ======================
