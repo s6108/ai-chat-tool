@@ -60,6 +60,7 @@ def save_auth_cookies(session):
 
     cookies["access_token"] = session.access_token
     cookies["refresh_token"] = session.refresh_token
+    cookies["login_saved_at"] = now_utc()
     cookies.save()
 def restore_login_from_cookies():
     access_token = cookies.get("access_token")
