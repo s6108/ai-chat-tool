@@ -522,7 +522,7 @@ if not st.session_state.user:
                 st.session_state.messages = []
                 st.session_state.new_chat_mode = True
                 if res.session:
-                    save_auth_cookies(res.session)
+                    
                     save_remember_session(res.user)
                     plan = get_user_plan(res.user.id)
                     save_device_session(res.user, res.session, plan)
