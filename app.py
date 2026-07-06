@@ -1,7 +1,10 @@
 import os
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import streamlit as st
+import secrets
+import hashlib
+from types import SimpleNamespace
 from openai import OpenAI
 from supabase import create_client
 from streamlit_js_eval import streamlit_js_eval
@@ -51,8 +54,99 @@ DEBUG = True
 # ====================== Basic Utils ======================
 def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
+def generate_remember_token():
+    return secrets.token_urlsafe(48)
 
 
+def hash_remember_token(token: str):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def save_remember_session(user, days=30):
+    token = generate_remember_token()
+    token_hash = hash_remember_token(token)
+
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(days=days)
+    ).isoformat()
+
+    supabase_admin.table("remember_sessions").delete().eq(
+        "user_id", user.id
+    ).execute()
+
+    supabase_admin.table("remember_sessions").insert(
+        {
+            "user_id": user.id,
+            "email": user.email,
+            "token_hash": token_hash,
+            "expires_at": expires_at,
+            "last_seen": now_utc(),
+        }
+    ).execute()
+
+    cookies["remember_token"] = token
+
+    # 清掉旧 Supabase token，避免 Already Used 冲突
+    cookies["access_token"] = ""
+    cookies["refresh_token"] = ""
+    cookies["login_saved_at"] = now_utc()
+
+    cookies.save()
+
+
+def restore_login_from_remember():
+    token = cookies.get("remember_token")
+
+    if not token:
+        return None
+
+    token_hash = hash_remember_token(token)
+
+    try:
+        result = (
+            supabase_admin.table("remember_sessions")
+            .select("*")
+            .eq("token_hash", token_hash)
+            .gt("expires_at", now_utc())
+            .limit(1)
+            .execute()
+        )
+
+        if not result.data:
+            cookies["remember_token"] = ""
+            cookies.save()
+            return None
+
+        saved = result.data[0]
+
+        supabase_admin.table("remember_sessions").update(
+            {"last_seen": now_utc()}
+        ).eq("id", saved["id"]).execute()
+
+        return SimpleNamespace(
+            id=saved.get("user_id"),
+            email=saved.get("email") or "用户"
+        )
+
+    except Exception as e:
+        print(f"Remember restore failed: {e}")
+        return None
+
+
+def clear_remember_session():
+    token = cookies.get("remember_token")
+
+    if token:
+        token_hash = hash_remember_token(token)
+        supabase_admin.table("remember_sessions").delete().eq(
+            "token_hash", token_hash
+        ).execute()
+
+    cookies["remember_token"] = ""
+    cookies["access_token"] = ""
+    cookies["refresh_token"] = ""
+    cookies["login_saved_at"] = ""
+    cookies.save()
 def get_key(name: str):
     return os.getenv(name)
 def save_auth_cookies(session):
@@ -89,6 +183,49 @@ def restore_login_from_cookies():
         cookies.save()
 
     return None
+def restore_login_from_remember():
+    token = cookies.get("remember_token")
+
+    if not token:
+        return None
+
+    token_hash = hash_remember_token(token)
+
+    try:
+        result = (
+            supabase_admin.table("remember_sessions")
+            .select("*")
+            .eq("token_hash", token_hash)
+            .gt("expires_at", now_utc())
+            .limit(1)
+            .execute()
+        )
+
+        if not result.data:
+            cookies["remember_token"] = ""
+            cookies.save()
+            return None
+
+        saved = result.data[0]
+
+        supabase_admin.table("remember_sessions").update(
+            {
+                "last_seen": now_utc()
+            }
+        ).eq("id", saved["id"]).execute()
+
+        class RememberUser:
+            pass
+
+        user = RememberUser()
+        user.id = saved.get("user_id")
+        user.email = saved.get("email") or "用户"
+
+        return user
+
+    except Exception as e:
+        print(f"Remember restore failed: {e}")
+        return None
 # ====================== Device ID ======================
 device_id = get_device_id()
 if not device_id:
@@ -337,7 +474,7 @@ if "new_chat_mode" not in st.session_state:
     st.session_state.new_chat_mode = True
 # ====================== Auto Login ======================
 if st.session_state.user is None:
-    restored_user = restore_login_from_device()
+    restored_user = restore_login_from_remember()
     if restored_user:
         st.session_state.user = restored_user
         st.session_state.current_session_id = None
@@ -386,7 +523,7 @@ if not st.session_state.user:
                 st.session_state.new_chat_mode = True
                 if res.session:
                     save_auth_cookies(res.session)
-
+                    save_remember_session(res.user)
                     plan = get_user_plan(res.user.id)
                     save_device_session(res.user, res.session, plan)
 
