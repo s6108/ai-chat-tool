@@ -491,8 +491,8 @@ if not st.session_state.user:
                     plan = get_user_plan(res.user.id)
                     save_device_session(res.user, res.session, plan)
 
-                st.success("登录成功！请手动刷新一次页面。")
-                st.stop()
+                st.success("登录成功！")
+                st.rerun()
 
             except Exception as e:
                 st.error(f"登录失败: {e}")
