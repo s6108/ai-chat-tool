@@ -76,12 +76,12 @@ def save_remember_session(user, days=30):
 
     supabase_admin.table("remember_sessions").insert(
         {
-            "user_id": user.id,
-            "email": user.email,
-            "token_hash": token_hash,
-            "expires_at": expires_at,
-            "last_seen": now_utc(),
-        }
+    "user_id": user.id,
+    "email": user.email,
+    "token_hash": token_hash,
+    "device_id": device_id,
+    "expires_at": expires_at,
+}
     ).execute()
 
     cookies["remember_token"] = token
@@ -151,6 +151,8 @@ def clear_remember_session():
     cookies["refresh_token"] = ""
     cookies["login_saved_at"] = ""
     cookies.save()
+
+    
 def get_key(name: str):
     return os.getenv(name)
 def save_auth_cookies(session):
@@ -187,49 +189,7 @@ def restore_login_from_cookies():
         cookies.save()
 
     return None
-def restore_login_from_remember():
-    token = cookies.get("remember_token")
 
-    if not token:
-        return None
-
-    token_hash = hash_remember_token(token)
-
-    try:
-        result = (
-            supabase_admin.table("remember_sessions")
-            .select("*")
-            .eq("token_hash", token_hash)
-            .gt("expires_at", now_utc())
-            .limit(1)
-            .execute()
-        )
-
-        if not result.data:
-            cookies["remember_token"] = ""
-            cookies.save()
-            return None
-
-        saved = result.data[0]
-
-        supabase_admin.table("remember_sessions").update(
-            {
-                "last_seen": now_utc()
-            }
-        ).eq("id", saved["id"]).execute()
-
-        class RememberUser:
-            pass
-
-        user = RememberUser()
-        user.id = saved.get("user_id")
-        user.email = saved.get("email") or "用户"
-
-        return user
-
-    except Exception as e:
-        print(f"Remember restore failed: {e}")
-        return None
 # ====================== Device ID ======================
 device_id = get_device_id()
 if not device_id:
