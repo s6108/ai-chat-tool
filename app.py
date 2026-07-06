@@ -97,6 +97,10 @@ def save_remember_session(user, days=30):
 def restore_login_from_remember():
     token = cookies.get("remember_token")
 
+    print("=" * 50)
+    print("remember_token =", token)
+    print("=" * 50)
+
     if not token:
         return None
 
