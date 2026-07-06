@@ -337,7 +337,7 @@ if "new_chat_mode" not in st.session_state:
     st.session_state.new_chat_mode = True
 # ====================== Auto Login ======================
 if st.session_state.user is None:
-    restored_user = restore_login_from_cookies() or restore_login_from_device()
+    restored_user = restore_login_from_device()
     if restored_user:
         st.session_state.user = restored_user
         st.session_state.current_session_id = None
