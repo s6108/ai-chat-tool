@@ -95,30 +95,17 @@ def save_remember_session(user, days=30):
 
 
 def restore_login_from_remember():
-    token = cookies.get("remember_token")
-
-    print("=" * 50)
-    print("remember_token =", token)
-    print("=" * 50)
-
-    if not token:
-        return None
-
-    token_hash = hash_remember_token(token)
-
     try:
         result = (
             supabase_admin.table("remember_sessions")
             .select("*")
-            .eq("token_hash", token_hash)
+            .eq("device_id", device_id)
             .gt("expires_at", now_utc())
             .limit(1)
             .execute()
         )
 
         if not result.data:
-            cookies["remember_token"] = ""
-            cookies.save()
             return None
 
         saved = result.data[0]
@@ -135,7 +122,6 @@ def restore_login_from_remember():
     except Exception as e:
         print(f"Remember restore failed: {e}")
         return None
-
 
 def clear_remember_session():
     token = cookies.get("remember_token")
