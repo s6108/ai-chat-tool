@@ -10,6 +10,12 @@ from supabase import create_client
 from streamlit_js_eval import streamlit_js_eval
 from services.chat_service import save_message
 from services.device_service import get_device_id
+from services.usage_service import (
+    can_use_chat,
+    can_use_image,
+    increase_chat_usage,
+    increase_image_usage,
+)
 from streamlit_cookies_manager import EncryptedCookieManager
 # ============================================================
 # Mango AI v2 Stable
@@ -659,6 +665,34 @@ prompt = st.chat_input("输入你的问题...")
 
 # ====================== Process User Input ======================
 if prompt:
+    user_id = st.session_state.user.id
+    user_plan = get_user_plan(user_id) or "free"
+    user_plan = str(user_plan).lower()
+
+    # 先检查文字聊天额度
+    if not can_use_chat(supabase_admin, user_id, user_plan):
+        st.error("今日免费聊天额度已用完。升级 Premium 可继续无限使用。")
+        st.link_button(
+            "🚀 升级 Premium",
+            "https://7jyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
+            use_container_width=True,
+        )
+        st.stop()
+
+    # 本次包含图片时，再检查图片额度
+    if uploaded_file and not can_use_image(
+        supabase_admin,
+        user_id,
+        user_plan,
+    ):
+        st.error("今日免费图片识别额度已用完。升级 Premium 可继续使用。")
+        st.link_button(
+            "🚀 升级 Premium",
+            "https://7jyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
+            use_container_width=True,
+        )
+        st.stop()
+
     st.session_state.processing = True
 
 if st.session_state.processing:
@@ -734,7 +768,21 @@ if st.session_state.processing:
 
             st.session_state.messages.append({"role": "assistant", "content": full_response})
             save_message(st.session_state.current_session_id, "assistant", full_response)
+            # 只有模型成功返回后才扣除额度
+            try:
+                user_id = st.session_state.user.id
+                user_plan = get_user_plan(user_id) or "free"
+                user_plan = str(user_plan).lower()
 
+                if user_plan != "premium":
+                    increase_chat_usage(supabase_admin, user_id)
+
+                    if uploaded_file:
+                        increase_image_usage(supabase_admin, user_id)
+
+            except Exception as usage_error:
+                # 用量统计失败不能影响用户已经得到的回答
+                print(f"Usage update failed: {usage_error}")
             st.session_state.processing = False
 
             if uploaded_file:
