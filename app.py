@@ -840,8 +840,13 @@ if st.session_state.processing:
             if uploaded_file:
                 st.session_state.uploader_key += 1
                 st.session_state.selected_model = "DeepSeek"
-                st.session_state.messages = [m for m in st.session_state.messages if isinstance(m.get("content"), str)]
-                st.rerun()
+                st.session_state.messages = [
+                    m for m in st.session_state.messages
+                    if isinstance(m.get("content"), str)
+                ]
+
+            # 每次成功回答后刷新页面，让侧边栏用量立即更新
+            st.rerun()
 
         except Exception as e:
             st.session_state.processing = False
