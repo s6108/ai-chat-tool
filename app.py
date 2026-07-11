@@ -11,6 +11,9 @@ from streamlit_js_eval import streamlit_js_eval
 from services.chat_service import save_message
 from services.device_service import get_device_id
 from services.usage_service import (
+    FREE_CHAT_LIMIT,
+    FREE_IMAGE_LIMIT,
+    get_today_usage,
     can_use_chat,
     can_use_image,
     increase_chat_usage,
@@ -528,10 +531,59 @@ with st.sidebar:
         st.session_state.current_session_id = None
         st.session_state.processing = False
         st.rerun()
+# ====================== Plan and Daily Usage ======================
+st.markdown("### 👤 当前套餐")
 
+sidebar_user_id = st.session_state.user.id
+sidebar_plan = get_user_plan(sidebar_user_id) or "free"
+sidebar_plan = str(sidebar_plan).lower()
+
+if sidebar_plan == "premium":
+    st.success("💎 Premium")
+
+    st.markdown("💬 **今日聊天：无限**")
+    st.markdown("🖼️ **今日识图：无限**")
+
+else:
+    st.info("🆓 Free")
+
+    try:
+        today_usage = get_today_usage(
+            supabase_admin,
+            sidebar_user_id,
+        )
+
+        chat_count = int(today_usage.get("chat_count", 0))
+        image_count = int(today_usage.get("image_count", 0))
+
+        chat_remaining = max(FREE_CHAT_LIMIT - chat_count, 0)
+        image_remaining = max(FREE_IMAGE_LIMIT - image_count, 0)
+
+        st.markdown(
+            f"💬 **今日聊天：{chat_count} / {FREE_CHAT_LIMIT}**"
+        )
+        st.progress(
+            min(chat_count / FREE_CHAT_LIMIT, 1.0)
+        )
+        st.caption(f"剩余 {chat_remaining} 次")
+
+        st.markdown(
+            f"🖼️ **今日识图：{image_count} / {FREE_IMAGE_LIMIT}**"
+        )
+        st.progress(
+            min(image_count / FREE_IMAGE_LIMIT, 1.0)
+        )
+        st.caption(f"剩余 {image_remaining} 次")
+
+    except Exception as usage_error:
+        print(f"Sidebar usage load failed: {usage_error}")
+        st.caption("暂时无法读取今日用量")
+
+    st.markdown("---")
     st.link_button(
         "💎 升级高级会员 $7.99/月",
         "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
+        use_container_width=True,
     )
 
     st.markdown("### 模式选择")
