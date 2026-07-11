@@ -59,7 +59,7 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 # ====================== Debug ======================
-DEBUG = True
+DEBUG = False
 # ====================== Basic Utils ======================
 def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
