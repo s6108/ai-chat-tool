@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 import streamlit as st
 import secrets
 import hashlib
+from urllib.parse import urlencode
 from types import SimpleNamespace
 from openai import OpenAI
 from supabase import create_client
@@ -316,7 +317,21 @@ def update_chat_title_if_needed(session_id: str, prompt: str):
                 .execute()
             )
 
+LEMONSQUEEZY_CHECKOUT_URL = (
+    "https://7jyo-ai-chat.lemonsqueezy.com/"
+    "checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a"
+)
 
+
+def get_premium_checkout_url(user) -> str:
+    """生成绑定当前 Mango AI 用户的 LemonSqueezy 付款链接。"""
+    params = {
+        "lang": "en",
+        "checkout[email]": user.email or "",
+        "checkout[custom][user_id]": str(user.id),
+    }
+
+    return f"{LEMONSQUEEZY_CHECKOUT_URL}?{urlencode(params)}"
 
 
 # ====================== Device / Login Management ======================
@@ -515,6 +530,10 @@ user_email = getattr(st.session_state.user, "email", "用户")
 st.write(f"欢迎回来，**{user_email}**")
 
 # ====================== Sidebar ======================
+premium_checkout_url = get_premium_checkout_url(
+    st.session_state.user
+)
+
 with st.sidebar:
     if st.button("退出登录", use_container_width=True):
         try:
@@ -581,8 +600,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.link_button(
-        "💎 升级高级会员 $7.99/月",
-        "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
+        "💎 升级高级会员 $14.99/月",
+        premium_checkout_url,
         use_container_width=True,
     )
 
@@ -720,13 +739,13 @@ if prompt:
     user_id = st.session_state.user.id
     user_plan = get_user_plan(user_id) or "free"
     user_plan = str(user_plan).lower()
-
+    
     # 先检查文字聊天额度
     if not can_use_chat(supabase_admin, user_id, user_plan):
         st.error("今日免费聊天额度已用完。升级 Premium 可继续无限使用。")
         st.link_button(
             "🚀 升级 Premium",
-            "https://7jyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
+            premium_checkout_url,
             use_container_width=True,
         )
         st.stop()
@@ -740,7 +759,7 @@ if prompt:
         st.error("今日免费图片识别额度已用完。升级 Premium 可继续使用。")
         st.link_button(
             "🚀 升级 Premium",
-            "https://7jyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a?lang=en",
+            premium_checkout_url,
             use_container_width=True,
         )
         st.stop()
