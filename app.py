@@ -318,8 +318,7 @@ def update_chat_title_if_needed(session_id: str, prompt: str):
             )
 
 LEMONSQUEEZY_CHECKOUT_URL = (
-    "https://7jyo-ai-chat.lemonsqueezy.com/"
-    "checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a"
+    "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a"
 )
 
 
@@ -331,7 +330,12 @@ def get_premium_checkout_url(user) -> str:
         "checkout[custom][user_id]": str(user.id),
     }
 
-    return f"{LEMONSQUEEZY_CHECKOUT_URL}?{urlencode(params)}"
+    separator = "&" if "?" in LEMONSQUEEZY_CHECKOUT_URL else "?"
+
+    return (
+        f"{LEMONSQUEEZY_CHECKOUT_URL}"
+        f"{separator}{urlencode(params)}"
+    )
 
 
 # ====================== Device / Login Management ======================
