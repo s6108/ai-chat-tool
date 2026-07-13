@@ -529,13 +529,30 @@ def save_subscription_record(
             f"plan={plan}"
         )
 
-# =========================================================
-# Main event processor
-# =========================================================
+def update_device_session_plan(
+    supabase_admin: Client,
+    user_id: str,
+    plan: str,
+) -> None:
+    """
+    同步现有 device_sessions.plan。
+    """
+    (
+        supabase_admin
+        .table("device_sessions")
+        .update({"plan": plan})
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    print(
+        "Device session plan updated: "
+        f"user={user_id}, plan={plan}"
+    )
 
 def process_subscription_event(
     event_name: str,
-    payload: dict[str, Any],
+    payload: dict[str, Any],  
 ) -> dict[str, Any]:
     """
     处理 LemonSqueezy 订阅事件并同步 Supabase。
