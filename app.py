@@ -715,53 +715,53 @@ with st.sidebar:
     )
 
     with st.expander("👤 My Account", expanded=False):
-    account = get_account_data(
-        supabase_admin,
-        st.session_state.user,
-    )
+        account = get_account_data(
+            supabase_admin,
+            st.session_state.user,
+        )
 
-    st.caption("Email")
-    st.write(account["email"])
+        st.caption("Email")
+        st.write(account["email"])
 
-    st.caption("当前套餐")
+        st.caption("当前套餐")
 
-    if account["is_premium"]:
-        st.success("💎 Premium")
-    else:
-        st.info("🆓 Free")
-
-    st.caption("订阅状态")
-    st.write(
-        account["status"]
-        .replace("_", " ")
-        .title()
-    )
-
-    if (
-        account["is_premium"]
-        and account["period_end_display"] != "—"
-    ):
-        if account["status"] == "cancelled":
-            st.caption("Premium 有效期至")
+        if account["is_premium"]:
+            st.success("💎 Premium")
         else:
-            st.caption("下次续费 / 当前周期结束")
+            st.info("🆓 Free")
 
-        st.write(account["period_end_display"])
-
-    if (
-        account["is_premium"]
-        and account["status"] == "cancelled"
-    ):
-        st.warning(
-            "已取消自动续费，Premium 将保留到当前付费周期结束。"
+        st.caption("订阅状态")
+        st.write(
+            account["status"]
+            .replace("_", " ")
+            .title()
         )
 
-    if not account["is_premium"]:
-        st.link_button(
-            "🚀 升级 Premium",
-            premium_checkout_url,
-            use_container_width=True,
-        )
+        if (
+            account["is_premium"]
+            and account["period_end_display"] != "—"
+        ):
+            if account["status"] == "cancelled":
+                st.caption("Premium 有效期至")
+            else:
+                st.caption("下次续费 / 当前周期结束")
+
+            st.write(account["period_end_display"])
+
+        if (
+            account["is_premium"]
+            and account["status"] == "cancelled"
+        ):
+            st.warning(
+                "已取消自动续费，Premium 将保留到当前付费周期结束。"
+            )
+
+        if not account["is_premium"]:
+            st.link_button(
+                "🚀 升级 Premium",
+                premium_checkout_url,
+                use_container_width=True,
+            )
 
     st.markdown("### 模式选择")
 
