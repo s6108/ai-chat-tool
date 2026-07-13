@@ -24,6 +24,7 @@ from services.usage_service import (
     increase_image_usage,
 )
 from streamlit_cookies_manager import EncryptedCookieManager
+from services.account_service import get_account_data
 # ============================================================
 # Mango AI v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
@@ -552,6 +553,8 @@ if "new_chat_mode" not in st.session_state:
     st.session_state.new_chat_mode = False
 if "new_chat_mode" not in st.session_state:
     st.session_state.new_chat_mode = True
+if "page" not in st.session_state:
+    st.session_state.page = "chat"
 # ====================== Auto Login ======================
 if st.session_state.user is None:
     restored_user = restore_login_from_remember()
@@ -711,6 +714,13 @@ with st.sidebar:
         use_container_width=True,
     )
 
+    if st.button(
+        "👤 My Account",
+        use_container_width=True,
+    ):
+        st.session_state.page = "account"
+        st.rerun()
+
     st.markdown("### 模式选择")
 
     if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
@@ -730,6 +740,7 @@ with st.sidebar:
 
     if st.button("✏️ 新建聊天", use_container_width=True):
         st.session_state.new_chat_mode = True
+        st.session_state.page = "chat"
         st.session_state.current_session_id = None
         st.session_state.messages = []
         st.session_state.uploader_key += 1
@@ -829,7 +840,60 @@ for msg in st.session_state.messages:
         else:
             st.markdown("📸 图片已上传")
 
+# ====================== Account Page ======================
+if st.session_state.page == "account":
+    account = get_account_data(
+        supabase_admin,
+        st.session_state.user,
+    )
 
+    st.title("👤 My Account")
+
+    if st.button("← Back to Chat"):
+        st.session_state.page = "chat"
+        st.rerun()
+
+    st.markdown("---")
+
+    st.markdown("### Email")
+    st.write(account["email"])
+
+    st.markdown("### Current Plan")
+
+    if account["is_premium"]:
+        st.success("💎 Premium")
+    else:
+        st.info("🆓 Free")
+
+    st.markdown("### Subscription Status")
+    st.write(account["status"].replace("_", " ").title())
+
+    if account["period_end_display"] != "—":
+        if account["status"] == "cancelled":
+            st.markdown("### Access Until")
+        else:
+            st.markdown("### Next Billing / Period End")
+
+        st.write(account["period_end_display"])
+
+    if account["status"] == "cancelled":
+        st.warning(
+            "Your subscription is cancelled, but Premium remains active "
+            "until the end of the current billing period."
+        )
+
+    st.markdown("---")
+
+    if account["is_premium"]:
+        st.success("Premium access is active.")
+    else:
+        st.link_button(
+            "🚀 Upgrade to Premium",
+            premium_checkout_url,
+            use_container_width=True,
+        )
+
+    st.stop()
 # ====================== Upload + Chat Input ======================
 uploaded_file = st.file_uploader(
     "上传图片",

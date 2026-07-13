@@ -148,6 +148,7 @@ def get_webhook_summary(
         "user_id": custom_data.get("user_id"),
         "renews_at": attributes.get("renews_at"),
         "ends_at": attributes.get("ends_at"),
+        "cancelled_at": attributes.get("cancelled_at"),
         "trial_ends_at": attributes.get("trial_ends_at"),
         "cancelled": attributes.get("cancelled"),
         "product_id": attributes.get("product_id"),
@@ -218,16 +219,21 @@ def determine_plan(
     period_end: Optional[str],
 ) -> str:
     """
-    根据订阅事件及状态决定 Mango AI 套餐。
+    根据 LemonSqueezy 订阅事件及状态决定 Mango AI 套餐。
 
-    cancelled 通常表示已取消自动续费，
-    用户可能仍可使用到 ends_at，所以在到期前保留 premium。
+    cancelled 表示停止自动续费，但在有效期结束前
+    仍然保留 Premium；真正 expired 后才降级。
     """
+    normalized_event = (
+        event_name or ""
+    ).strip().lower()
+
     normalized_status = (
         status or ""
     ).strip().lower()
 
-    if event_name == "subscription_expired":
+    # 订阅真正到期，立即降级。
+    if normalized_event == "subscription_expired":
         return "free"
 
     if normalized_status in {
@@ -236,6 +242,7 @@ def determine_plan(
     }:
         return "free"
 
+    # 已取消续费，但付费周期尚未结束。
     if normalized_status == "cancelled":
         return (
             "premium"
@@ -243,6 +250,7 @@ def determine_plan(
             else "free"
         )
 
+    # 这些状态下暂时保留 Premium。
     if normalized_status in {
         "active",
         "on_trial",
@@ -251,10 +259,12 @@ def determine_plan(
     }:
         return "premium"
 
-    if event_name in {
+    # 新建、恢复或付款恢复后启用 Premium。
+    if normalized_event in {
         "subscription_created",
         "subscription_resumed",
         "subscription_payment_success",
+        "subscription_payment_recovered",
     }:
         return "premium"
 
@@ -356,8 +366,8 @@ def save_subscription_record(
     """
     插入或更新 user_subscriptions。
 
-    当前表只有 id 为主键，因此不能直接依赖 user_id upsert；
-    这里先查询，再 update 或 insert。
+    取消订阅时继续保留 Premium 到 ends_at；
+    真正 expired 后才降级为 Free。
     """
     email = normalize_email(
         summary.get("customer_email")
@@ -371,14 +381,76 @@ def save_subscription_record(
         summary.get("customer_id")
     )
 
+    event_name = (
+        normalize_text(summary.get("event_name"))
+        or ""
+    ).lower()
+
     status = (
         normalize_text(summary.get("status"))
         or "unknown"
-    )
+    ).lower()
 
     current_period_end = choose_period_end(
         summary
     )
+
+    ends_at = (
+        normalize_text(summary.get("ends_at"))
+        or None
+    )
+
+    cancelled_at = (
+        normalize_text(summary.get("cancelled_at"))
+        or None
+    )
+
+    cancelled = bool(
+        summary.get("cancelled")
+    )
+
+    # 用户取消：本周期结束前仍然保留 Premium。
+    if (
+        event_name == "subscription_cancelled"
+        or status == "cancelled"
+        or cancelled
+    ):
+        status = "cancelled"
+        plan = "premium"
+
+        if not ends_at:
+            ends_at = current_period_end
+
+        if not cancelled_at:
+            cancelled_at = datetime.now(
+                timezone.utc
+            ).isoformat()
+
+    # 恢复订阅或付款恢复：重新变成正常 Premium。
+    elif (
+        event_name in {
+            "subscription_resumed",
+            "subscription_payment_recovered",
+        }
+        or status in {
+            "active",
+            "on_trial",
+        }
+    ):
+        plan = "premium"
+        cancelled_at = None
+        ends_at = None
+
+    # 真正过期后才降级。
+    elif (
+        event_name == "subscription_expired"
+        or status == "expired"
+    ):
+        status = "expired"
+        plan = "free"
+
+        if not ends_at:
+            ends_at = current_period_end
 
     record = {
         "user_id": user_id,
@@ -392,6 +464,8 @@ def save_subscription_record(
         "current_period_end": (
             current_period_end
         ),
+        "ends_at": ends_at,
+        "cancelled_at": cancelled_at,
     }
 
     # 优先按 LemonSqueezy subscription_id 查找。
@@ -436,7 +510,9 @@ def save_subscription_record(
 
         print(
             "Subscription record updated: "
-            f"{record_id}"
+            f"{record_id}, "
+            f"status={status}, "
+            f"plan={plan}"
         )
     else:
         (
@@ -447,35 +523,11 @@ def save_subscription_record(
         )
 
         print(
-            "Subscription record inserted "
-            f"for user {user_id}"
+            "Subscription record inserted: "
+            f"user={user_id}, "
+            f"status={status}, "
+            f"plan={plan}"
         )
-
-
-def update_device_session_plan(
-    supabase_admin: Client,
-    user_id: str,
-    plan: str,
-) -> None:
-    """
-    同步现有 device_sessions.plan。
-
-    你的 app.py 当前通过 device_sessions.plan
-    判断用户套餐，因此这里必须同步。
-    """
-    (
-        supabase_admin
-        .table("device_sessions")
-        .update({"plan": plan})
-        .eq("user_id", user_id)
-        .execute()
-    )
-
-    print(
-        "Device session plan updated: "
-        f"user={user_id}, plan={plan}"
-    )
-
 
 # =========================================================
 # Main event processor
