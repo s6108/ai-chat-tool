@@ -34,10 +34,10 @@ from streamlit_cookies_manager import EncryptedCookieManager
 APP_DIR = Path(__file__).resolve().parent
 MANGO_ICON_PATH = APP_DIR / "static" / "apple-touch-icon.png"
 
-mango_page_icon = (
-    Image.open(MANGO_ICON_PATH)
-    if MANGO_ICON_PATH.exists()
-    else "🥭"
+try:
+    mango_page_icon = Image.open(MANGO_ICON_PATH)
+except Exception:
+    mango_page_icon = "🥭"
 )
 st.set_page_config(
     page_title="Mango AI",
