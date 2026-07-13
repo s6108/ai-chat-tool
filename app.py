@@ -38,7 +38,7 @@ try:
     mango_page_icon = Image.open(MANGO_ICON_PATH)
 except Exception:
     mango_page_icon = "🥭"
-)
+
 st.set_page_config(
     page_title="Mango AI",
     page_icon=mango_page_icon,
