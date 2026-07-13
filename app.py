@@ -714,12 +714,54 @@ with st.sidebar:
         use_container_width=True,
     )
 
-    if st.button(
-        "👤 My Account",
-        use_container_width=True,
+    with st.expander("👤 My Account", expanded=False):
+    account = get_account_data(
+        supabase_admin,
+        st.session_state.user,
+    )
+
+    st.caption("Email")
+    st.write(account["email"])
+
+    st.caption("当前套餐")
+
+    if account["is_premium"]:
+        st.success("💎 Premium")
+    else:
+        st.info("🆓 Free")
+
+    st.caption("订阅状态")
+    st.write(
+        account["status"]
+        .replace("_", " ")
+        .title()
+    )
+
+    if (
+        account["is_premium"]
+        and account["period_end_display"] != "—"
     ):
-        st.session_state.page = "account"
-        st.rerun()
+        if account["status"] == "cancelled":
+            st.caption("Premium 有效期至")
+        else:
+            st.caption("下次续费 / 当前周期结束")
+
+        st.write(account["period_end_display"])
+
+    if (
+        account["is_premium"]
+        and account["status"] == "cancelled"
+    ):
+        st.warning(
+            "已取消自动续费，Premium 将保留到当前付费周期结束。"
+        )
+
+    if not account["is_premium"]:
+        st.link_button(
+            "🚀 升级 Premium",
+            premium_checkout_url,
+            use_container_width=True,
+        )
 
     st.markdown("### 模式选择")
 
@@ -840,60 +882,7 @@ for msg in st.session_state.messages:
         else:
             st.markdown("📸 图片已上传")
 
-# ====================== Account Page ======================
-if st.session_state.page == "account":
-    account = get_account_data(
-        supabase_admin,
-        st.session_state.user,
-    )
 
-    st.title("👤 My Account")
-
-    if st.button("← Back to Chat"):
-        st.session_state.page = "chat"
-        st.rerun()
-
-    st.markdown("---")
-
-    st.markdown("### Email")
-    st.write(account["email"])
-
-    st.markdown("### Current Plan")
-
-    if account["is_premium"]:
-        st.success("💎 Premium")
-    else:
-        st.info("🆓 Free")
-
-    st.markdown("### Subscription Status")
-    st.write(account["status"].replace("_", " ").title())
-
-    if account["period_end_display"] != "—":
-        if account["status"] == "cancelled":
-            st.markdown("### Access Until")
-        else:
-            st.markdown("### Next Billing / Period End")
-
-        st.write(account["period_end_display"])
-
-    if account["status"] == "cancelled":
-        st.warning(
-            "Your subscription is cancelled, but Premium remains active "
-            "until the end of the current billing period."
-        )
-
-    st.markdown("---")
-
-    if account["is_premium"]:
-        st.success("Premium access is active.")
-    else:
-        st.link_button(
-            "🚀 Upgrade to Premium",
-            premium_checkout_url,
-            use_container_width=True,
-        )
-
-    st.stop()
 # ====================== Upload + Chat Input ======================
 uploaded_file = st.file_uploader(
     "上传图片",
