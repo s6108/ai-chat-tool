@@ -1,5 +1,8 @@
 import os
 import base64
+from pathlib import Path
+import streamlit.components.v1 as components
+from PIL import Image
 from datetime import datetime, timezone, timedelta
 import streamlit as st
 import secrets
@@ -28,10 +31,109 @@ from streamlit_cookies_manager import EncryptedCookieManager
 
 
 # ====================== Page Config ======================
+APP_DIR = Path(__file__).resolve().parent
+MANGO_ICON_PATH = APP_DIR / "static" / "apple-touch-icon.png"
+
+mango_page_icon = (
+    Image.open(MANGO_ICON_PATH)
+    if MANGO_ICON_PATH.exists()
+    else "🥭"
+)
 st.set_page_config(
     page_title="Mango AI",
-    page_icon="🥭",
-    layout="centered",
+    page_icon=mango_page_icon,
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+components.html(
+    """
+    <script>
+    (() => {
+        const parentDocument = window.parent.document;
+        const head = parentDocument.head;
+
+        function setLink(rel, href, sizes = "") {
+            let link = head.querySelector(`link[rel="${rel}"]`);
+
+            if (!link) {
+                link = parentDocument.createElement("link");
+                link.setAttribute("rel", rel);
+                head.appendChild(link);
+            }
+
+            link.setAttribute("href", href);
+
+            if (sizes) {
+                link.setAttribute("sizes", sizes);
+            }
+        }
+
+        setLink(
+            "apple-touch-icon",
+            "/app/static/apple-touch-icon.png",
+            "180x180"
+        );
+
+        setLink(
+            "apple-touch-icon-precomposed",
+            "/app/static/apple-touch-icon.png",
+            "180x180"
+        );
+
+        setLink(
+            "manifest",
+            "/app/static/manifest.json"
+        );
+
+        let mobileCapable = head.querySelector(
+            'meta[name="apple-mobile-web-app-capable"]'
+        );
+
+        if (!mobileCapable) {
+            mobileCapable = parentDocument.createElement("meta");
+            mobileCapable.setAttribute(
+                "name",
+                "apple-mobile-web-app-capable"
+            );
+            head.appendChild(mobileCapable);
+        }
+
+        mobileCapable.setAttribute("content", "yes");
+
+        let appTitle = head.querySelector(
+            'meta[name="apple-mobile-web-app-title"]'
+        );
+
+        if (!appTitle) {
+            appTitle = parentDocument.createElement("meta");
+            appTitle.setAttribute(
+                "name",
+                "apple-mobile-web-app-title"
+            );
+            head.appendChild(appTitle);
+        }
+
+        appTitle.setAttribute("content", "Mango AI");
+
+        let statusBar = head.querySelector(
+            'meta[name="apple-mobile-web-app-status-bar-style"]'
+        );
+
+        if (!statusBar) {
+            statusBar = parentDocument.createElement("meta");
+            statusBar.setAttribute(
+                "name",
+                "apple-mobile-web-app-status-bar-style"
+            );
+            head.appendChild(statusBar);
+        }
+
+        statusBar.setAttribute("content", "default");
+    })();
+    </script>
+    """,
+    height=0,
+    width=0,
 )
 
 
