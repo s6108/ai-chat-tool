@@ -338,7 +338,14 @@ model_options = {
     },
 }
 
-
+MODEL_ICONS = {
+    "DeepSeek": "🔴",
+    "GLM-4V": "🟠",
+    "GLM-4": "🟡",
+    "Kimi": "🔵",
+    "Doubao-Pro": "🟢",
+    "Qwen": "🟣",
+}
 # ====================== Chat Database Functions ======================
 def load_messages(session_id: str):
     result = (
@@ -355,6 +362,8 @@ def load_messages(session_id: str):
         {
             "role": row.get("role", "user"),
             "content": row.get("content", ""),
+            "model_name": row.get("model_name"),
+            "model_icon": row.get("model_icon"),
         }
         for row in rows
     ]
@@ -1062,8 +1071,19 @@ if st.session_state.processing:
             st.session_state.selected_model = "Doubao-Pro"
         else:
             st.session_state.selected_model = "DeepSeek"
+        used_model = st.session_state.selected_model
+        used_model_icon = MODEL_ICONS.get(
+            used_model,
+            "🤖",
+        )
+    with st.chat_message(
+        "assistant",
+        avatar=used_model_icon,
+    ):
+        st.caption(
+            f"{used_model_icon} {used_model}"
+        )
 
-    with st.chat_message("assistant"):
         placeholder = st.empty()
         full_response = ""
 
@@ -1097,8 +1117,22 @@ if st.session_state.processing:
 
             placeholder.markdown(full_response)
 
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            save_message(st.session_state.current_session_id, "assistant", full_response)
+
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": full_response,
+                    "model_name": used_model,
+                    "model_icon": used_model_icon,
+                }
+            )
+            save_message(
+                st.session_state.current_session_id,
+                "assistant",
+                full_response,
+                model_name=used_model,
+                model_icon=used_model_icon,
+            )
             # 只有模型成功返回后才扣除额度
             try:
                 user_id = st.session_state.user.id
