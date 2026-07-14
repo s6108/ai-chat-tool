@@ -640,6 +640,47 @@ user_email = getattr(st.session_state.user, "email", "用户")
 st.write(f"欢迎回来，**{user_email}**")
 
 # ====================== Sidebar ======================
+# 用户从付款页返回 Mango AI 时，自动刷新一次页面，
+# 以便重新读取最新的订阅状态。
+components.html(
+    """
+    <script>
+    (() => {
+        const parentWindow = window.parent;
+        const parentDocument = parentWindow.document;
+
+        if (parentWindow.__mangoVisibilityRefreshInstalled) {
+            return;
+        }
+
+        parentWindow.__mangoVisibilityRefreshInstalled = true;
+
+        let wasHidden = parentDocument.hidden;
+
+        parentDocument.addEventListener(
+            "visibilitychange",
+            () => {
+                if (parentDocument.hidden) {
+                    wasHidden = true;
+                    return;
+                }
+
+                if (wasHidden) {
+                    wasHidden = false;
+
+                    // 稍等 Webhook 完成数据库更新后再刷新。
+                    setTimeout(() => {
+                        parentWindow.location.reload();
+                    }, 2500);
+                }
+            }
+        );
+    })();
+    </script>
+    """,
+    height=0,
+)
+
 premium_checkout_url = get_premium_checkout_url(
     st.session_state.user
 )
@@ -773,15 +814,21 @@ with st.sidebar:
                 st.warning("暂时无法找到订阅记录，请联系支持。")
 
             else:
-                if st.button(
-                    "💳 获取订阅管理链接",
-                    use_container_width=True,
-                    key="load_customer_portal",
+                portal_url = st.session_state.get(
+                    "customer_portal_url"
+                )
+                cached_subscription_id = st.session_state.get(
+                    "portal_subscription_id"
+                )
+
+                # 当前订阅尚未获取链接时，自动请求一次。
+                if (
+                    not portal_url
+                    or cached_subscription_id != subscription_id
                 ):
-                    with st.spinner("正在连接订阅管理中心..."):
-                        portal_url = get_customer_portal_url(
-                            subscription_id
-                        )
+                    portal_url = get_customer_portal_url(
+                        subscription_id
+                    )
 
                     if portal_url:
                         st.session_state.customer_portal_url = (
@@ -790,30 +837,19 @@ with st.sidebar:
                         st.session_state.portal_subscription_id = (
                             subscription_id
                         )
-                    else:
-                        st.error(
-                            "暂时无法打开订阅管理中心，请稍后重试。"
-                        )
 
-                saved_portal_url = st.session_state.get(
-                    "customer_portal_url"
-                )
-                saved_subscription_id = st.session_state.get(
-                    "portal_subscription_id"
-                )
-
-                if (
-                    saved_portal_url
-                    and saved_subscription_id == subscription_id
-                ):
+                if portal_url:
                     st.link_button(
-                        "💳 打开订阅管理",
-                        saved_portal_url,
+                        "💳 管理订阅",
+                        portal_url,
                         use_container_width=True,
+                    )
+                else:
+                    st.error(
+                        "暂时无法连接订阅管理中心，请稍后重试。"
                     )
 
         else:
-            # 防止用户降级后继续显示旧的 Portal 链接
             st.session_state.pop(
                 "customer_portal_url",
                 None,
@@ -827,8 +863,7 @@ with st.sidebar:
                 "🚀 升级 Premium",
                 premium_checkout_url,
                 use_container_width=True,
-            )
-
+    )
     st.markdown("### 模式选择")
 
     if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
