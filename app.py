@@ -1,5 +1,6 @@
 import os
 import base64
+import json
 from io import BytesIO
 from pathlib import Path
 import streamlit.components.v1 as components
@@ -393,16 +394,34 @@ def load_messages(session_id: str):
     )
 
     rows = list(reversed(result.data or []))
-    return [
-        {
-            "role": row.get("role", "user"),
-            "content": row.get("content", ""),
-            "model_name": row.get("model_name"),
-            "model_icon": row.get("model_icon"),
-        }
-        for row in rows
-    ]
+    messages = []
 
+    for row in rows:
+        content = row.get("content", "")
+
+        # 尝试把保存的图片消息 JSON 恢复为 list
+        if isinstance(content, str):
+            stripped_content = content.strip()
+
+            if stripped_content.startswith("["):
+                try:
+                    parsed_content = json.loads(stripped_content)
+
+                    if isinstance(parsed_content, list):
+                        content = parsed_content
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        messages.append(
+            {
+                "role": row.get("role", "user"),
+                "content": content,
+                "model_name": row.get("model_name"),
+                "model_icon": row.get("model_icon"),
+            }
+        )
+
+    return messages
 
 def load_sessions(user_id: str):
     result = (
@@ -1153,7 +1172,17 @@ if st.session_state.processing:
     st.session_state.messages.append({"role": "user", "content": user_content})
 
     display_user_text = prompt if prompt else "📸 图片已上传"
-    save_message(st.session_state.current_session_id, "user", display_user_text)
+    content_to_save = (
+        json.dumps(user_content, ensure_ascii=False)
+        if isinstance(user_content, list)
+        else user_content
+    )
+
+    save_message(
+        st.session_state.current_session_id,
+        "user",
+        content_to_save,
+    )
     update_chat_title_if_needed(st.session_state.current_session_id, prompt)
 
     with st.chat_message("user"):
