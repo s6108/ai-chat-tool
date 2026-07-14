@@ -985,13 +985,31 @@ if st.button("🗑️ 清空当前对话"):
 
 # ====================== Display Messages ======================
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        content = msg.get("content", "")
-        if isinstance(content, str):
-            st.markdown(content)
-        else:
-            st.markdown("📸 图片已上传")
 
+    role = msg.get("role", "assistant")
+    content = msg.get("content", "")
+
+    if role == "assistant":
+
+        model_name = msg.get("model_name") or "Mango AI"
+        model_icon = msg.get("model_icon") or "🤖"
+
+        with st.chat_message(
+            "assistant",
+            avatar=model_icon,
+        ):
+            st.caption(f"{model_icon} {model_name}")
+            st.markdown(content)
+
+    else:
+
+        with st.chat_message("user"):
+
+            if isinstance(content, str):
+                st.markdown(content)
+
+            else:
+                st.markdown("📷 图片已上传")
 
 # ====================== Upload + Chat Input ======================
 uploaded_file = st.file_uploader(
@@ -1071,11 +1089,11 @@ if st.session_state.processing:
             st.session_state.selected_model = "Doubao-Pro"
         else:
             st.session_state.selected_model = "DeepSeek"
-        used_model = st.session_state.selected_model
-        used_model_icon = MODEL_ICONS.get(
-            used_model,
-            "🤖",
-        )
+    used_model = st.session_state.selected_model
+    used_model_icon = MODEL_ICONS.get(
+        used_model,
+         "🤖",
+    )
     with st.chat_message(
         "assistant",
         avatar=used_model_icon,
