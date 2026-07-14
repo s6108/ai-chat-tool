@@ -996,7 +996,7 @@ for msg in st.session_state.messages:
 
         with st.chat_message(
             "assistant",
-            avatar=model_icon,
+            avatar=model_icon+" ",
         ):
             st.caption(f"{model_icon} {model_name}")
             st.markdown(content)
@@ -1096,7 +1096,7 @@ if st.session_state.processing:
     )
     with st.chat_message(
         "assistant",
-        avatar=used_model_icon,
+        avatar=used_model_icon+" ",
     ):
         st.caption(
             f"{used_model_icon} {used_model}"
