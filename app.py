@@ -346,7 +346,41 @@ MODEL_ICONS = {
     "Doubao-Pro": "🟢",
     "Qwen": "🟣",
 }
+
+MODEL_SELECTOR_OPTIONS = [
+    "🔄 自动模式",
+    "🔴 DeepSeek",
+    "🟠 GLM-4V",
+    "🟡 GLM-4",
+    "🔵 Kimi",
+    "🟢 Doubao-Pro",
+    "🟣 Qwen",
+]
+
+MODEL_LABEL_TO_NAME = {
+    "🔴 DeepSeek": "DeepSeek",
+    "🟠 GLM-4V": "GLM-4V",
+    "🟡 GLM-4": "GLM-4",
+    "🔵 Kimi": "Kimi",
+    "🟢 Doubao-Pro": "Doubao-Pro",
+    "🟣 Qwen": "Qwen",
+}
 # ====================== Chat Database Functions ======================
+def handle_model_selector_change():
+    selected_label = st.session_state.model_selector
+
+    if selected_label == "🔄 自动模式":
+        st.session_state.auto_mode = True
+        return
+
+    selected_model = MODEL_LABEL_TO_NAME.get(
+        selected_label
+    )
+
+    if selected_model:
+        st.session_state.auto_mode = False
+        st.session_state.selected_model = selected_model
+
 def load_messages(session_id: str):
     result = (
         supabase_admin.table("messages")
@@ -553,6 +587,18 @@ if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
+if "model_selector" not in st.session_state:
+    if st.session_state.auto_mode:
+        st.session_state.model_selector = "🔄 自动模式"
+    else:
+        current_icon = MODEL_ICONS.get(
+            st.session_state.selected_model,
+            "🤖",
+        )
+        st.session_state.model_selector = (
+            f"{current_icon} "
+            f"{st.session_state.selected_model}"
+        )
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 if "current_session_id" not in st.session_state:
@@ -873,19 +919,8 @@ with st.sidebar:
                 premium_checkout_url,
                 use_container_width=True,
     )
-    st.markdown("### 模式选择")
+    
 
-    if st.button("🔄 自动模式" if st.session_state.auto_mode else "🔧 手动模式", use_container_width=True):
-        st.session_state.auto_mode = not st.session_state.auto_mode
-        st.rerun()
-
-    if not st.session_state.auto_mode:
-        st.markdown("### 选择模型")
-        for model_name in model_options.keys():
-            label = "🔴 " + model_name if st.session_state.selected_model == model_name else "⚪ " + model_name
-            if st.button(label, key=f"btn_model_{model_name}", use_container_width=True):
-                st.session_state.selected_model = model_name
-                st.rerun()
 
     st.markdown("---")
     st.markdown("### 历史会话")
@@ -1016,6 +1051,13 @@ uploaded_file = st.file_uploader(
     "上传图片",
     type=["png", "jpg", "jpeg"],
     key=f"upload_{st.session_state.uploader_key}",
+)
+st.selectbox(
+    "选择模型",
+    MODEL_SELECTOR_OPTIONS,
+    key="model_selector",
+    on_change=handle_model_selector_change,
+    label_visibility="collapsed",
 )
 
 prompt = st.chat_input("输入你的问题...")
@@ -1183,6 +1225,4 @@ if st.session_state.processing:
 
 
 # ====================== Status ======================
-st.caption(
-    f"当前模型: **{st.session_state.selected_model}** | 自动模式: {'✅' if st.session_state.auto_mode else '❌'}"
-)
+
