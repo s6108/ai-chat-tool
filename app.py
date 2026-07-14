@@ -1047,11 +1047,7 @@ for msg in st.session_state.messages:
                 st.markdown("📷 图片已上传")
 
 # ====================== Upload + Chat Input ======================
-uploaded_file = st.file_uploader(
-    "上传图片",
-    type=["png", "jpg", "jpeg"],
-    key=f"upload_{st.session_state.uploader_key}",
-)
+
 st.selectbox(
     "选择模型",
     MODEL_SELECTOR_OPTIONS,
@@ -1060,11 +1056,25 @@ st.selectbox(
     label_visibility="collapsed",
 )
 
-prompt = st.chat_input("输入你的问题...")
+submission = st.chat_input(
+    "输入你的问题...",
+    accept_file=True,
+    file_type=["png", "jpg", "jpeg"],
+    max_upload_size=20,
+    key="main_chat_input",
+)
+prompt = ""
+uploaded_file = None
+
+if submission:
+    prompt = submission.text or ""
+
+    if submission.files:
+        uploaded_file = submission.files[0]
 
 
 # ====================== Process User Input ======================
-if prompt:
+if submission and (prompt or uploaded_file):
     user_id = st.session_state.user.id
     user_plan = get_user_plan(user_id) or "free"
     user_plan = str(user_plan).lower()
