@@ -1026,7 +1026,64 @@ with st.sidebar:
                 "Processing:",
                 st.session_state.processing
             )
+def render_user_content(content) -> None:
+    """统一显示用户的文字和图片消息。"""
 
+    if isinstance(content, str):
+        if content:
+            st.markdown(content)
+        return
+
+    if not isinstance(content, list):
+        return
+
+    image_items = []
+    text_items = []
+
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+
+        item_type = item.get("type")
+
+        if item_type == "image_url":
+            image_items.append(item)
+
+        elif item_type == "text":
+            text_items.append(item)
+
+    # 先显示图片
+    for item in image_items:
+        image_url = (
+            item.get("image_url", {})
+            .get("url", "")
+        )
+
+        if not image_url.startswith("data:image"):
+            continue
+
+        try:
+            encoded_image = image_url.split(",", 1)[1]
+            image_bytes = base64.b64decode(encoded_image)
+
+            st.image(
+                image_bytes,
+                use_container_width=True,
+            )
+
+        except Exception as image_error:
+            print(
+                "Display user image failed: "
+                f"{image_error}"
+            )
+
+    # 再显示提问文字
+    for item in text_items:
+        text = item.get("text", "").strip()
+
+        if text and text != "请描述这张图片":
+            st.markdown(text)
+ 
 # ====================== Clear Current Messages ======================
 if st.button("🗑️ 清空当前对话"):
     if st.session_state.current_session_id:
@@ -1058,40 +1115,7 @@ for msg in st.session_state.messages:
 
     else:
         with st.chat_message("user"):
-            if isinstance(content, str):
-                st.markdown(content)
-
-            elif isinstance(content, list):
-                for item in content:
-                    if not isinstance(item, dict):
-                        continue
-
-                    if item.get("type") == "text":
-                        text = item.get("text", "")
-                        if text and text != "请描述这张图片":
-                            st.markdown(text)
-
-                    elif item.get("type") == "image_url":
-                        image_url = (
-                            item.get("image_url", {})
-                            .get("url", "")
-                        )
-
-                        if image_url.startswith("data:image"):
-                            try:
-                                encoded_image = image_url.split(",", 1)[1]
-                                image_bytes = base64.b64decode(encoded_image)
-
-                                st.image(
-                                    BytesIO(image_bytes),
-                                    use_container_width=True,
-                                )
-                            except Exception as image_error:
-                                print(
-                                    f"Display uploaded image failed: "
-                                    f"{image_error}"
-                                )
-
+            render_user_content(content)
 # ====================== Upload + Chat Input ======================
 
 st.selectbox(
@@ -1186,14 +1210,7 @@ if st.session_state.processing:
     update_chat_title_if_needed(st.session_state.current_session_id, prompt)
 
     with st.chat_message("user"):
-        if uploaded_file:
-            st.image(
-                uploaded_file.getvalue(),
-                use_container_width=True,
-            )
-
-        if prompt:
-            st.markdown(prompt)
+        render_user_content(user_content)
 
     if st.session_state.auto_mode:
         if uploaded_file:
