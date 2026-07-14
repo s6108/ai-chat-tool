@@ -25,6 +25,7 @@ from services.usage_service import (
 )
 from streamlit_cookies_manager import EncryptedCookieManager
 from services.account_service import get_account_data
+from services.subscription_service import get_customer_portal_url
 # ============================================================
 # Mango AI v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
@@ -765,7 +766,63 @@ with st.sidebar:
                 "已取消自动续费，Premium 将保留到当前付费周期结束。"
             )
 
-        if not account["is_premium"]:
+        if account["is_premium"]:
+            subscription_id = account.get("subscription_id")
+
+            if not subscription_id:
+                st.warning("暂时无法找到订阅记录，请联系支持。")
+
+            else:
+                if st.button(
+                    "💳 获取订阅管理链接",
+                    use_container_width=True,
+                    key="load_customer_portal",
+                ):
+                    with st.spinner("正在连接订阅管理中心..."):
+                        portal_url = get_customer_portal_url(
+                            subscription_id
+                        )
+
+                    if portal_url:
+                        st.session_state.customer_portal_url = (
+                            portal_url
+                        )
+                        st.session_state.portal_subscription_id = (
+                            subscription_id
+                        )
+                    else:
+                        st.error(
+                            "暂时无法打开订阅管理中心，请稍后重试。"
+                        )
+
+                saved_portal_url = st.session_state.get(
+                    "customer_portal_url"
+                )
+                saved_subscription_id = st.session_state.get(
+                    "portal_subscription_id"
+                )
+
+                if (
+                    saved_portal_url
+                    and saved_subscription_id == subscription_id
+                ):
+                    st.link_button(
+                        "💳 打开订阅管理",
+                        saved_portal_url,
+                        use_container_width=True,
+                    )
+
+        else:
+            # 防止用户降级后继续显示旧的 Portal 链接
+            st.session_state.pop(
+                "customer_portal_url",
+                None,
+            )
+            st.session_state.pop(
+                "portal_subscription_id",
+                None,
+            )
+
             st.link_button(
                 "🚀 升级 Premium",
                 premium_checkout_url,

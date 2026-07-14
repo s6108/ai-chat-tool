@@ -6,3 +6,4 @@ streamlit-cookies-manager>=0.2.0
 streamlit-js-eval
 fastapi
 uvicorn[standard]
+requests>=2.31.0
