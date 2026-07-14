@@ -1,5 +1,6 @@
 import os
 import base64
+from io import BytesIO
 from pathlib import Path
 import streamlit.components.v1 as components
 from PIL import Image
@@ -1037,14 +1038,40 @@ for msg in st.session_state.messages:
             st.markdown(content)
 
     else:
-
         with st.chat_message("user"):
-
             if isinstance(content, str):
                 st.markdown(content)
 
-            else:
-                st.markdown("📷 图片已上传")
+            elif isinstance(content, list):
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+
+                    if item.get("type") == "text":
+                        text = item.get("text", "")
+                        if text and text != "请描述这张图片":
+                            st.markdown(text)
+
+                    elif item.get("type") == "image_url":
+                        image_url = (
+                            item.get("image_url", {})
+                            .get("url", "")
+                        )
+
+                        if image_url.startswith("data:image"):
+                            try:
+                                encoded_image = image_url.split(",", 1)[1]
+                                image_bytes = base64.b64decode(encoded_image)
+
+                                st.image(
+                                    BytesIO(image_bytes),
+                                    use_container_width=True,
+                                )
+                            except Exception as image_error:
+                                print(
+                                    f"Display uploaded image failed: "
+                                    f"{image_error}"
+                                )
 
 # ====================== Upload + Chat Input ======================
 
@@ -1130,7 +1157,14 @@ if st.session_state.processing:
     update_chat_title_if_needed(st.session_state.current_session_id, prompt)
 
     with st.chat_message("user"):
-        st.markdown(display_user_text)
+        if uploaded_file:
+            st.image(
+                uploaded_file.getvalue(),
+                use_container_width=True,
+            )
+
+        if prompt:
+            st.markdown(prompt)
 
     if st.session_state.auto_mode:
         if uploaded_file:
