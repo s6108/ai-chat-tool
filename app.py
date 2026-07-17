@@ -1,6 +1,10 @@
 import os
 import base64
 import json
+from ui.chat_messages import (
+    render_user_content,
+    render_chat_messages,
+)
 from io import BytesIO
 from pathlib import Path
 import streamlit.components.v1 as components
@@ -681,11 +685,13 @@ if not st.session_state.user:
                 st.session_state.messages = []
                 st.session_state.new_chat_mode = True
                 if res.session:
-                    
                     save_remember_session(res.user)
-                    plan = get_user_plan(res.user.id)
-                    save_device_session(res.user, res.session, plan)
 
+                    try:
+                        plan = get_user_plan(res.user.id)
+                        save_device_session(res.user, res.session, plan)
+                    except Exception as device_error:
+                        print(f"Device session update failed: {device_error}")
                 st.success("登录成功！")
                 st.rerun()
 
@@ -1026,63 +1032,7 @@ with st.sidebar:
                 "Processing:",
                 st.session_state.processing
             )
-def render_user_content(content) -> None:
-    """统一显示用户的文字和图片消息。"""
 
-    if isinstance(content, str):
-        if content:
-            st.markdown(content)
-        return
-
-    if not isinstance(content, list):
-        return
-
-    image_items = []
-    text_items = []
-
-    for item in content:
-        if not isinstance(item, dict):
-            continue
-
-        item_type = item.get("type")
-
-        if item_type == "image_url":
-            image_items.append(item)
-
-        elif item_type == "text":
-            text_items.append(item)
-
-    # 先显示图片
-    for item in image_items:
-        image_url = (
-            item.get("image_url", {})
-            .get("url", "")
-        )
-
-        if not image_url.startswith("data:image"):
-            continue
-
-        try:
-            encoded_image = image_url.split(",", 1)[1]
-            image_bytes = base64.b64decode(encoded_image)
-
-            st.image(
-                image_bytes,
-                use_container_width=True,
-            )
-
-        except Exception as image_error:
-            print(
-                "Display user image failed: "
-                f"{image_error}"
-            )
-
-    # 再显示提问文字
-    for item in text_items:
-        text = item.get("text", "").strip()
-
-        if text and text != "请描述这张图片":
-            st.markdown(text)
  
 # ====================== Clear Current Messages ======================
 if st.button("🗑️ 清空当前对话"):
@@ -1096,26 +1046,10 @@ if st.button("🗑️ 清空当前对话"):
 
 
 # ====================== Display Messages ======================
-for msg in st.session_state.messages:
+render_chat_messages(
+    st.session_state.messages
+)
 
-    role = msg.get("role", "assistant")
-    content = msg.get("content", "")
-
-    if role == "assistant":
-
-        model_name = msg.get("model_name") or "Mango AI"
-        model_icon = msg.get("model_icon") or "🤖"
-
-        with st.chat_message(
-            "assistant",
-            avatar=model_icon,
-        ):
-            st.caption(model_name)
-            st.markdown(content)
-
-    else:
-        with st.chat_message("user"):
-            render_user_content(content)
 # ====================== Upload + Chat Input ======================
 
 st.selectbox(
