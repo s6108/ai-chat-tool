@@ -47,6 +47,20 @@ from services.usage_service import (
     increase_chat_usage,
     increase_image_usage,
 )
+from services.remember_service import (
+    clear_remember_session,
+    restore_login_from_cookies,
+    restore_login_from_remember,
+    save_auth_cookies,
+    save_remember_session,
+)
+
+from services.remember_service import (
+    restore_login_from_cookies,
+    restore_login_from_remember,
+    save_auth_cookies,
+    save_remember_session,
+)
 from ui.chat_messages import render_chat_messages, render_user_content
 from ui.sidebar import render_sidebar_placeholder
 # ============================================================
@@ -189,135 +203,11 @@ DEBUG = False
 # ====================== Basic Utils ======================
 def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
-def generate_remember_token():
-    return secrets.token_urlsafe(48)
-
-
-def hash_remember_token(token: str):
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
-def save_remember_session(user, days=30):
-    token = generate_remember_token()
-    token_hash = hash_remember_token(token)
-
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(days=days)
-    ).isoformat()
-
-    supabase_admin.table("remember_sessions").delete().eq(
-        "user_id", user.id
-    ).execute()
-
-    supabase_admin.table("remember_sessions").insert(
-        {
-    "user_id": user.id,
-    "email": user.email,
-    "token_hash": token_hash,
-    "device_id": device_id,
-    "expires_at": expires_at,
-}
-    ).execute()
-
-    cookies["remember_token"] = token
-
-    # 清掉旧 Supabase token，避免 Already Used 冲突
-    cookies["access_token"] = ""
-    cookies["refresh_token"] = ""
-    cookies["login_saved_at"] = now_utc()
-
-    cookies.save()
-
-
-def restore_login_from_remember():
-    try:
-        result = (
-            supabase_admin.table("remember_sessions")
-            .select("*")
-            .eq("device_id", device_id)
-            .gt("expires_at", now_utc())
-            .limit(1)
-            .execute()
-        )
-
-        if not result.data:
-            return None
-
-        saved = result.data[0]
-
-        supabase_admin.table("remember_sessions").update(
-            {"last_seen": now_utc()}
-        ).eq("id", saved["id"]).execute()
-
-        return SimpleNamespace(
-            id=saved.get("user_id"),
-            email=saved.get("email") or "用户"
-        )
-
-    except Exception as e:
-        print(f"Remember restore failed: {e}")
-        return None
-
-def clear_remember_session():
-    token = cookies.get("remember_token")
-
-    if token:
-        token_hash = hash_remember_token(token)
-        supabase_admin.table("remember_sessions").delete().eq(
-            "token_hash", token_hash
-        ).execute()
-
-    cookies["remember_token"] = ""
-    cookies["access_token"] = ""
-    cookies["refresh_token"] = ""
-    cookies["login_saved_at"] = ""
-    cookies.save()
-
-    
-
-def save_auth_cookies(session):
-    if not session:
-        return
-
-    cookies["access_token"] = session.access_token
-    cookies["refresh_token"] = session.refresh_token
-    cookies["login_saved_at"] = now_utc()
-    cookies.save()
-def restore_login_from_cookies():
-    access_token = cookies.get("access_token")
-    refresh_token = cookies.get("refresh_token")
-    print("Access exists:", bool(access_token))
-    print("Refresh exists:", bool(refresh_token))
-    if not refresh_token:
-        return None
-
-    try:
-        if access_token:
-            res = supabase.auth.set_session(access_token, refresh_token)
-        else:
-            res = supabase.auth.refresh_session(refresh_token)
-
-        if res and res.user:
-            if res.session:
-                save_auth_cookies(res.session)
-            return res.user
-
-    except Exception as e:
-        print(f"Cookie restore failed: {e}")
-        cookies["access_token"] = ""
-        cookies["refresh_token"] = ""
-        cookies.save()
-
-    return None
 
 # ====================== Device ID ======================
 device_id = get_device_id()
 if not device_id:
     st.stop()
-
-
-
-
 
 # ====================== Model Config ======================
 model_options = {
@@ -506,7 +396,11 @@ def restore_login_from_device():
 
         if auth_res and auth_res.user:
             if auth_res.session:
-                save_auth_cookies(auth_res.session)
+                save_auth_cookies(
+                    cookies,
+                    auth_res.session,
+                    now_utc,
+                )
                 save_device_session(auth_res.user, auth_res.session, plan)
 
             return auth_res.user
@@ -550,7 +444,11 @@ if "page" not in st.session_state:
     st.session_state.page = "chat"
 # ====================== Auto Login ======================
 if st.session_state.user is None:
-    restored_user = restore_login_from_remember()
+    restored_user = restore_login_from_cookies(
+        cookies,
+        supabase,
+        now_utc,
+    )
     if restored_user:
         st.session_state.user = restored_user
         st.session_state.current_session_id = None
@@ -598,7 +496,17 @@ if not st.session_state.user:
                 st.session_state.messages = []
                 st.session_state.new_chat_mode = True
                 if res.session:
-                    save_remember_session(res.user)
+                    save_auth_cookies(
+                        cookies,
+                        res.session,
+                        now_utc,
+                    )
+
+                    save_remember_session(
+                        res.user,
+                        cookies,
+                        device_id,
+                    )
 
                     try:
                         plan = get_user_plan(res.user.id)

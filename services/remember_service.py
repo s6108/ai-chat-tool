@@ -58,10 +58,7 @@ def save_remember_session(
     cookies["remember_token"] = token
 
     # 清除旧 Supabase Token，避免 Already Used 冲突
-    cookies["access_token"] = ""
-    cookies["refresh_token"] = ""
-    cookies["login_saved_at"] = now_utc()
-
+    cookies["remember_token"] = token
     cookies.save()
 
 
@@ -134,3 +131,47 @@ def save_auth_cookies(cookies, session, now_utc):
     cookies["refresh_token"] = session.refresh_token
     cookies["login_saved_at"] = now_utc()
     cookies.save()
+
+def restore_login_from_cookies(
+    cookies,
+    supabase,
+    now_utc,
+):
+    access_token = cookies.get("access_token")
+    refresh_token = cookies.get("refresh_token")
+
+    print("Access exists:", bool(access_token))
+    print("Refresh exists:", bool(refresh_token))
+
+    if not refresh_token:
+        return None
+
+    try:
+        if access_token:
+            result = supabase.auth.set_session(
+                access_token,
+                refresh_token,
+            )
+        else:
+            result = supabase.auth.refresh_session(
+                refresh_token,
+            )
+
+        if result and result.user:
+            if result.session:
+                save_auth_cookies(
+                    cookies,
+                    result.session,
+                    now_utc,
+                )
+
+            return result.user
+
+    except Exception as error:
+        print(f"Cookie restore failed: {error}")
+
+        cookies["access_token"] = ""
+        cookies["refresh_token"] = ""
+        cookies.save()
+
+    return None
