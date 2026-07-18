@@ -1,11 +1,20 @@
-import os
 import base64
+import hashlib
 import json
-from ui.chat_messages import (
-    render_user_content,
-    render_chat_messages,
-)
-from ui.sidebar import render_sidebar_placeholder
+import secrets
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import urlencode
+
+import streamlit as st
+import streamlit.components.v1 as components
+from openai import OpenAI
+from PIL import Image
+from streamlit_cookies_manager import EncryptedCookieManager
+from streamlit_js_eval import streamlit_js_eval
+from supabase import create_client
+
 from config import (
     COOKIE_PASSWORD,
     DASHSCOPE_API_KEY,
@@ -17,41 +26,29 @@ from config import (
     SUPABASE_URL,
     ZHIPU_API_KEY,
 )
-from io import BytesIO
-from pathlib import Path
-import streamlit.components.v1 as components
-from PIL import Image
-from datetime import datetime, timezone, timedelta
-import streamlit as st
-import secrets
-import hashlib
-from urllib.parse import urlencode
-from types import SimpleNamespace
-from openai import OpenAI
-from supabase import create_client
-from streamlit_js_eval import streamlit_js_eval
+from services.account_service import get_account_data
 from services.chat_service import save_message
 from services.device_service import get_device_id
+from services.history_service import (
+    clear_chat_messages,
+    create_new_chat,
+    delete_chat,
+    load_messages,
+    load_sessions,
+    update_chat_title_if_needed,
+)
+from services.subscription_service import get_customer_portal_url
 from services.usage_service import (
     FREE_CHAT_LIMIT,
     FREE_IMAGE_LIMIT,
-    get_today_usage,
     can_use_chat,
     can_use_image,
+    get_today_usage,
     increase_chat_usage,
     increase_image_usage,
 )
-from streamlit_cookies_manager import EncryptedCookieManager
-from services.account_service import get_account_data
-from services.subscription_service import get_customer_portal_url
-from services.history_service import (
-    load_messages,
-    load_sessions,
-    create_new_chat,
-    delete_chat,
-    clear_chat_messages,
-    update_chat_title_if_needed,
-)
+from ui.chat_messages import render_chat_messages, render_user_content
+from ui.sidebar import render_sidebar_placeholder
 # ============================================================
 # Mango AI v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
@@ -277,8 +274,7 @@ def clear_remember_session():
     cookies.save()
 
     
-def get_key(name: str):
-    return os.getenv(name)
+
 def save_auth_cookies(session):
     if not session:
         return
