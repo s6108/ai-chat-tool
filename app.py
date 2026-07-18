@@ -5,6 +5,18 @@ from ui.chat_messages import (
     render_user_content,
     render_chat_messages,
 )
+from ui.sidebar import render_sidebar_placeholder
+from config import (
+    COOKIE_PASSWORD,
+    DASHSCOPE_API_KEY,
+    DEEPSEEK_API_KEY,
+    DOUBAO_API_KEY,
+    KIMI_API_KEY,
+    SUPABASE_KEY,
+    SUPABASE_SERVICE_KEY,
+    SUPABASE_URL,
+    ZHIPU_API_KEY,
+)
 from io import BytesIO
 from pathlib import Path
 import streamlit.components.v1 as components
@@ -32,6 +44,14 @@ from services.usage_service import (
 from streamlit_cookies_manager import EncryptedCookieManager
 from services.account_service import get_account_data
 from services.subscription_service import get_customer_portal_url
+from services.history_service import (
+    load_messages,
+    load_sessions,
+    create_new_chat,
+    delete_chat,
+    clear_chat_messages,
+    update_chat_title_if_needed,
+)
 # ============================================================
 # Mango AI v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
@@ -146,9 +166,7 @@ components.html(
 
 
 # ====================== Environment Config ======================
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+
 
 if not SUPABASE_URL or not SUPABASE_KEY or not SUPABASE_SERVICE_KEY:
     st.error("Supabase 环境变量未配置完整，请检查 Render Environment Variables。")
@@ -156,7 +174,7 @@ if not SUPABASE_URL or not SUPABASE_KEY or not SUPABASE_SERVICE_KEY:
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-COOKIE_PASSWORD = os.getenv("COOKIE_PASSWORD")
+
 
 if not COOKIE_PASSWORD:
     st.error("COOKIE_PASSWORD 环境变量未配置，请检查 Render Environment Variables。")
@@ -302,12 +320,7 @@ if not device_id:
     st.stop()
 
 
-# ====================== API Keys ======================
-ZHIPU_API_KEY = get_key("ZHIPU_API_KEY")
-DEEPSEEK_API_KEY = get_key("DEEPSEEK_API_KEY")
-KIMI_API_KEY = get_key("KIMI_API_KEY")
-DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
-DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
+
 
 
 # ====================== Model Config ======================
@@ -387,106 +400,10 @@ def handle_model_selector_change():
         st.session_state.auto_mode = False
         st.session_state.selected_model = selected_model
 
-def load_messages(session_id: str):
-    result = (
-        supabase_admin.table("messages")
-        .select("*")
-        .eq("session_id", session_id)
-        .order("created_at", desc=True)
-        .limit(100)
-        .execute()
-    )
-
-    rows = list(reversed(result.data or []))
-    messages = []
-
-    for row in rows:
-        content = row.get("content", "")
-
-        # 尝试把保存的图片消息 JSON 恢复为 list
-        if isinstance(content, str):
-            stripped_content = content.strip()
-
-            if stripped_content.startswith("["):
-                try:
-                    parsed_content = json.loads(stripped_content)
-
-                    if isinstance(parsed_content, list):
-                        content = parsed_content
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
-        messages.append(
-            {
-                "role": row.get("role", "user"),
-                "content": content,
-                "model_name": row.get("model_name"),
-                "model_icon": row.get("model_icon"),
-            }
-        )
-
-    return messages
-
-def load_sessions(user_id: str):
-    result = (
-        supabase_admin.table("chat_sessions")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("created_at", desc=True)
-        .limit(30)
-        .execute()
-    )
-    return result.data or []
 
 
-def create_new_chat(user_id: str):
-    result = (
-        supabase_admin.table("chat_sessions")
-        .insert({"user_id": user_id, "title": "新对话"})
-        .execute()
-    )
-    if not result.data:
-        raise RuntimeError("创建新对话失败")
-    return result.data[0]["id"]
 
 
-def delete_chat(session_id: str):
-    if not session_id:
-        return
-    supabase_admin.table("messages").delete().eq("session_id", session_id).execute()
-    supabase_admin.table("chat_sessions").delete().eq("id", session_id).execute()
-
-
-def clear_chat_messages(session_id: str):
-    if not session_id:
-        return
-    supabase_admin.table("messages").delete().eq("session_id", session_id).execute()
-
-
-def update_chat_title_if_needed(session_id: str, prompt: str):
-    if not session_id or not prompt:
-        return
-
-    result = (
-        supabase_admin.table("chat_sessions")
-        .select("title")
-        .eq("id", session_id)
-        .limit(1)
-        .execute()
-    )
-    if not result.data:
-        return
-
-    old_title = result.data[0].get("title") or "新对话"
-    if old_title == "新对话":
-        new_title = prompt.strip().replace("\n", " ")[:22]
-        if new_title:
-            (
-                supabase_admin.table("chat_sessions")
-                .update({"title": new_title})
-                .eq("id", session_id)
-                .execute()
-            )
 
 LEMONSQUEEZY_CHECKOUT_URL = (
     "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/ba6ddc8c-7c6f-40e1-b886-019ebc747a0a"
@@ -765,7 +682,7 @@ components.html(
 premium_checkout_url = get_premium_checkout_url(
     st.session_state.user
 )
-
+render_sidebar_placeholder()
 with st.sidebar:
     if st.button("退出登录", use_container_width=True):
         try:
