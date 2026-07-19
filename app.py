@@ -242,6 +242,11 @@ model_options = {
         "model": "qwen-plus",
         "key": DASHSCOPE_API_KEY,
     },
+    "ChatGPT": {
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-5.4-mini",
+        "key": OPENAI_API_KEY,
+    }
 }
 
 MODEL_ICONS = {
@@ -251,6 +256,7 @@ MODEL_ICONS = {
     "Kimi": "🔵",
     "Doubao-Pro": "🟢",
     "Qwen": "🟣",
+    "ChatGPT": "⚫", 
 }
 
 MODEL_SELECTOR_OPTIONS = [
@@ -261,6 +267,7 @@ MODEL_SELECTOR_OPTIONS = [
     "🔵 Kimi",
     "🟢 Doubao-Pro",
     "🟣 Qwen",
+    "⚫ ChatGPT",
 ]
 
 MODEL_LABEL_TO_NAME = {
@@ -270,6 +277,7 @@ MODEL_LABEL_TO_NAME = {
     "🔵 Kimi": "Kimi",
     "🟢 Doubao-Pro": "Doubao-Pro",
     "🟣 Qwen": "Qwen",
+    "⚫ ChatGPT": "ChatGPT",
 }
 # ====================== Chat Database Functions ======================
 def handle_model_selector_change():
@@ -1006,13 +1014,19 @@ if st.session_state.processing:
             else:
                 api_messages = [m for m in st.session_state.messages if isinstance(m.get("content"), str)]
 
-            stream = client.chat.completions.create(
-                model=cfg["model"],
-                messages=api_messages,
-                stream=True,
-                temperature=0.7,
-                max_tokens=2000,
-            )
+            request_params = {
+                "model": cfg["model"],
+                "messages": api_messages,
+                "stream": True,
+            }
+
+            if st.session_state.selected_model == "ChatGPT":
+                request_params["max_completion_tokens"] = 2000
+            else:
+                request_params["temperature"] = 0.7
+                request_params["max_tokens"] = 2000
+
+            stream = client.chat.completions.create(**request_params)
 
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
