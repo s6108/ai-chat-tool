@@ -25,6 +25,7 @@ from config import (
     SUPABASE_SERVICE_KEY,
     SUPABASE_URL,
     ZHIPU_API_KEY,
+    OPENAI_API_KEY,
 )
 from services.account_service import get_account_data
 from services.chat_service import save_message
