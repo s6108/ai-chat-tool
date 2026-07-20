@@ -23,18 +23,18 @@ def hash_remember_token(token: str) -> str:
 
 
 def save_remember_session(
-    user: Any,
-    cookies: Any,
-    device_id: str,
-    days: int = 30,
-) -> None:
+    user,
+    cookies,
+    device_id,
+    save: bool = True,
+):
     """保存长期登录记录，并将 Remember Token 写入 Cookie。"""
 
     token = generate_remember_token()
     token_hash = hash_remember_token(token)
 
     expires_at = (
-        datetime.now(timezone.utc) + timedelta(days=days)
+        datetime.now(timezone.utc) + timedelta(days=30)
     ).isoformat()
 
     # 删除当前用户旧的长期登录记录
@@ -59,7 +59,8 @@ def save_remember_session(
 
     # 清除旧 Supabase Token，避免 Already Used 冲突
     cookies["remember_token"] = token
-    cookies.save()
+    if save:
+        cookies.save()
 
 
 def restore_login_from_remember(
