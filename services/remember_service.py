@@ -123,14 +123,21 @@ def clear_remember_session(cookies: Any) -> None:
 
     cookies.save()
 
-def save_auth_cookies(cookies, session, now_utc):
+def save_auth_cookies(
+    cookies,
+    session,
+    now_utc,
+    save: bool = True,
+):
     if not session:
         return
 
     cookies["access_token"] = session.access_token
     cookies["refresh_token"] = session.refresh_token
     cookies["login_saved_at"] = now_utc()
-    cookies.save()
+
+    if save:
+        cookies.save()
 
 def restore_login_from_cookies(
     cookies,

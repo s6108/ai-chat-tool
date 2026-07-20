@@ -509,6 +509,7 @@ if not st.session_state.user:
                         cookies,
                         res.session,
                         now_utc,
+                        save=False,
                     )
 
                     save_remember_session(
