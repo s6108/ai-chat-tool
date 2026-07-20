@@ -56,12 +56,7 @@ from services.remember_service import (
     save_remember_session,
 )
 
-from services.remember_service import (
-    restore_login_from_cookies,
-    restore_login_from_remember,
-    save_auth_cookies,
-    save_remember_session,
-)
+
 from ui.chat_messages import render_chat_messages, render_user_content
 from ui.sidebar import render_sidebar_placeholder
 # ============================================================
@@ -458,12 +453,19 @@ if st.session_state.user is None:
         supabase,
         now_utc,
     )
+
+    # Supabase Cookie 恢复失败时，尝试长期登录记录
+    if restored_user is None:
+        restored_user = restore_login_from_remember(
+            cookies,
+            device_id,
+        )
+
     if restored_user:
         st.session_state.user = restored_user
         st.session_state.current_session_id = None
         st.session_state.messages = []
         st.session_state.new_chat_mode = True
-
 
 # ====================== Load Current Chat ======================
 if (

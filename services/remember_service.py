@@ -70,6 +70,7 @@ def restore_login_from_remember(
     """根据设备上的长期登录记录恢复用户。"""
 
     try:
+       
         result = (
             supabase_admin.table("remember_sessions")
             .select("*")
@@ -78,10 +79,10 @@ def restore_login_from_remember(
             .limit(1)
             .execute()
         )
-
+        
         if not result.data:
             return None
-
+        
         saved = result.data[0]
 
         # 更新最近使用时间
