@@ -55,6 +55,8 @@ from services.remember_service import (
     save_auth_cookies,
     save_remember_session,
 )
+from services.search_router import should_search
+from services.search_service import search_web, format_search_results
 
 
 from ui.chat_messages import render_chat_messages, render_user_content
@@ -1034,6 +1036,40 @@ if st.session_state.processing:
             else:
                 request_params["temperature"] = 0.7
                 request_params["max_tokens"] = 2000
+
+            # ===== 自动判断并执行联网搜索 =====
+            print(f"🧠 判断是否联网：{prompt}")
+
+            if should_search(prompt):
+                print("🌐 需要联网搜索")
+
+                search_results = search_web(prompt)
+
+                print(f"搜索到 {len(search_results)} 条结果")
+
+                for result in search_results:
+                    print(result.get("title", "无标题"))
+
+                search_context = format_search_results(search_results)
+
+                web_instruction = {
+                    "role": "system",
+                    "content": (
+                        "你可以使用下面提供的实时联网搜索结果回答用户问题。"
+                        "请优先根据搜索结果回答，不要声称自己无法联网。"
+                        "如果资料存在不确定性，请明确说明。"
+                        "回答末尾列出主要来源链接。\n\n"
+                        f"联网搜索结果：\n{search_context}"
+                    ),
+                }
+
+                request_params["messages"] = [
+                    web_instruction,
+                    *api_messages,
+                ]
+
+            else:
+                print("📚 不需要联网")
 
             stream = client.chat.completions.create(**request_params)
 

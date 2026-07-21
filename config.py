@@ -64,3 +64,5 @@ def validate_env() -> None:
             + "\n\n请检查本地 `.env` 或 Render Environment Variables。"
         )
         st.stop()
+
+SEARCH_ROUTER_MODEL = "DeepSeek"
