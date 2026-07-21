@@ -34,7 +34,9 @@ DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 OPENAI_API_KEY = get_key("OPENAI_API_KEY")
 
+# ================= Tavily =================
 
+TAVILY_API_KEY = get_key("TAVILY_API_KEY")
 
 
 def validate_env() -> None:
