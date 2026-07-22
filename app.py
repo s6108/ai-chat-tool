@@ -57,6 +57,11 @@ from services.remember_service import (
 )
 from services.search_router import should_search
 from services.search_service import search_web, format_search_results
+from services.date_service import (
+    get_search_query,
+    build_date_prompt,
+)
+from services.search_planner import plan_search
 
 
 from ui.chat_messages import render_chat_messages, render_user_content
@@ -1043,30 +1048,80 @@ if st.session_state.processing:
             if should_search(prompt):
                 print("🌐 需要联网搜索")
 
-                search_results = search_web(prompt)
+                search_queries = plan_search(prompt)
 
-                print(f"搜索到 {len(search_results)} 条结果")
+                print(f"🧭 Search Planner 生成 {len(search_queries)} 条搜索词：")
+
+                for index, query in enumerate(search_queries, start=1):
+                    print(f"  {index}. {query}")
+
+                search_results = []
+                seen_urls = set()
+
+                for index, query in enumerate(search_queries, start=1):
+                    dated_query = get_search_query(query)
+
+                    print(
+                        f"🔎 执行第 {index}/{len(search_queries)} 次搜索："
+                        f"{query}"
+                    )
+
+                    current_results = search_web(
+                        dated_query,
+                        max_results=5,
+                    )
+
+                    print(f"   找到 {len(current_results)} 条结果")
+
+                    for result in current_results:
+                        url = (result.get("url") or "").strip()
+
+                        # 有 URL 时，根据 URL 去重
+                        if url:
+                            normalized_url = url.rstrip("/").casefold()
+
+                            if normalized_url in seen_urls:
+                                continue
+
+                            seen_urls.add(normalized_url)
+
+                        search_results.append(result)
+
+                print(f"✅ 合并去重后共 {len(search_results)} 条结果")
+                search_results = search_results[:10]
+
+                print(f"📚 最终选取前 {len(search_results)} 条结果供模型分析")
 
                 for result in search_results:
                     print(result.get("title", "无标题"))
 
+                date_prompt = build_date_prompt()
+
                 search_context = format_search_results(search_results)
+
+                content = (
+                    f"{date_prompt}\n\n"
+                    "【联网搜索结果】\n\n"
+                    f"{search_context}"
+                )
 
                 web_instruction = {
                     "role": "system",
                     "content": (
-                        "你可以使用下面提供的实时联网搜索结果回答用户问题。"
-                        "请优先根据搜索结果回答，不要声称自己无法联网。"
-                        "如果资料存在不确定性，请明确说明。"
-                        "回答末尾列出主要来源链接。\n\n"
-                        f"联网搜索结果：\n{search_context}"
-                    ),
+                        "你可以使用下面提供的联网搜索结果回答用户问题。\n"
+                        "请严格遵守前面的日期校验规则。\n"
+                        "不得把历史新闻当作最新新闻。\n"
+                        "如果搜索结果日期不明确，请主动说明。\n"
+                        "如果多个来源时间冲突，请说明存在冲突。\n\n"
+                        f"{content}"
+                    )
                 }
 
                 request_params["messages"] = [
                     web_instruction,
                     *api_messages,
                 ]
+              
 
             else:
                 print("📚 不需要联网")
