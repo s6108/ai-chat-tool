@@ -62,6 +62,7 @@ from services.date_service import (
     build_date_prompt,
 )
 from services.search_planner import plan_search
+from services.search_evaluator import evaluate_search_results
 
 
 from ui.chat_messages import render_chat_messages, render_user_content
@@ -1055,6 +1056,8 @@ if st.session_state.processing:
                 for index, query in enumerate(search_queries, start=1):
                     print(f"  {index}. {query}")
 
+                
+
                 search_results = []
                 seen_urls = set()
 
@@ -1066,17 +1069,20 @@ if st.session_state.processing:
                         f"{query}"
                     )
 
-                    current_results = search_web(
-                        dated_query,
-                        max_results=5,
-                    )
+                    try:
+                        current_results = search_web(
+                            dated_query,
+                            max_results=5,
+                        )
+                    except Exception as error:
+                        print(f"⚠️ 第 {index} 次搜索失败：{error}")
+                        current_results = []
 
                     print(f"   找到 {len(current_results)} 条结果")
 
                     for result in current_results:
                         url = (result.get("url") or "").strip()
 
-                        # 有 URL 时，根据 URL 去重
                         if url:
                             normalized_url = url.rstrip("/").casefold()
 
@@ -1087,6 +1093,26 @@ if st.session_state.processing:
 
                         search_results.append(result)
 
+                    evaluation = evaluate_search_results(
+                        user_prompt=prompt,
+                        results=search_results,
+                    )
+
+                    print(
+                        f"🧪 搜索评估："
+                        f"{'资料足够' if evaluation['enough'] else '资料不足'}"
+                    )
+                    print(f"   原因：{evaluation['reason']}")
+
+                    if evaluation["missing"]:
+                        print(f"   仍缺少：{evaluation['missing']}")
+
+                    if evaluation["enough"]:
+                        print("✅ 已找到足够资料，提前停止搜索")
+                        break
+
+                    if index < len(search_queries):
+                        print("🔁 当前资料不足，继续下一轮搜索")
                 print(f"✅ 合并去重后共 {len(search_results)} 条结果")
                 search_results = search_results[:10]
 
