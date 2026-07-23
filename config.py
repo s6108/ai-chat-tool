@@ -66,3 +66,6 @@ def validate_env() -> None:
         st.stop()
 
 SEARCH_ROUTER_MODEL = "DeepSeek"
+# ===== Chat =====
+
+AUTO_NEW_CHAT_AFTER_MINUTES = 60

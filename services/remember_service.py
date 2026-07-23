@@ -7,6 +7,7 @@ from typing import Any, Optional
 from database import supabase_admin
 
 
+
 def now_utc() -> str:
     """返回当前 UTC 时间的 ISO 格式字符串。"""
     return datetime.now(timezone.utc).isoformat()
@@ -124,6 +125,45 @@ def clear_remember_session(cookies: Any) -> None:
     cookies["login_saved_at"] = ""
 
     cookies.save()
+
+from datetime import datetime, timezone
+
+
+def save_last_activity(cookies):
+    """更新最后活动时间，但不在这里调用 cookies.save()。"""
+    cookies["last_activity"] = datetime.now(timezone.utc).isoformat()
+
+
+def load_last_activity(cookies):
+    value = cookies.get("last_activity")
+
+    if not value:
+        return None
+
+    try:
+        return datetime.fromisoformat(value)
+    except:
+        return None
+
+def is_chat_activity_expired(
+    last_activity,
+    timeout_minutes: int,
+) -> bool:
+    """
+    判断用户是否超过指定分钟数没有活动。
+
+    没有历史活动时间时暂不判定过期，
+    避免升级后所有老用户突然丢失当前页面。
+    """
+    if last_activity is None:
+        return False
+
+    now_utc = datetime.now(timezone.utc)
+    elapsed_seconds = (
+        now_utc - last_activity
+    ).total_seconds()
+
+    return elapsed_seconds > timeout_minutes * 60
 
 def save_auth_cookies(
     cookies,

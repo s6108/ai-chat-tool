@@ -26,6 +26,7 @@ from config import (
     SUPABASE_URL,
     ZHIPU_API_KEY,
     OPENAI_API_KEY,
+    AUTO_NEW_CHAT_AFTER_MINUTES,
 )
 from services.account_service import get_account_data
 from services.chat_service import save_message
@@ -54,7 +55,11 @@ from services.remember_service import (
     restore_login_from_remember,
     save_auth_cookies,
     save_remember_session,
+    save_last_activity,
+    load_last_activity,
+    is_chat_activity_expired,
 )
+
 from services.search_router import should_search
 from services.search_service import search_web, format_search_results
 from services.date_service import (
@@ -421,7 +426,25 @@ def restore_login_from_device():
         print(f"Cookie restore failed: {e}")
 
     return None
-# ====================== Session State Init ======================
+# ====================== Session State Init ====================== 
+
+def get_chat_id_from_url():
+    """读取 URL 中保存的当前聊天 ID。"""
+    chat_id = st.query_params.get("chat")
+
+    if not chat_id:
+        return None
+
+    return str(chat_id).strip() or None
+
+
+def remove_chat_id_from_url():
+    """只删除 chat 参数，保留 URL 中的其他参数。"""
+    params = st.query_params.to_dict()
+    params.pop("chat", None)
+    st.query_params.from_dict(params)
+
+
 if "user" not in st.session_state:
     st.session_state.user = None
 if "messages" not in st.session_state:
@@ -445,7 +468,7 @@ if "model_selector" not in st.session_state:
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 if "current_session_id" not in st.session_state:
-    st.session_state.current_session_id = None
+    st.session_state.current_session_id = get_chat_id_from_url()
 if "processing" not in st.session_state:
     st.session_state.processing = False
 if "new_chat_mode" not in st.session_state:
@@ -471,24 +494,92 @@ if st.session_state.user is None:
 
     if restored_user:
         st.session_state.user = restored_user
-        st.session_state.current_session_id = None
-        st.session_state.messages = []
-        st.session_state.new_chat_mode = True
 
-# ====================== Load Current Chat ======================
-if (
-    st.session_state.user
-    and st.session_state.current_session_id is None
-    and not st.session_state.new_chat_mode
-):
-    try:
-        sessions = [s for s in load_sessions(st.session_state.user.id) if s.get("title") != "新对话"]
-        if sessions:
-            st.session_state.current_session_id = sessions[0]["id"]
-            st.session_state.messages = load_messages(st.session_state.current_session_id)
-        else:
+        restored_chat_id = get_chat_id_from_url()
+        last_activity = load_last_activity(cookies)
+
+        activity_expired = is_chat_activity_expired(
+            last_activity,
+            AUTO_NEW_CHAT_AFTER_MINUTES,
+        )
+
+        if activity_expired:
+            # 超过60分钟：显示新的空白聊天页面
+            # 不立即在数据库创建会话，等用户发送第一条消息再创建
             st.session_state.current_session_id = None
             st.session_state.messages = []
+            st.session_state.new_chat_mode = True
+            st.session_state.processing = False
+
+            remove_chat_id_from_url()
+
+            print(
+                "🆕 距离上次活动超过 "
+                f"{AUTO_NEW_CHAT_AFTER_MINUTES} 分钟，"
+                "进入新聊天页面"
+            )
+
+        else:
+            # 60分钟内：恢复原来的聊天
+            st.session_state.current_session_id = restored_chat_id
+            st.session_state.messages = []
+            st.session_state.new_chat_mode = (
+                restored_chat_id is None
+            )
+
+            print("↩️ 用户仍在活动期内，恢复原聊天")
+
+
+# ================= Load Current Chat =================
+
+if st.session_state.user:
+    try:
+        sessions = [
+            session
+            for session in load_sessions(st.session_state.user.id)
+            if session.get("title") != "新对话"
+        ]
+
+        valid_session_ids = {
+            str(session["id"])
+            for session in sessions
+            if session.get("id")
+        }
+
+        current_session_id = st.session_state.current_session_id
+
+        # URL 或 Session State 中已有当前聊天 ID
+        if current_session_id:
+            current_session_id = str(current_session_id)
+
+            # 安全检查：只能恢复属于当前用户的聊天
+            if current_session_id in valid_session_ids:
+                if not st.session_state.messages:
+                    st.session_state.messages = load_messages(
+                        current_session_id
+                    )
+
+                st.session_state.current_session_id = current_session_id
+                st.session_state.new_chat_mode = False
+
+            else:
+                # URL 中的会话不存在，或不属于当前用户
+                st.session_state.current_session_id = None
+                st.session_state.messages = []
+                st.session_state.new_chat_mode = True
+                remove_chat_id_from_url()
+
+        # 没有指定聊天，而且用户不是主动处于“新聊天”模式
+        elif not st.session_state.new_chat_mode and sessions:
+            latest_session_id = str(sessions[0]["id"])
+
+            st.session_state.current_session_id = latest_session_id
+            st.session_state.messages = load_messages(
+                latest_session_id
+            )
+
+            st.query_params["chat"] = latest_session_id
+
     except Exception as e:
         st.warning(f"加载历史会话失败：{e}")
 
@@ -805,6 +896,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.session_state.uploader_key += 1
         st.session_state.processing = False
+        remove_chat_id_from_url()
         st.rerun()
 
     sessions = [s for s in load_sessions(st.session_state.user.id) if s.get("title") != "新对话"]
@@ -819,10 +911,20 @@ with st.sidebar:
         if session_id == st.session_state.current_session_id:
             label = "🔴 " + label
 
-        if st.button(label, key=f"open_session_{session_id}", use_container_width=True):
+        if st.button(
+            label,
+            key=f"open_session_{session_id}",
+            use_container_width=True,
+        ):
             st.session_state.current_session_id = session_id
             st.session_state.messages = load_messages(session_id)
             st.session_state.new_chat_mode = False
+            st.query_params["chat"] = str(session_id)
+
+            # 用户主动打开历史会话，也属于一次有效活动
+            save_last_activity(cookies)
+            cookies.save()
+
             st.session_state.uploader_key += 1
             st.session_state.processing = False
             st.rerun()
@@ -834,11 +936,19 @@ with st.sidebar:
             remaining_sessions = [s for s in load_sessions(st.session_state.user.id) if s.get("title") != "新对话"]
 
             if remaining_sessions:
-                st.session_state.current_session_id = remaining_sessions[0]["id"]
-                st.session_state.messages = load_messages(remaining_sessions[0]["id"])
+                next_session_id = remaining_sessions[0]["id"]
+
+                st.session_state.current_session_id = next_session_id
+                st.session_state.messages = load_messages(next_session_id)
+                st.session_state.new_chat_mode = False
+
+                st.query_params["chat"] = str(next_session_id)
             else:
                 st.session_state.current_session_id = None
                 st.session_state.messages = []
+                st.session_state.new_chat_mode = True
+
+                remove_chat_id_from_url()
 
             st.session_state.uploader_key += 1
             st.session_state.processing = False
@@ -962,9 +1072,14 @@ if st.session_state.processing:
         st.stop()
 
     if st.session_state.current_session_id is None:
-        st.session_state.current_session_id = create_new_chat(st.session_state.user.id)
-        st.session_state.messages = []
+        new_session_id = create_new_chat(
+            st.session_state.user.id
+        )
+
+        st.session_state.current_session_id = new_session_id
         st.session_state.new_chat_mode = False
+        st.session_state.messages = []
+        
     user_content = prompt
 
     if uploaded_file:
@@ -989,6 +1104,7 @@ if st.session_state.processing:
         content_to_save,
     )
     update_chat_title_if_needed(st.session_state.current_session_id, prompt)
+    
 
     with st.chat_message("user"):
         render_user_content(user_content)
@@ -1179,6 +1295,15 @@ if st.session_state.processing:
                 model_name=used_model,
                 model_icon=used_model_icon,
             )
+            # 每轮完整问答只保存一次最后活动时间
+            save_last_activity(cookies)
+            cookies.save()
+
+            # 回答与数据库保存都完成后，再更新 URL
+            st.query_params["chat"] = str(
+                st.session_state.current_session_id
+            )
+
             # 只有模型成功返回后才扣除额度
             try:
                 user_id = st.session_state.user.id
