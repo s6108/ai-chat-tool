@@ -639,7 +639,6 @@ if not st.session_state.user:
                         cookies,
                         res.session,
                         now_utc,
-                        save=False,
                     )
 
                     try:
@@ -647,12 +646,18 @@ if not st.session_state.user:
                             res.user,
                             cookies,
                             device_id,
-                            save=False,
                         )
                     except Exception as remember_error:
                         print(f"Remember session save failed: {remember_error}")
 
-                    save_cookies(cookies)
+                    try:
+                        save_remember_session(
+                            res.user,
+                            cookies,
+                            device_id,
+                        )
+                    except Exception as remember_error:
+                        print(f"Remember session save failed: {remember_error}")
 
                     try:
                         plan = get_user_plan(res.user.id)
