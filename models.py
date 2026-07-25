@@ -11,7 +11,7 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 model_options = {
     "DeepSeek": {
         "base_url": "https://api.deepseek.com",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "key": DEEPSEEK_API_KEY,
     },
     "GLM-4V": {

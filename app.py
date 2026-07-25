@@ -11,7 +11,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
 from PIL import Image
-from streamlit_cookies_manager import EncryptedCookieManager
+from services.cookie_service import (
+    create_cookie_manager,
+    cookies_ready,
+    save_cookies,
+    get_cookie,
+    set_cookie,
+    delete_cookie,
+)
 from streamlit_js_eval import streamlit_js_eval
 from supabase import create_client
 
@@ -200,12 +207,9 @@ if not COOKIE_PASSWORD:
     st.error("COOKIE_PASSWORD 环境变量未配置，请检查 Render Environment Variables。")
     st.stop()
 
-cookies = EncryptedCookieManager(
-    prefix="mango_ai_",
-    password=COOKIE_PASSWORD,
-)
+cookies = create_cookie_manager()
 
-if not cookies.ready():
+if not cookies_ready(cookies):
     st.stop()
 # ====================== Debug ======================
 DEBUG = False
@@ -222,7 +226,7 @@ if not device_id:
 model_options = {
     "DeepSeek": {
         "base_url": "https://api.deepseek.com",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "key": DEEPSEEK_API_KEY,
     },
     "GLM-4V": {
@@ -449,10 +453,14 @@ if "user" not in st.session_state:
     st.session_state.user = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "manual_logout" not in st.session_state:
+    st.session_state.manual_logout = False
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "DeepSeek"
 if "auto_mode" not in st.session_state:
     st.session_state.auto_mode = True
+if "auth_checked" not in st.session_state:
+    st.session_state.auth_checked = False
 if "model_selector" not in st.session_state:
     if st.session_state.auto_mode:
         st.session_state.model_selector = "🔄 自动模式"
@@ -477,58 +485,73 @@ if "new_chat_mode" not in st.session_state:
     st.session_state.new_chat_mode = True
 if "page" not in st.session_state:
     st.session_state.page = "chat"
-# ====================== Auto Login ======================
-if st.session_state.user is None:
+
+# ==================== Auto Login ====================
+
+restored_user = None
+
+manual_logout_marker = (
+    get_cookie(cookies, "manual_logout_marker") == "1"
+)
+
+print("主动退出标记：", manual_logout_marker)
+
+if (
+    st.session_state.user is None
+    and not st.session_state.auth_checked
+    and not manual_logout_marker
+):
+    st.session_state.auth_checked = True
+
     restored_user = restore_login_from_cookies(
         cookies,
         supabase,
         now_utc,
     )
 
-    # Supabase Cookie 恢复失败时，尝试长期登录记录
     if restored_user is None:
         restored_user = restore_login_from_remember(
             cookies,
             device_id,
         )
 
-    if restored_user:
-        st.session_state.user = restored_user
+if restored_user:
+    st.session_state.user = restored_user
 
-        restored_chat_id = get_chat_id_from_url()
-        last_activity = load_last_activity(cookies)
+    
+if restored_user:
+    st.session_state.user = restored_user
 
-        activity_expired = is_chat_activity_expired(
-            last_activity,
-            AUTO_NEW_CHAT_AFTER_MINUTES,
+    restored_chat_id = get_chat_id_from_url()
+    last_activity = load_last_activity(cookies)
+
+    activity_expired = is_chat_activity_expired(
+        last_activity,
+        AUTO_NEW_CHAT_AFTER_MINUTES,
+    )
+
+    if activity_expired:
+        st.session_state.current_session_id = None
+        st.session_state.messages = []
+        st.session_state.new_chat_mode = True
+        st.session_state.processing = False
+
+        remove_chat_id_from_url()
+
+        print(
+            "🆕 距离上次活动超过 "
+            f"{AUTO_NEW_CHAT_AFTER_MINUTES} 分钟，"
+            "进入新聊天页面"
         )
 
-        if activity_expired:
-            # 超过60分钟：显示新的空白聊天页面
-            # 不立即在数据库创建会话，等用户发送第一条消息再创建
-            st.session_state.current_session_id = None
-            st.session_state.messages = []
-            st.session_state.new_chat_mode = True
-            st.session_state.processing = False
+    else:
+        st.session_state.current_session_id = restored_chat_id
+        st.session_state.messages = []
+        st.session_state.new_chat_mode = (
+            restored_chat_id is None
+        )
 
-            remove_chat_id_from_url()
-
-            print(
-                "🆕 距离上次活动超过 "
-                f"{AUTO_NEW_CHAT_AFTER_MINUTES} 分钟，"
-                "进入新聊天页面"
-            )
-
-        else:
-            # 60分钟内：恢复原来的聊天
-            st.session_state.current_session_id = restored_chat_id
-            st.session_state.messages = []
-            st.session_state.new_chat_mode = (
-                restored_chat_id is None
-            )
-
-            print("↩️ 用户仍在活动期内，恢复原聊天")
-
+        print("↩️ 用户仍在活动期内，恢复原聊天")
 
 # ================= Load Current Chat =================
 
@@ -602,6 +625,12 @@ if not st.session_state.user:
                 )
 
                 st.session_state.user = res.user
+
+                # 用户主动重新登录，解除此前的退出标记
+                delete_cookie(cookies, "manual_logout_marker")
+                save_cookies(cookies)
+
+                st.session_state.auth_checked = True
                 st.session_state.current_session_id = None
                 st.session_state.messages = []
                 st.session_state.new_chat_mode = True
@@ -623,7 +652,7 @@ if not st.session_state.user:
                     except Exception as remember_error:
                         print(f"Remember session save failed: {remember_error}")
 
-                    cookies.save()
+                    save_cookies(cookies)
 
                     try:
                         plan = get_user_plan(res.user.id)
@@ -706,19 +735,57 @@ premium_checkout_url = get_premium_checkout_url(
 render_sidebar_placeholder()
 with st.sidebar:
     if st.button("退出登录", use_container_width=True):
-        try:
-            supabase_admin.table("device_sessions").delete().eq("device_id", device_id).execute()
-            supabase.auth.sign_out()
-            cookies["access_token"] = ""
-            cookies["refresh_token"] = ""
-            cookies.save()
-        except Exception:
-            pass
+        # 阻止本次 rerun 立即恢复
+        st.session_state.auth_checked = True
 
+        # 1. 删除设备会话
+        try:
+            supabase_admin.table("device_sessions").delete().eq(
+                "device_id",
+                device_id,
+            ).execute()
+        except Exception as device_error:
+            print(f"删除设备登录记录失败：{device_error}")
+
+        # 2. 撤销该设备的长期登录授权
+        try:
+            supabase_admin.table("remember_sessions").delete().eq(
+                "device_id",
+                device_id,
+            ).execute()
+
+            print("已删除该设备的 remember_sessions 记录")
+
+        except Exception as remember_error:
+            print(f"删除长期登录记录失败：{remember_error}")
+
+        # 3. 注销 Supabase 当前会话
+        try:
+            supabase.auth.sign_out()
+        except Exception as signout_error:
+            print(f"Supabase 退出失败：{signout_error}")
+
+        # 4. 清除登录 Cookie
+        try:
+            clear_remember_session(cookies)
+        except Exception as cookie_error:
+            print(f"清除登录 Cookie 失败：{cookie_error}")
+
+        # 5. 退出标记暂时保留，作为辅助保护
+        try:
+            set_cookie(cookies, "manual_logout_marker", "1")
+            save_cookies(cookies)
+        except Exception as marker_error:
+            print(f"写入退出标记失败：{marker_error}")
+
+        # 6. 清理页面状态
         st.session_state.user = None
         st.session_state.messages = []
         st.session_state.current_session_id = None
+        st.session_state.new_chat_mode = True
         st.session_state.processing = False
+
+        remove_chat_id_from_url()
         st.rerun()
     # ====================== Plan and Daily Usage ======================
 
@@ -923,7 +990,7 @@ with st.sidebar:
 
             # 用户主动打开历史会话，也属于一次有效活动
             save_last_activity(cookies)
-            cookies.save()
+            save_cookies(cookies)
 
             st.session_state.uploader_key += 1
             st.session_state.processing = False
@@ -1297,7 +1364,7 @@ if st.session_state.processing:
             )
             # 每轮完整问答只保存一次最后活动时间
             save_last_activity(cookies)
-            cookies.save()
+            save_cookies(cookies)
 
             # 回答与数据库保存都完成后，再更新 URL
             st.query_params["chat"] = str(

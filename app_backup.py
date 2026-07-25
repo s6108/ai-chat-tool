@@ -73,7 +73,7 @@ DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 model_options = {
     "DeepSeek": {
         "base_url": "https://api.deepseek.com",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "key": DEEPSEEK_API_KEY,
     },
     "GLM-4V": {
@@ -387,8 +387,8 @@ with st.sidebar:
         try:
             supabase_admin.table("device_sessions").delete().eq("device_id", device_id).execute()
             supabase.auth.sign_out()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"退出失败: {e}")
 
         st.session_state.user = None
         st.session_state.messages = []

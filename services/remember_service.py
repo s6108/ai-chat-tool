@@ -5,6 +5,12 @@ from types import SimpleNamespace
 from typing import Any, Optional
 
 from database import supabase_admin
+from services.cookie_service import (
+    get_cookie,
+    set_cookie,
+    delete_cookie,
+    save_cookies,
+)
 
 
 
@@ -61,7 +67,7 @@ def save_remember_session(
     # 清除旧 Supabase Token，避免 Already Used 冲突
     cookies["remember_token"] = token
     if save:
-        cookies.save()
+        save_cookies(cookies)
 
 
 def restore_login_from_remember(
@@ -109,7 +115,7 @@ def restore_login_from_remember(
 def clear_remember_session(cookies: Any) -> None:
     """删除长期登录记录，并清空相关 Cookie。"""
 
-    token = cookies.get("remember_token")
+    token = get_cookie(cookies, "remember_token")
 
     if token:
         token_hash = hash_remember_token(token)
@@ -119,30 +125,47 @@ def clear_remember_session(cookies: Any) -> None:
             token_hash,
         ).execute()
 
-    cookies["remember_token"] = ""
-    cookies["access_token"] = ""
-    cookies["refresh_token"] = ""
-    cookies["login_saved_at"] = ""
+    delete_cookie(cookies, "remember_token")
+    delete_cookie(cookies, "access_token")
+    delete_cookie(cookies, "refresh_token")
+    delete_cookie(cookies, "login_saved_at")
+    delete_cookie(cookies, "last_activity")
 
-    cookies.save()
+    save_cookies(cookies)
 
 from datetime import datetime, timezone
 
 
 def save_last_activity(cookies):
-    """更新最后活动时间，但不在这里调用 cookies.save()。"""
-    cookies["last_activity"] = datetime.now(timezone.utc).isoformat()
+    """更新最后活动时间，但不在这里保存 Cookie。"""
+    set_cookie(
+        cookies,
+        "last_activity",
+        datetime.now(timezone.utc).isoformat(),
+    )
 
 
 def load_last_activity(cookies):
-    value = cookies.get("last_activity")
+    """读取最后活动时间并转换为 UTC datetime。"""
+    value = get_cookie(
+        cookies,
+        "last_activity",
+    )
 
     if not value:
         return None
 
     try:
-        return datetime.fromisoformat(value)
-    except:
+        last_activity = datetime.fromisoformat(str(value))
+
+        if last_activity.tzinfo is None:
+            last_activity = last_activity.replace(
+                tzinfo=timezone.utc
+            )
+
+        return last_activity.astimezone(timezone.utc)
+
+    except (TypeError, ValueError):
         return None
 
 def is_chat_activity_expired(
@@ -174,20 +197,21 @@ def save_auth_cookies(
     if not session:
         return
 
-    cookies["access_token"] = session.access_token
-    cookies["refresh_token"] = session.refresh_token
-    cookies["login_saved_at"] = now_utc()
+    set_cookie(cookies, "access_token", session.access_token)
+    set_cookie(cookies, "refresh_token", session.refresh_token)
+    set_cookie(cookies, "login_saved_at", now_utc())
 
     if save:
-        cookies.save()
+        save_cookies(cookies)
 
 def restore_login_from_cookies(
     cookies,
     supabase,
     now_utc,
 ):
-    access_token = cookies.get("access_token")
-    refresh_token = cookies.get("refresh_token")
+    access_token = get_cookie(cookies, "access_token")
+    refresh_token = get_cookie(cookies, "refresh_token")
+    remember_token = get_cookie(cookies, "remember_token")
 
     print("Access exists:", bool(access_token))
     print("Refresh exists:", bool(refresh_token))
@@ -221,6 +245,6 @@ def restore_login_from_cookies(
 
         cookies["access_token"] = ""
         cookies["refresh_token"] = ""
-        cookies.save()
+        save_cookies(cookies)
 
     return None
