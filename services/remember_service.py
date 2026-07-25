@@ -62,10 +62,23 @@ def save_remember_session(
     ).execute()
 
     # 保存新的 Remember Token
-    cookies["remember_token"] = token
+    set_cookie(
+        cookies,
+        "remember_token",
+        token,
+    )
 
-    # 清除旧 Supabase Token，避免 Already Used 冲突
-    cookies["remember_token"] = token
+    # 清除旧 Supabase Token，避免 refresh_token 重复使用冲突
+    delete_cookie(
+        cookies,
+        "access_token",
+    )
+
+    delete_cookie(
+        cookies,
+        "refresh_token",
+    )
+
     if save:
         save_cookies(cookies)
 
@@ -243,8 +256,14 @@ def restore_login_from_cookies(
     except Exception as error:
         print(f"Cookie restore failed: {error}")
 
-        cookies["access_token"] = ""
-        cookies["refresh_token"] = ""
+        delete_cookie(
+            cookies,
+            "access_token",
+        )
+        delete_cookie(
+            cookies,
+            "refresh_token",
+        )
         save_cookies(cookies)
 
     return None

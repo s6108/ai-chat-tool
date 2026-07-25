@@ -153,71 +153,33 @@ def get_cookie(
 def set_cookie(
     cookie_store: Any,
     name: str,
-    value: Any,
+    value: str,
 ) -> None:
     """
-    统一设置 Cookie。
+    使用 CookieController 写入 Cookie。
 
-    legacy 后端只写入内存，稍后由 save_cookies() 保存。
-    controller 后端调用 set() 时立即写入浏览器。
+    敏感值先加密，再写入浏览器。
     """
-    backend = _get_backend()
+    cookie_name = _controller_cookie_name(name)
+    encrypted_value = _encrypt_cookie_value(value)
 
-    try:
-        if backend == CONTROLLER_BACKEND:
-            encrypted_value = _encrypt_cookie_value(value)
-
-            cookie_store.set(
-                _controller_cookie_name(name),
-                encrypted_value,
-            )
-        else:
-            cookie_store[name] = (
-                "" if value is None else str(value)
-            )
-
-    except Exception as error:
-        print(f"⚠️ 设置 Cookie {name!r} 失败：{error}")
-        raise
-
+    cookie_store.set(
+        cookie_name,
+        encrypted_value,
+    )
 
 def delete_cookie(
     cookie_store: Any,
     name: str,
 ) -> None:
-    """
-    删除 Cookie。
-    controller 不存在时忽略错误。
-    """
-
-    backend = _get_backend()
+    """使用 CookieController 删除指定 Cookie。"""
+    cookie_name = _controller_cookie_name(name)
 
     try:
-
-        if backend == CONTROLLER_BACKEND:
-
-            cookie_name = _controller_cookie_name(name)
-
-            try:
-                print("DEBUG delete cookie:", cookie_name)
-                cookie_store.remove(cookie_name)
-
-            except KeyError:
-                pass
-
-            except Exception as error:
-                print(
-                    f"⚠️ 删除 Cookie {cookie_name} 时忽略异常: {error}"
-                )
-
-        else:
-            cookie_store[name] = ""
-
-    except Exception as error:
-        print(
-            f"⚠️ Cookie 删除失败，继续退出流程: {error}"
-        )
-
+        cookie_store.remove(cookie_name)
+    except KeyError:
+        # Cookie 原本不存在，等同于已删除
+        pass
 
 def save_cookies(cookie_store: Any) -> None:
     """
