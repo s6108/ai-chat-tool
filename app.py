@@ -646,6 +646,7 @@ if not st.session_state.user:
                             res.user,
                             cookies,
                             device_id,
+                            save=False,
                         )
                     except Exception as remember_error:
                         print(f"Remember session save failed: {remember_error}")
@@ -655,6 +656,7 @@ if not st.session_state.user:
                             res.user,
                             cookies,
                             device_id,
+                            save=False,
                         )
                     except Exception as remember_error:
                         print(f"Remember session save failed: {remember_error}")

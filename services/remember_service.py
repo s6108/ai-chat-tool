@@ -79,8 +79,8 @@ def save_remember_session(
         "refresh_token",
     )
 
-    if save:
-        save_cookies(cookies)
+    # CookieController 自动保存，无需 save()
+    return
 
 
 def restore_login_from_remember(
