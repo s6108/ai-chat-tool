@@ -221,15 +221,8 @@ def delete_cookie(
 
 def save_cookies(cookie_store: Any) -> None:
     """
-    统一保存 Cookie。
-
-    legacy:
-        必须调用 save() 才真正写入浏览器。
-
-    controller:
-        set() 和 remove() 已即时生效，因此无需额外保存。
+    CookieController 的 set() 和 remove() 会直接生效，
+    不需要额外调用 save()。
+    保留此函数是为了兼容现有业务代码。
     """
-    if _get_backend() == CONTROLLER_BACKEND:
-        return
-
-    cookie_store.save()
+    return
