@@ -115,19 +115,11 @@ def create_cookie_manager() -> CookieController:
 
 def cookies_ready(cookie_store: Any) -> bool:
     """
-    判断 Cookie 组件是否已加载。
+    CookieController 不提供 ready() 方法。
 
-    旧后端需要调用 ready()。
-    新后端没有 ready()，因此直接视为可用。
+    控制器创建后即可调用，因此直接返回 True。
     """
-    if _get_backend() == CONTROLLER_BACKEND:
-        return True
-
-    try:
-        return bool(cookie_store.ready())
-    except Exception as error:
-        print(f"⚠️ Cookie ready 检查失败：{error}")
-        return False
+    return True
 
 
 def get_cookie(
