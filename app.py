@@ -652,15 +652,7 @@ if not st.session_state.user:
                     except Exception as remember_error:
                         print(f"Remember session save failed: {remember_error}")
 
-                    try:
-                        save_remember_session(
-                            res.user,
-                            cookies,
-                            device_id,
-                            save=False,
-                        )
-                    except Exception as remember_error:
-                        print(f"Remember session save failed: {remember_error}")
+                    
 
                     try:
                         plan = get_user_plan(res.user.id)
