@@ -127,27 +127,27 @@ def get_cookie(
     name: str,
     default: Optional[str] = None,
 ) -> Optional[str]:
-    """统一读取 Cookie。"""
-    backend = _get_backend()
+    """安全读取并解密 Cookie。"""
+    if cookie_store is None:
+        return default
+
+    cookie_name = _controller_cookie_name(name)
 
     try:
-        if backend == CONTROLLER_BACKEND:
-            raw_value = cookie_store.get(
-                _controller_cookie_name(name)
-            )
-
-            value = _decrypt_cookie_value(raw_value)
-        else:
-            value = cookie_store.get(name)
-
+        encrypted_value = cookie_store.get(cookie_name)
     except Exception as error:
-        print(f"⚠️ 读取 Cookie {name!r} 失败：{error}")
+        print(f"⚠️ 读取 Cookie {name!r} 失败: {error}")
         return default
 
-    if value in (None, ""):
+    if encrypted_value in (None, ""):
         return default
 
-    return str(value)
+    decrypted_value = _decrypt_cookie_value(encrypted_value)
+
+    if decrypted_value in (None, ""):
+        return default
+
+    return decrypted_value
 
 
 def set_cookie(

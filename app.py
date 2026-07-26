@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import secrets
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1405,6 +1406,10 @@ if st.session_state.processing:
 
         except Exception as e:
             st.session_state.processing = False
+
+            print("❌ 聊天调用完整异常：")
+            traceback.print_exc()
+
             placeholder.error(f"调用失败: {str(e)}")
 
 
