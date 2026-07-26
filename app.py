@@ -627,9 +627,12 @@ if not st.session_state.user:
 
                 st.session_state.user = res.user
 
-                # 用户主动重新登录，解除此前的退出标记
-                delete_cookie(cookies, "manual_logout_marker")
-                save_cookies(cookies)
+                # 登录成功后不调用 remove()。
+                # CookieController 首次加载时 remove() 可能触发 None.pop 错误。
+                try:
+                    set_cookie(cookies, "manual_logout_marker", "0")
+                except Exception as marker_error:
+                    print(f"更新退出标记失败，但不阻止登录: {marker_error}")
 
                 st.session_state.auth_checked = True
                 st.session_state.current_session_id = None
