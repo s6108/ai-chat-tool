@@ -642,13 +642,9 @@ if not st.session_state.user:
                         now_utc,
                     )
 
+                    # 临时跳过 remember session 测试
                     try:
-                        save_remember_session(
-                            res.user,
-                            cookies,
-                            device_id,
-                            save=False,
-                        )
+                        pass
                     except Exception as remember_error:
                         print(f"Remember session save failed: {remember_error}")
 
