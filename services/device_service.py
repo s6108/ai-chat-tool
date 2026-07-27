@@ -35,3 +35,4 @@ def get_device_id():
     )
 
     return device_id
+

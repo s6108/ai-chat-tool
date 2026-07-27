@@ -25,7 +25,7 @@ SUPABASE_SERVICE_KEY = get_key("SUPABASE_SERVICE_KEY")
 
 COOKIE_PASSWORD = get_key("COOKIE_PASSWORD")
 # Cookie 底层实现切换：
-# legacy = 继续使用旧的 EncryptedCookieManager
+# Cookie 统一使用 CookieController
 # controller = 使用新的 CookieController
 COOKIE_BACKEND = get_key("COOKIE_BACKEND") or "legacy"
 

@@ -1,12 +1,10 @@
 import base64
-import hashlib
 import json
-import secrets
 import traceback
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from urllib.parse import urlencode
+from dotenv import load_dotenv
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -15,16 +13,10 @@ from PIL import Image
 from services.cookie_service import (
     create_cookie_manager,
     cookies_ready,
-    save_cookies,
-    get_cookie,
-    set_cookie,
-    delete_cookie,
 )
-from streamlit_js_eval import streamlit_js_eval
 from supabase import create_client
 
 from config import (
-    COOKIE_PASSWORD,
     DASHSCOPE_API_KEY,
     DEEPSEEK_API_KEY,
     DOUBAO_API_KEY,
@@ -59,9 +51,7 @@ from services.usage_service import (
 )
 from services.remember_service import (
     clear_remember_session,
-    restore_login_from_cookies,
     restore_login_from_remember,
-    save_auth_cookies,
     save_remember_session,
     save_last_activity,
     load_last_activity,
@@ -204,14 +194,16 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
-if not COOKIE_PASSWORD:
-    st.error("COOKIE_PASSWORD 环境变量未配置，请检查 Render Environment Variables。")
-    st.stop()
+# ====================== Cookie Bootstrap ======================
 
+# EncryptedCookieManager 自带 ready() 初始化机制。
+# 在浏览器 Cookie 尚未同步完成前停止本次执行，
+# 组件准备好后 Streamlit 会自动重新运行。
 cookies = create_cookie_manager()
 
 if not cookies_ready(cookies):
     st.stop()
+
 # ====================== Debug ======================
 DEBUG = False
 # ====================== Basic Utils ======================
@@ -376,8 +368,6 @@ def save_device_session(user, session, plan: str = "free"):
             "device_id": device_id,
             "user_id": user.id,
             "email": user.email,
-            "access_token": session.access_token,
-            "refresh_token": session.refresh_token,
             "last_seen": now_utc(),
             "plan": plan,
         },
@@ -387,50 +377,7 @@ def save_device_session(user, session, plan: str = "free"):
     enforce_device_limit(user.id, device_id, plan)
 
 
-def restore_login_from_device():
-    try:
-        result = (
-            supabase_admin.table("device_sessions")
-            .select("*")
-            .eq("device_id", device_id)
-            .limit(1)
-            .execute()
-        )
 
-        if not result.data:
-            return None
-
-        saved = result.data[0]
-        access_token = saved.get("access_token")
-        refresh_token = saved.get("refresh_token")
-        plan = saved.get("plan") or "free"
-
-        if not refresh_token:
-            return None
-
-        try:
-            if access_token:
-                auth_res = supabase.auth.set_session(access_token, refresh_token)
-            else:
-                auth_res = supabase.auth.refresh_session(refresh_token)
-        except Exception:
-            auth_res = supabase.auth.refresh_session(refresh_token)
-
-        if auth_res and auth_res.user:
-            if auth_res.session:
-                save_auth_cookies(
-                    cookies,
-                    auth_res.session,
-                    now_utc,
-                )
-                save_device_session(auth_res.user, auth_res.session, plan)
-
-            return auth_res.user
-
-    except Exception as e:
-        print(f"Cookie restore failed: {e}")
-
-    return None
 # ====================== Session State Init ====================== 
 
 def get_chat_id_from_url():
@@ -450,110 +397,136 @@ def remove_chat_id_from_url():
     st.query_params.from_dict(params)
 
 
-if "user" not in st.session_state:
-    st.session_state.user = None
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "manual_logout" not in st.session_state:
-    st.session_state.manual_logout = False
-if "selected_model" not in st.session_state:
-    st.session_state.selected_model = "DeepSeek"
-if "auto_mode" not in st.session_state:
-    st.session_state.auto_mode = True
-if "auth_checked" not in st.session_state:
-    st.session_state.auth_checked = False
+SESSION_DEFAULTS = {
+    "user": None,
+    "messages": [],
+    "selected_model": "DeepSeek",
+    "auto_mode": True,
+    "auth_checked": False,
+    "uploader_key": 0,
+    "processing": False,
+    "page": "chat",
+}
+
+
+for state_key, default_value in SESSION_DEFAULTS.items():
+    if state_key not in st.session_state:
+        # 对列表进行复制，避免以后扩展时共享可变对象。
+        if isinstance(default_value, list):
+            st.session_state[state_key] = default_value.copy()
+        else:
+            st.session_state[state_key] = default_value
+
+
 if "model_selector" not in st.session_state:
-    if st.session_state.auto_mode:
-        st.session_state.model_selector = "🔄 自动模式"
+    if st.session_state["auto_mode"]:
+        st.session_state["model_selector"] = (
+            "🔄 自动模式"
+        )
     else:
         current_icon = MODEL_ICONS.get(
-            st.session_state.selected_model,
+            st.session_state["selected_model"],
             "🤖",
         )
-        st.session_state.model_selector = (
+
+        st.session_state["model_selector"] = (
             f"{current_icon} "
-            f"{st.session_state.selected_model}"
+            f"{st.session_state['selected_model']}"
         )
-if "uploader_key" not in st.session_state:
-    st.session_state.uploader_key = 0
+
+
 if "current_session_id" not in st.session_state:
-    st.session_state.current_session_id = get_chat_id_from_url()
-if "processing" not in st.session_state:
-    st.session_state.processing = False
-if "new_chat_mode" not in st.session_state:
-    st.session_state.new_chat_mode = False
-if "new_chat_mode" not in st.session_state:
-    st.session_state.new_chat_mode = True
-if "page" not in st.session_state:
-    st.session_state.page = "chat"
-
-# ==================== Auto Login ====================
-
-restored_user = None
-
-manual_logout_marker = (
-    get_cookie(cookies, "manual_logout_marker") == "1"
-)
-
-print("主动退出标记：", manual_logout_marker)
-
-if (
-    st.session_state.user is None
-    and not st.session_state.auth_checked
-    and not manual_logout_marker
-):
-    st.session_state.auth_checked = True
-
-    restored_user = restore_login_from_cookies(
-        cookies,
-        supabase,
-        now_utc,
+    st.session_state["current_session_id"] = (
+        get_chat_id_from_url()
     )
 
-    if restored_user is None:
+
+if "new_chat_mode" not in st.session_state:
+    st.session_state["new_chat_mode"] = (
+        st.session_state["current_session_id"] is None
+    )
+
+
+# ====================== Auto Login ======================
+
+# Cookie 组件准备完成后，
+# 每个新的 Streamlit 会话只检查一次长期登录。
+if (
+    st.session_state["user"] is None
+    and not st.session_state["auth_checked"]
+):
+    restored_user = None
+
+    try:
         restored_user = restore_login_from_remember(
             cookies,
             device_id,
         )
 
-if restored_user:
-    st.session_state.user = restored_user
-
-    
-if restored_user:
-    st.session_state.user = restored_user
-
-    restored_chat_id = get_chat_id_from_url()
-    last_activity = load_last_activity(cookies)
-
-    activity_expired = is_chat_activity_expired(
-        last_activity,
-        AUTO_NEW_CHAT_AFTER_MINUTES,
-    )
-
-    if activity_expired:
-        st.session_state.current_session_id = None
-        st.session_state.messages = []
-        st.session_state.new_chat_mode = True
-        st.session_state.processing = False
-
-        remove_chat_id_from_url()
-
+    except Exception as restore_error:
         print(
-            "🆕 距离上次活动超过 "
-            f"{AUTO_NEW_CHAT_AFTER_MINUTES} 分钟，"
-            "进入新聊天页面"
+            "长期登录恢复失败:",
+            restore_error,
         )
 
-    else:
-        st.session_state.current_session_id = restored_chat_id
-        st.session_state.messages = []
-        st.session_state.new_chat_mode = (
-            restored_chat_id is None
-        )
+    # 无论成功或失败，本次 Streamlit 会话都已经完成认证检查。
+    st.session_state["auth_checked"] = True
 
-        print("↩️ 用户仍在活动期内，恢复原聊天")
+    if restored_user is not None:
+        st.session_state["user"] = restored_user
 
+        restored_chat_id = get_chat_id_from_url()
+
+        try:
+            last_activity = load_last_activity(
+                cookies
+            )
+
+            activity_expired = (
+                is_chat_activity_expired(
+                    last_activity,
+                    AUTO_NEW_CHAT_AFTER_MINUTES,
+                )
+            )
+
+        except Exception as activity_error:
+            print(
+                "读取聊天活动时间失败:",
+                activity_error,
+            )
+            activity_expired = False
+
+        if activity_expired:
+            # 无活动超过设定时间：
+            # 保持登录，但进入一个新的空白聊天页面。
+            st.session_state["current_session_id"] = None
+            st.session_state["messages"] = []
+            st.session_state["new_chat_mode"] = True
+            st.session_state["processing"] = False
+
+            remove_chat_id_from_url()
+
+            print(
+                "🆕 距离上次活动超过 "
+                f"{AUTO_NEW_CHAT_AFTER_MINUTES} 分钟，"
+                "进入新聊天页面"
+            )
+
+        else:
+            # 活动时间未过期：
+            # 恢复 URL 中指定的历史聊天。
+            st.session_state["current_session_id"] = (
+                restored_chat_id
+            )
+            st.session_state["messages"] = []
+            st.session_state["new_chat_mode"] = (
+                restored_chat_id is None
+            )
+            st.session_state["processing"] = False
+
+            print(
+                "✅ 长期登录恢复成功"
+            )
 # ================= Load Current Chat =================
 
 if st.session_state.user:
@@ -619,50 +592,79 @@ if not st.session_state.user:
         email = st.text_input("邮箱地址", key="login_email")
         password = st.text_input("密码", type="password", key="login_pass")
 
-        if st.button("登录", use_container_width=True, key="login_btn"):
-            try:
-                res = supabase.auth.sign_in_with_password(
-                    {"email": email, "password": password}
-                )
+        if st.button(
+            "登录",
+            use_container_width=True,
+            key="login_btn",
+        ):
+            if not email or not password:
+                st.error("请输入邮箱地址和密码。")
 
-                st.session_state.user = res.user
-
-                # 登录成功后不调用 remove()。
-                # CookieController 首次加载时 remove() 可能触发 None.pop 错误。
+            else:
+                # 第一层只负责 Supabase 身份认证。
                 try:
-                    set_cookie(cookies, "manual_logout_marker", "0")
-                except Exception as marker_error:
-                    print(f"更新退出标记失败，但不阻止登录: {marker_error}")
-
-                st.session_state.auth_checked = True
-                st.session_state.current_session_id = None
-                st.session_state.messages = []
-                st.session_state.new_chat_mode = True
-                if res.session:
-                    save_auth_cookies(
-                        cookies,
-                        res.session,
-                        now_utc,
+                    res = supabase.auth.sign_in_with_password(
+                        {
+                            "email": email.strip(),
+                            "password": password,
+                        }
                     )
 
-                    # 临时跳过 remember session 测试
-                    try:
-                        pass
-                    except Exception as remember_error:
-                        print(f"Remember session save failed: {remember_error}")
+                except Exception as login_error:
+                    st.error(f"登录失败：{login_error}")
 
-                    
+                else:
+                    if not res or not res.user:
+                        st.error("登录失败：没有返回有效用户。")
 
-                    try:
-                        plan = get_user_plan(res.user.id)
-                        save_device_session(res.user, res.session, plan)
-                    except Exception as device_error:
-                        print(f"Device session update failed: {device_error}")
-                st.success("登录成功！")
-                st.rerun()
+                    else:
+                        # 认证已经成功。下面的附加任务即使失败，
+                        # 也不能再把页面显示为“登录失败”。
+                        st.session_state["user"] = res.user
+                        st.session_state["auth_checked"] = True
+                        st.session_state["current_session_id"] = None
+                        st.session_state["messages"] = []
+                        st.session_state["new_chat_mode"] = True
+                        st.session_state["processing"] = False
 
-            except Exception as e:
-                st.error(f"登录失败: {e}")
+                        # 登录成功即建立活动基准时间。
+                        save_last_activity(cookies)
+
+                        try:
+                            save_remember_session(
+                                res.user,
+                                cookies,
+                                device_id,
+                            )
+                        except Exception as remember_error:
+                            print(
+                                "长期登录记录保存失败，"
+                                f"但不阻止本次登录: {remember_error}"
+                            )
+
+                        # 暂时保留设备数量管理，但它不再负责恢复登录。
+                        if res.session:
+                            try:
+                                plan = get_user_plan(
+                                    res.user.id
+                                )
+
+                                save_device_session(
+                                    res.user,
+                                    res.session,
+                                    plan,
+                                )
+
+                            except Exception as device_error:
+                                print(
+                                    "设备记录更新失败，"
+                                    f"但不阻止登录: {device_error}"
+                                )
+
+                        st.success("登录成功！")
+                        st.rerun()
+
+            
 
     with tab2:
         email_reg = st.text_input("注册邮箱", key="reg_email")
@@ -733,57 +735,55 @@ premium_checkout_url = get_premium_checkout_url(
 )
 render_sidebar_placeholder()
 with st.sidebar:
-    if st.button("退出登录", use_container_width=True):
-        # 阻止本次 rerun 立即恢复
+    if st.button(
+        "退出登录",
+        use_container_width=True,
+    ):
+        # 阻止本次 rerun 再进行自动恢复。
         st.session_state.auth_checked = True
 
-        # 1. 删除设备会话
+        # 撤销该设备的长期登录授权。
         try:
-            supabase_admin.table("device_sessions").delete().eq(
+            clear_remember_session(
+                cookies,
+                device_id,
+            )
+        except Exception as remember_error:
+            print(
+                f"长期登录清理失败: {remember_error}"
+            )
+
+        # 删除设备管理记录。
+        try:
+            supabase_admin.table(
+                "device_sessions"
+            ).delete().eq(
                 "device_id",
                 device_id,
             ).execute()
         except Exception as device_error:
-            print(f"删除设备登录记录失败：{device_error}")
+            print(
+                f"删除设备记录失败: {device_error}"
+            )
 
-        # 2. 撤销该设备的长期登录授权
-        try:
-            supabase_admin.table("remember_sessions").delete().eq(
-                "device_id",
-                device_id,
-            ).execute()
-
-            print("已删除该设备的 remember_sessions 记录")
-
-        except Exception as remember_error:
-            print(f"删除长期登录记录失败：{remember_error}")
-
-        # 3. 注销 Supabase 当前会话
+        # 注销当前 Supabase 会话。
         try:
             supabase.auth.sign_out()
         except Exception as signout_error:
-            print(f"Supabase 退出失败：{signout_error}")
+            print(
+                f"Supabase 退出失败: {signout_error}"
+            )
 
-        # 4. 清除登录 Cookie
-        try:
-            clear_remember_session(cookies)
-        except Exception as cookie_error:
-            print(f"清除登录 Cookie 失败：{cookie_error}")
+        # 清理页面状态。
+        st.session_state["user"] = None
+        st.session_state["messages"] = []
+        st.session_state["current_session_id"] = None
+        st.session_state["new_chat_mode"] = True
+        st.session_state["processing"] = False
+        st.session_state["uploader_key"] += 1
 
-        # 5. 退出标记暂时保留，作为辅助保护
-        try:
-            set_cookie(cookies, "manual_logout_marker", "1")
-            save_cookies(cookies)
-        except Exception as marker_error:
-            print(f"写入退出标记失败：{marker_error}")
-
-        # 6. 清理页面状态
-        st.session_state.user = None
-        st.session_state.messages = []
-        st.session_state.current_session_id = None
-        st.session_state.new_chat_mode = True
-        st.session_state.processing = False
-
+        # 主动退出后，本次 Streamlit 会话不再尝试自动恢复。
+        st.session_state["auth_checked"] = True
         remove_chat_id_from_url()
         st.rerun()
     # ====================== Plan and Daily Usage ======================
@@ -956,13 +956,15 @@ with st.sidebar:
     st.markdown("### 历史会话")
 
     if st.button("✏️ 新建聊天", use_container_width=True):
-        st.session_state.new_chat_mode = True
         st.session_state.page = "chat"
         st.session_state.current_session_id = None
         st.session_state.messages = []
-        st.session_state.uploader_key += 1
+        st.session_state.new_chat_mode = True
         st.session_state.processing = False
+        st.session_state.uploader_key += 1
+
         remove_chat_id_from_url()
+        save_last_activity(cookies)
         st.rerun()
 
     sessions = [s for s in load_sessions(st.session_state.user.id) if s.get("title") != "新对话"]
@@ -989,7 +991,6 @@ with st.sidebar:
 
             # 用户主动打开历史会话，也属于一次有效活动
             save_last_activity(cookies)
-            save_cookies(cookies)
 
             st.session_state.uploader_key += 1
             st.session_state.processing = False
@@ -1026,20 +1027,7 @@ with st.sidebar:
 
             st.write("Device ID:", device_id)
 
-            st.write(
-                "Access Cookie:",
-                "✅" if cookies.get("access_token") else "❌"
-            )
-
-            st.write(
-                "Refresh Cookie:",
-                "✅" if cookies.get("refresh_token") else "❌"
-            )
-
-            st.write(
-                "Login Saved:",
-                cookies.get("login_saved_at")
-            )
+            
 
             st.write(
                 "User:",
@@ -1363,7 +1351,6 @@ if st.session_state.processing:
             )
             # 每轮完整问答只保存一次最后活动时间
             save_last_activity(cookies)
-            save_cookies(cookies)
 
             # 回答与数据库保存都完成后，再更新 URL
             st.query_params["chat"] = str(
@@ -1405,4 +1392,3 @@ if st.session_state.processing:
 
 
 # ====================== Status ======================
-
