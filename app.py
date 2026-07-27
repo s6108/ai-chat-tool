@@ -618,31 +618,20 @@ if not st.session_state.user:
                         st.error("登录失败：没有返回有效用户。")
 
                     else:
-                        # 认证已经成功。下面的附加任务即使失败，
-                        # 也不能再把页面显示为“登录失败”。
-                        st.session_state["user"] = res.user
-                        st.session_state["auth_checked"] = True
-                        st.session_state["current_session_id"] = None
-                        st.session_state["messages"] = []
-                        st.session_state["new_chat_mode"] = True
-                        st.session_state["processing"] = False
+                        # Supabase 身份认证已经成功。
+                        # 立即建立当前登录状态，不在本轮保存 Cookie。
+                        st.session_state.user = res.user
+                        st.session_state.auth_checked = True
+                        st.session_state.current_session_id = None
+                        st.session_state.messages = []
+                        st.session_state.new_chat_mode = True
+                        st.session_state.processing = False
 
-                        # 登录成功即建立活动基准时间。
-                        save_last_activity(cookies)
+                        # 标记：下一轮 Streamlit 运行再保存长期登录。
+                        # 避免登录按钮、rerun 和 Cookie 前端组件在同一轮发生竞态。
+                        st.session_state.pending_remember_login = True
 
-                        try:
-                            save_remember_session(
-                                res.user,
-                                cookies,
-                                device_id,
-                            )
-                        except Exception as remember_error:
-                            print(
-                                "长期登录记录保存失败，"
-                                f"但不阻止本次登录: {remember_error}"
-                            )
-
-                        # 暂时保留设备数量管理，但它不再负责恢复登录。
+                        # 设备记录失败不能影响本次登录。
                         if res.session:
                             try:
                                 plan = get_user_plan(
@@ -658,10 +647,11 @@ if not st.session_state.user:
                             except Exception as device_error:
                                 print(
                                     "设备记录更新失败，"
-                                    f"但不阻止登录: {device_error}"
+                                    f"但不阻止登录：{device_error}"
                                 )
 
-                        st.success("登录成功！")
+                        # 不再显示 st.success 后等待，
+                        # 直接进入下一轮并显示主页面。
                         st.rerun()
 
             
@@ -681,6 +671,35 @@ if not st.session_state.user:
 
     st.stop()
 
+
+# ====================== Deferred Remember Login ======================
+
+# 登录成功后的下一轮运行，再单独保存长期登录 Cookie。
+# 这样 CookieManager 已经完成初始化，
+# 并且不会和登录按钮触发的组件发生冲突。
+if (
+    st.session_state.user is not None
+    and st.session_state.pop(
+        "pending_remember_login",
+        False,
+    )
+):
+    try:
+        save_remember_session(
+            st.session_state.user,
+            cookies,
+            device_id,
+        )
+
+        print("✅ 长期登录记录延迟保存完成")
+
+    except Exception as remember_error:
+        # Supabase 登录已经成功。
+        # Cookie 保存失败只写终端日志，绝不能退回登录页面。
+        print(
+            "长期登录记录延迟保存失败，"
+            f"但本次登录继续：{remember_error}"
+        )
 
 # ====================== Main Page ======================
 st.title("🥭 Mango AI")
