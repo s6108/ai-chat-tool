@@ -76,34 +76,11 @@ def delete_cookie(
 
 def persist_cookies(
     cookies: EncryptedCookieManager,
-) -> bool:
+) -> None:
     """
-    将本轮 Cookie 修改同步到浏览器。
+    把本轮所有 Cookie 修改一次性同步到浏览器。
 
-    EncryptedCookieManager 的前端组件偶尔可能尚未完成初始化，
-    此时可能抛出：
-    'NoneType' object has no attribute 'pop'
-
-    Cookie 保存异常不能影响已经完成的 Supabase 登录。
+    cookies.save() 成功时通常返回 None，
+    因此不要用 if cookies.save() 判断成功与否。
     """
-    try:
-        cookies.save()
-        return True
-
-    except AttributeError as error:
-        error_text = str(error)
-
-        if "'NoneType' object has no attribute 'pop'" in error_text:
-            print(
-                "CookieManager 本轮尚未完成同步，"
-                "忽略本次保存异常：",
-                error,
-            )
-            return False
-
-        print(f"Cookie 保存 AttributeError：{error}")
-        return False
-
-    except Exception as error:
-        print(f"Cookie 保存失败：{error}")
-        return False
+    cookies.save()

@@ -447,42 +447,17 @@ if "new_chat_mode" not in st.session_state:
     )
 
 
-# ====================== Cookie Ready Gate ======================
-
-# iPhone Safari 刷新时，Cookie 前端组件通常比电脑初始化得慢。
-# 在 CookieManager 真正准备好之前，绝对不能执行长期登录恢复，
-# 也不能把 auth_checked 设置为 True。
-if not cookies_ready(cookies):
-    print("[APP AUTH] CookieManager 尚未准备完成，等待组件初始化")
-    st.stop()
-
-
 # ====================== Auto Login ======================
 
-# CookieManager 已经准备完成后，
+# Cookie 组件准备完成后，
 # 每个新的 Streamlit 会话只检查一次长期登录。
 if (
-    st.session_state.user is None
-    and not st.session_state.auth_checked
-    and cookies.ready()
+    st.session_state["user"] is None
+    and not st.session_state["auth_checked"]
 ):
     restored_user = None
 
-    print(
-        "[APP AUTH] CookieManager 已准备完成，"
-        "开始恢复长期登录"
-    )
-
     try:
-        print(
-            "[APP AUTH] CookieManager ready:",
-            cookies.ready()
-        )
-
-        print(
-            "[APP AUTH] 当前cookie:",
-            cookies.get("remember_token")
-        )
         restored_user = restore_login_from_remember(
             cookies,
             device_id,
@@ -490,24 +465,15 @@ if (
 
     except Exception as restore_error:
         print(
-            "[APP AUTH] 长期登录恢复异常：",
+            "长期登录恢复失败:",
             restore_error,
         )
 
-    # 注意：
-    # 只有 CookieManager 已经 ready，
-    # 并且完成了一次真正的恢复尝试后，
-    # 才允许把 auth_checked 设为 True。
-    st.session_state.auth_checked = True
+    # 无论成功或失败，本次 Streamlit 会话都已经完成认证检查。
+    st.session_state["auth_checked"] = True
 
     if restored_user is not None:
         st.session_state["user"] = restored_user
-        st.session_state["processing"] = False
-
-        print(
-            "[APP AUTH] 长期登录用户恢复成功："
-            f"{getattr(restored_user, 'email', '用户')}"
-        )
 
         restored_chat_id = get_chat_id_from_url()
 
@@ -525,14 +491,14 @@ if (
 
         except Exception as activity_error:
             print(
-                "[APP AUTH] 读取最后活动时间失败："
-                f"{activity_error}"
+                "读取聊天活动时间失败:",
+                activity_error,
             )
             activity_expired = False
 
         if activity_expired:
-            # 无活动超过规定时间：
-            # 保持登录，但进入新的空白聊天。
+            # 无活动超过设定时间：
+            # 保持登录，但进入一个新的空白聊天页面。
             st.session_state["current_session_id"] = None
             st.session_state["messages"] = []
             st.session_state["new_chat_mode"] = True
@@ -541,13 +507,14 @@ if (
             remove_chat_id_from_url()
 
             print(
-                "[APP AUTH] 无活动超过 "
+                "🆕 距离上次活动超过 "
                 f"{AUTO_NEW_CHAT_AFTER_MINUTES} 分钟，"
-                "进入新聊天"
+                "进入新聊天页面"
             )
 
         else:
-            # 没有过期时，按照网址里的 chat 参数恢复会话。
+            # 活动时间未过期：
+            # 恢复 URL 中指定的历史聊天。
             st.session_state["current_session_id"] = (
                 restored_chat_id
             )
@@ -557,14 +524,9 @@ if (
             )
             st.session_state["processing"] = False
 
-        # 重新运行，让页面直接进入已登录主界面。
-        st.rerun()
-
-    else:
-        print(
-            "[APP AUTH] CookieManager 已准备完成，"
-            "但没有恢复到长期登录用户"
-        )
+            print(
+                "✅ 长期登录恢复成功"
+            )
 # ================= Load Current Chat =================
 
 if st.session_state.user:
@@ -656,20 +618,31 @@ if not st.session_state.user:
                         st.error("登录失败：没有返回有效用户。")
 
                     else:
-                        # Supabase 身份认证已经成功。
-                        # 立即建立当前登录状态，不在本轮保存 Cookie。
-                        st.session_state.user = res.user
-                        st.session_state.auth_checked = True
-                        st.session_state.current_session_id = None
-                        st.session_state.messages = []
-                        st.session_state.new_chat_mode = True
-                        st.session_state.processing = False
+                        # 认证已经成功。下面的附加任务即使失败，
+                        # 也不能再把页面显示为“登录失败”。
+                        st.session_state["user"] = res.user
+                        st.session_state["auth_checked"] = True
+                        st.session_state["current_session_id"] = None
+                        st.session_state["messages"] = []
+                        st.session_state["new_chat_mode"] = True
+                        st.session_state["processing"] = False
 
-                        # 标记：下一轮 Streamlit 运行再保存长期登录。
-                        # 避免登录按钮、rerun 和 Cookie 前端组件在同一轮发生竞态。
-                        st.session_state.pending_remember_login = True
+                        # 登录成功即建立活动基准时间。
+                        save_last_activity(cookies)
 
-                        # 设备记录失败不能影响本次登录。
+                        try:
+                            save_remember_session(
+                                res.user,
+                                cookies,
+                                device_id,
+                            )
+                        except Exception as remember_error:
+                            print(
+                                "长期登录记录保存失败，"
+                                f"但不阻止本次登录: {remember_error}"
+                            )
+
+                        # 暂时保留设备数量管理，但它不再负责恢复登录。
                         if res.session:
                             try:
                                 plan = get_user_plan(
@@ -685,11 +658,10 @@ if not st.session_state.user:
                             except Exception as device_error:
                                 print(
                                     "设备记录更新失败，"
-                                    f"但不阻止登录：{device_error}"
+                                    f"但不阻止登录: {device_error}"
                                 )
 
-                        # 不再显示 st.success 后等待，
-                        # 直接进入下一轮并显示主页面。
+                        st.success("登录成功！")
                         st.rerun()
 
             
@@ -709,35 +681,6 @@ if not st.session_state.user:
 
     st.stop()
 
-
-# ====================== Deferred Remember Login ======================
-
-# 登录成功后的下一轮运行，再单独保存长期登录 Cookie。
-# 这样 CookieManager 已经完成初始化，
-# 并且不会和登录按钮触发的组件发生冲突。
-if (
-    st.session_state.user is not None
-    and st.session_state.pop(
-        "pending_remember_login",
-        False,
-    )
-):
-    try:
-        save_remember_session(
-            st.session_state.user,
-            cookies,
-            device_id,
-        )
-
-        print("✅ 长期登录记录延迟保存完成")
-
-    except Exception as remember_error:
-        # Supabase 登录已经成功。
-        # Cookie 保存失败只写终端日志，绝不能退回登录页面。
-        print(
-            "长期登录记录延迟保存失败，"
-            f"但本次登录继续：{remember_error}"
-        )
 
 # ====================== Main Page ======================
 st.title("🥭 Mango AI")
