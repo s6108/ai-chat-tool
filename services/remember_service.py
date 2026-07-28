@@ -89,21 +89,42 @@ def save_remember_session(
         now_utc(),
     )
 
-    # 本次业务操作只保存一次。
-    persist_cookies(cookies)
+    persist_result = persist_cookies(cookies)
 
-    print("✅ 长期登录 Cookie 保存成功")
+    print(
+        "[REMEMBER SAVE] Cookie 保存调用完成，"
+        f"persist_result={persist_result}"
+    )
+
+    print(
+        "[REMEMBER SAVE] remember_token 前8位："
+        f"{token[:8]}"
+    )
 
 
 def restore_login_from_remember(
     cookies,
     device_id: str,
 ) -> Optional[SimpleNamespace]:
-    """根据长期登录 Cookie 恢复用户。"""
+    print(
+        "[REMEMBER RESTORE] 开始恢复长期登录，"
+        f"device_id={device_id}"
+    )
+
     token = get_cookie(
         cookies,
         REMEMBER_COOKIE,
     )
+
+    if token:
+        print(
+            "[REMEMBER RESTORE] 已读取 remember_token，"
+            f"前8位={token[:8]}"
+        )
+    else:
+        print(
+            "[REMEMBER RESTORE] remember_token=None"
+        )
 
     if not token:
         return None
@@ -122,21 +143,23 @@ def restore_login_from_remember(
             .execute()
         )
 
+        print(
+            "[REMEMBER RESTORE] 数据库匹配记录数："
+            f"{len(result.data or [])}"
+        )
+
         if not result.data:
+            print(
+                "[REMEMBER RESTORE] Cookie 存在，"
+                "但数据库没有匹配记录"
+            )
             return None
 
         saved = result.data[0]
 
-        (
-            supabase_admin
-            .table("remember_sessions")
-            .update(
-                {
-                    "last_seen": now_utc(),
-                }
-            )
-            .eq("id", saved["id"])
-            .execute()
+        print(
+            "[REMEMBER RESTORE] 长期登录恢复成功，"
+            f"email={saved.get('email')}"
         )
 
         return SimpleNamespace(
@@ -145,7 +168,10 @@ def restore_login_from_remember(
         )
 
     except Exception as error:
-        print(f"长期登录恢复失败：{error}")
+        print(
+            "[REMEMBER RESTORE] 恢复异常："
+            f"{error}"
+        )
         return None
 
 
