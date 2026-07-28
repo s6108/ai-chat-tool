@@ -462,8 +462,9 @@ if not cookies_ready(cookies):
 # CookieManager 已经准备完成后，
 # 每个新的 Streamlit 会话只检查一次长期登录。
 if (
-    st.session_state["user"] is None
-    and not st.session_state["auth_checked"]
+    st.session_state.user is None
+    and not st.session_state.auth_checked
+    and cookies.ready()
 ):
     restored_user = None
 
@@ -473,6 +474,15 @@ if (
     )
 
     try:
+        print(
+            "[APP AUTH] CookieManager ready:",
+            cookies.ready()
+        )
+
+        print(
+            "[APP AUTH] 当前cookie:",
+            cookies.get("remember_token")
+        )
         restored_user = restore_login_from_remember(
             cookies,
             device_id,
@@ -488,7 +498,7 @@ if (
     # 只有 CookieManager 已经 ready，
     # 并且完成了一次真正的恢复尝试后，
     # 才允许把 auth_checked 设为 True。
-    st.session_state["auth_checked"] = True
+    st.session_state.auth_checked = True
 
     if restored_user is not None:
         st.session_state["user"] = restored_user
