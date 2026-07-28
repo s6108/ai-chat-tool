@@ -447,15 +447,30 @@ if "new_chat_mode" not in st.session_state:
     )
 
 
+# ====================== Cookie Ready Gate ======================
+
+# iPhone Safari 刷新时，Cookie 前端组件通常比电脑初始化得慢。
+# 在 CookieManager 真正准备好之前，绝对不能执行长期登录恢复，
+# 也不能把 auth_checked 设置为 True。
+if not cookies_ready(cookies):
+    print("[APP AUTH] CookieManager 尚未准备完成，等待组件初始化")
+    st.stop()
+
+
 # ====================== Auto Login ======================
 
-# Cookie 组件准备完成后，
+# CookieManager 已经准备完成后，
 # 每个新的 Streamlit 会话只检查一次长期登录。
 if (
     st.session_state["user"] is None
     and not st.session_state["auth_checked"]
 ):
     restored_user = None
+
+    print(
+        "[APP AUTH] CookieManager 已准备完成，"
+        "开始恢复长期登录"
+    )
 
     try:
         restored_user = restore_login_from_remember(
@@ -465,15 +480,24 @@ if (
 
     except Exception as restore_error:
         print(
-            "长期登录恢复失败:",
+            "[APP AUTH] 长期登录恢复异常：",
             restore_error,
         )
 
-    # 无论成功或失败，本次 Streamlit 会话都已经完成认证检查。
+    # 注意：
+    # 只有 CookieManager 已经 ready，
+    # 并且完成了一次真正的恢复尝试后，
+    # 才允许把 auth_checked 设为 True。
     st.session_state["auth_checked"] = True
 
     if restored_user is not None:
         st.session_state["user"] = restored_user
+        st.session_state["processing"] = False
+
+        print(
+            "[APP AUTH] 长期登录用户恢复成功："
+            f"{getattr(restored_user, 'email', '用户')}"
+        )
 
         restored_chat_id = get_chat_id_from_url()
 
@@ -491,14 +515,14 @@ if (
 
         except Exception as activity_error:
             print(
-                "读取聊天活动时间失败:",
-                activity_error,
+                "[APP AUTH] 读取最后活动时间失败："
+                f"{activity_error}"
             )
             activity_expired = False
 
         if activity_expired:
-            # 无活动超过设定时间：
-            # 保持登录，但进入一个新的空白聊天页面。
+            # 无活动超过规定时间：
+            # 保持登录，但进入新的空白聊天。
             st.session_state["current_session_id"] = None
             st.session_state["messages"] = []
             st.session_state["new_chat_mode"] = True
@@ -507,14 +531,13 @@ if (
             remove_chat_id_from_url()
 
             print(
-                "🆕 距离上次活动超过 "
+                "[APP AUTH] 无活动超过 "
                 f"{AUTO_NEW_CHAT_AFTER_MINUTES} 分钟，"
-                "进入新聊天页面"
+                "进入新聊天"
             )
 
         else:
-            # 活动时间未过期：
-            # 恢复 URL 中指定的历史聊天。
+            # 没有过期时，按照网址里的 chat 参数恢复会话。
             st.session_state["current_session_id"] = (
                 restored_chat_id
             )
@@ -524,9 +547,14 @@ if (
             )
             st.session_state["processing"] = False
 
-            print(
-                "✅ 长期登录恢复成功"
-            )
+        # 重新运行，让页面直接进入已登录主界面。
+        st.rerun()
+
+    else:
+        print(
+            "[APP AUTH] CookieManager 已准备完成，"
+            "但没有恢复到长期登录用户"
+        )
 # ================= Load Current Chat =================
 
 if st.session_state.user:
