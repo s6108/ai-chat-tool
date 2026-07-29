@@ -1,6 +1,7 @@
 import base64
 import json
 import traceback
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -212,8 +213,17 @@ def now_utc() -> str:
 
 # ====================== Device ID ======================
 device_id = get_device_id()
+
 if not device_id:
-    st.stop()
+    device_id = st.session_state.get(
+        "fallback_device_id"
+    )
+
+if not device_id:
+    import uuid
+
+    device_id = str(uuid.uuid4())
+    st.session_state["fallback_device_id"] = device_id
 
 # ====================== Model Config ======================
 model_options = {
@@ -659,20 +669,10 @@ if not st.session_state.user:
                                     f"但不阻止登录: {device_error}"
                                 )
 
-                        # Safari/iOS 上 cookies.save() 由前端组件异步完成。
-                        # 不要立刻 st.rerun()，否则可能在 Cookie 真正落盘前重载。
-                        st.success("登录成功，正在保存登录状态……")
-                        components.html(
-                            """
-                            <script>
-                            setTimeout(() => {
-                                window.parent.location.reload();
-                            }, 1200);
-                            </script>
-                            """,
-                            height=0,
-                        )
-                        st.stop()
+                        # 当前 Streamlit 会话已经登录成功，
+                        # 直接进入主页面，不再强制刷新整个浏览器页面。
+                        st.success("登录成功！")
+                        st.rerun()
 
             
 
