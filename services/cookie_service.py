@@ -1,86 +1,86 @@
+import json
 import os
-from typing import Optional
+from typing import Any, Optional
 
-from streamlit_cookies_manager import EncryptedCookieManager
-
+import streamlit as st
 
 COOKIE_PREFIX = "mango_ai_"
+_PENDING_KEY = "_mango_pending_cookie_changes"
 
 
-def create_cookie_manager() -> EncryptedCookieManager:
-    """创建 Mango AI 唯一的加密 Cookie 管理器。"""
-    password = os.getenv("COOKIE_PASSWORD", "").strip()
-
-    if not password:
-        # 仅用于本地开发；Render 必须配置 COOKIE_PASSWORD。
-        password = "mango-ai-local-cookie-password"
-
-    return EncryptedCookieManager(
-        prefix=COOKIE_PREFIX,
-        password=password,
-    )
+def create_cookie_manager() -> None:
+    """兼容旧调用；不再创建 iframe Cookie 组件。"""
+    return None
 
 
-def cookies_ready(
-    cookies: EncryptedCookieManager,
-) -> bool:
-    """等待前端 Cookie 组件完成初始化。"""
+def cookies_ready(cookies: Any = None) -> bool:
+    """原生页面 Cookie 无需等待自定义组件初始化。"""
+    return True
+
+
+def _full_name(name: str) -> str:
+    return f"{COOKIE_PREFIX}{name}"
+
+
+def get_cookie(cookies: Any, name: str, default: Optional[str] = None) -> Optional[str]:
+    """从本次浏览器初始请求中读取第一方 Cookie。"""
     try:
-        return cookies.ready()
-    except Exception as error:
-        print(f"CookieManager 初始化失败：{error}")
-        return False
-
-
-def get_cookie(
-    cookies: EncryptedCookieManager,
-    name: str,
-    default: Optional[str] = None,
-) -> Optional[str]:
-    """读取一个 Cookie，但不触发保存组件。"""
-    try:
-        value = cookies.get(name)
-
+        value = st.context.cookies.get(_full_name(name))
         if value in (None, ""):
             return default
-
         return str(value)
-
     except Exception as error:
         print(f"读取 Cookie {name} 失败：{error}")
         return default
 
 
-def set_cookie(
-    cookies: EncryptedCookieManager,
-    name: str,
-    value: str,
-) -> None:
+def _pending() -> dict:
+    if _PENDING_KEY not in st.session_state:
+        st.session_state[_PENDING_KEY] = {}
+    return st.session_state[_PENDING_KEY]
+
+
+def set_cookie(cookies: Any, name: str, value: str) -> None:
+    """暂存 Cookie 写入，persist_cookies() 时一次性写入主页面。"""
+    _pending()[name] = str(value)
+
+
+def delete_cookie(cookies: Any, name: str) -> None:
+    """暂存 Cookie 删除。"""
+    _pending()[name] = None
+
+
+def persist_cookies(cookies: Any = None) -> None:
     """
-    只修改内存中的 Cookie。
+    通过 st.html 在主页面上下文写第一方 Cookie。
 
-    注意：这里绝对不能调用 cookies.save()，
-    否则同一次 Streamlit 运行中写入多个 Cookie 时会发生组件 key 冲突。
+    不使用 iframe，因此不会触发 iPhone Safari 对组件 iframe 存储的限制。
+    remember_token 是高强度随机不透明令牌；数据库只保存其哈希。
     """
-    cookies[name] = value
+    changes = dict(_pending())
+    st.session_state[_PENDING_KEY] = {}
 
+    if not changes:
+        return
 
-def delete_cookie(
-    cookies: EncryptedCookieManager,
-    name: str,
-) -> None:
-    """只修改内存状态，不在这里调用 save()。"""
-    if name in cookies:
-        del cookies[name]
+    secure = os.getenv("RENDER", "").lower() in {"true", "1", "yes"} or bool(
+        os.getenv("RENDER_SERVICE_ID")
+    )
+    secure_part = "; Secure" if secure else ""
 
+    lines = []
+    for name, value in changes.items():
+        cookie_name = json.dumps(_full_name(name))
+        if value is None:
+            lines.append(
+                f'document.cookie = {cookie_name} + "=; Path=/; Max-Age=0; SameSite=Lax{secure_part}";'
+            )
+        else:
+            encoded_value = json.dumps(str(value))
+            lines.append(
+                f'document.cookie = {cookie_name} + "=" + encodeURIComponent({encoded_value}) '
+                f'+ "; Path=/; Max-Age=2592000; SameSite=Lax{secure_part}";'
+            )
 
-def persist_cookies(
-    cookies: EncryptedCookieManager,
-) -> None:
-    """
-    把本轮所有 Cookie 修改一次性同步到浏览器。
-
-    cookies.save() 成功时通常返回 None，
-    因此不要用 if cookies.save() 判断成功与否。
-    """
-    cookies.save()
+    script = "<script>" + "\n".join(lines) + "</script>"
+    st.html(script, unsafe_allow_javascript=True)
