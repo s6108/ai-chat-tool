@@ -627,8 +627,6 @@ if not st.session_state.user:
                         st.session_state["new_chat_mode"] = True
                         st.session_state["processing"] = False
 
-                        # 登录成功即建立活动基准时间。
-                        save_last_activity(cookies)
 
                         try:
                             save_remember_session(
@@ -661,8 +659,20 @@ if not st.session_state.user:
                                     f"但不阻止登录: {device_error}"
                                 )
 
-                        st.success("登录成功！")
-                        st.rerun()
+                        # Safari/iOS 上 cookies.save() 由前端组件异步完成。
+                        # 不要立刻 st.rerun()，否则可能在 Cookie 真正落盘前重载。
+                        st.success("登录成功，正在保存登录状态……")
+                        components.html(
+                            """
+                            <script>
+                            setTimeout(() => {
+                                window.parent.location.reload();
+                            }, 1200);
+                            </script>
+                            """,
+                            height=0,
+                        )
+                        st.stop()
 
             
 
@@ -1196,10 +1206,15 @@ if st.session_state.processing:
 
             client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
 
+            # 只发送最近对话，显著减少首字延迟和 token 成本。
+            recent_messages = st.session_state.messages[-12:]
             if st.session_state.selected_model == "GLM-4V":
-                api_messages = st.session_state.messages
+                api_messages = recent_messages
             else:
-                api_messages = [m for m in st.session_state.messages if isinstance(m.get("content"), str)]
+                api_messages = [
+                    m for m in recent_messages
+                    if isinstance(m.get("content"), str)
+                ]
 
             request_params = {
                 "model": cfg["model"],
@@ -1208,10 +1223,10 @@ if st.session_state.processing:
             }
 
             if st.session_state.selected_model == "ChatGPT":
-                request_params["max_completion_tokens"] = 2000
+                request_params["max_completion_tokens"] = 1200
             else:
                 request_params["temperature"] = 0.7
-                request_params["max_tokens"] = 2000
+                request_params["max_tokens"] = 1200
 
             # ===== 自动判断并执行联网搜索 =====
             print(f"🧠 判断是否联网：{prompt}")

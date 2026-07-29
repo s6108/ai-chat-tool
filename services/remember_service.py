@@ -5,13 +5,7 @@ from types import SimpleNamespace
 from typing import Any, Optional
 
 from database import supabase_admin
-from services.cookie_service import (
-    delete_cookie,
-    get_cookie,
-    persist_cookies,
-    set_cookie,
-)
-
+from services.cookie_service import delete_cookie, get_cookie, persist_cookies, set_cookie
 
 REMEMBER_COOKIE = "remember_token"
 LAST_ACTIVITY_COOKIE = "last_activity"
@@ -27,227 +21,108 @@ def generate_remember_token() -> str:
 
 
 def hash_remember_token(token: str) -> str:
-    return hashlib.sha256(
-        token.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def save_remember_session(
-    user,
-    cookies,
-    device_id: str,
-) -> None:
-    """
-    创建长期登录记录。
-
-    remember_token 和 last_activity 先一起写入内存，
-    最后只调用一次 persist_cookies()。
-    """
+def save_remember_session(user, cookies, device_id: str) -> None:
     token = generate_remember_token()
     token_hash = hash_remember_token(token)
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=REMEMBER_DAYS)).isoformat()
 
-    expires_at = (
-        datetime.now(timezone.utc)
-        + timedelta(days=REMEMBER_DAYS)
-    ).isoformat()
+    # device_id 只用于设备管理，不再作为恢复登录的必要条件。
+    # Safari/iOS 会限制组件 iframe 内的 localStorage/cookie，device_id 可能变化。
+    if device_id:
+        (supabase_admin.table("remember_sessions").delete()
+         .eq("device_id", device_id).execute())
 
-    # 当前设备只保留一条有效长期登录记录。
-    (
-        supabase_admin
-        .table("remember_sessions")
-        .delete()
-        .eq("device_id", device_id)
-        .execute()
-    )
+    (supabase_admin.table("remember_sessions").insert({
+        "user_id": user.id,
+        "email": user.email,
+        "token_hash": token_hash,
+        "device_id": device_id or None,
+        "expires_at": expires_at,
+        "last_seen": now_utc(),
+    }).execute())
 
-    (
-        supabase_admin
-        .table("remember_sessions")
-        .insert(
-            {
-                "user_id": user.id,
-                "email": user.email,
-                "token_hash": token_hash,
-                "device_id": device_id,
-                "expires_at": expires_at,
-                "last_seen": now_utc(),
-            }
-        )
-        .execute()
-    )
-
-    # 这里只修改 Cookie 内存状态。
-    set_cookie(
-        cookies,
-        REMEMBER_COOKIE,
-        token,
-    )
-
-    set_cookie(
-        cookies,
-        LAST_ACTIVITY_COOKIE,
-        now_utc(),
-    )
-
-    # 本次业务操作只保存一次。
+    set_cookie(cookies, REMEMBER_COOKIE, token)
+    set_cookie(cookies, LAST_ACTIVITY_COOKIE, now_utc())
     persist_cookies(cookies)
+    print("✅ 长期登录 Cookie 已提交保存")
 
-    print("✅ 长期登录 Cookie 保存成功")
 
-
-def restore_login_from_remember(
-    cookies,
-    device_id: str,
-) -> Optional[SimpleNamespace]:
-    """根据长期登录 Cookie 恢复用户。"""
-    token = get_cookie(
-        cookies,
-        REMEMBER_COOKIE,
-    )
-
+def restore_login_from_remember(cookies, device_id: str) -> Optional[SimpleNamespace]:
+    """仅凭不可猜测的 remember_token 恢复登录，不依赖 Safari 中不稳定的 device_id。"""
+    token = get_cookie(cookies, REMEMBER_COOKIE)
     if not token:
+        print("ℹ️ 未读取到 remember_token")
         return None
 
     token_hash = hash_remember_token(token)
-
     try:
-        result = (
-            supabase_admin
-            .table("remember_sessions")
-            .select("*")
-            .eq("device_id", device_id)
-            .eq("token_hash", token_hash)
-            .gt("expires_at", now_utc())
-            .limit(1)
-            .execute()
-        )
-
+        result = (supabase_admin.table("remember_sessions").select("*")
+                  .eq("token_hash", token_hash)
+                  .gt("expires_at", now_utc()).limit(1).execute())
         if not result.data:
+            print("ℹ️ remember_token 无匹配记录或已过期")
             return None
 
         saved = result.data[0]
+        (supabase_admin.table("remember_sessions").update({
+            "last_seen": now_utc(),
+            # 新 device_id 可用于后续设备列表更新，但不影响认证。
+            "device_id": device_id or saved.get("device_id"),
+        }).eq("id", saved["id"]).execute())
 
-        (
-            supabase_admin
-            .table("remember_sessions")
-            .update(
-                {
-                    "last_seen": now_utc(),
-                }
-            )
-            .eq("id", saved["id"])
-            .execute()
-        )
-
-        return SimpleNamespace(
-            id=saved["user_id"],
-            email=saved.get("email", "用户"),
-        )
-
+        return SimpleNamespace(id=saved["user_id"], email=saved.get("email", "用户"))
     except Exception as error:
         print(f"长期登录恢复失败：{error}")
         return None
 
 
-def clear_remember_session(
-    cookies: Any,
-    device_id: str,
-) -> None:
-    """撤销当前设备长期登录并删除 Cookie。"""
-    if device_id:
+def clear_remember_session(cookies: Any, device_id: str) -> None:
+    """按当前浏览器中的 token 精确撤销，避免 iPhone device_id 变化导致退出不彻底。"""
+    token = get_cookie(cookies, REMEMBER_COOKIE)
+    if token:
         try:
-            (
-                supabase_admin
-                .table("remember_sessions")
-                .delete()
-                .eq("device_id", device_id)
-                .execute()
-            )
+            token_hash = hash_remember_token(token)
+            (supabase_admin.table("remember_sessions").delete()
+             .eq("token_hash", token_hash).execute())
         except Exception as error:
-            print(
-                f"删除 remember_sessions 失败：{error}"
-            )
+            print(f"删除 remember_sessions 失败：{error}")
 
-    delete_cookie(
-        cookies,
-        REMEMBER_COOKIE,
-    )
-    delete_cookie(
-        cookies,
-        LAST_ACTIVITY_COOKIE,
-    )
-
-    # 两个删除操作完成后只保存一次。
+    delete_cookie(cookies, REMEMBER_COOKIE)
+    delete_cookie(cookies, LAST_ACTIVITY_COOKIE)
     persist_cookies(cookies)
 
 
-def save_last_activity(
-    cookies: Any,
-) -> None:
-    """保存最后一次有效聊天活动时间。"""
+def save_last_activity(cookies: Any) -> None:
     try:
-        set_cookie(
-            cookies,
-            LAST_ACTIVITY_COOKIE,
-            now_utc(),
-        )
-
+        set_cookie(cookies, LAST_ACTIVITY_COOKIE, now_utc())
         persist_cookies(cookies)
-
     except Exception as error:
         print(f"最后活动时间保存失败：{error}")
 
 
-def load_last_activity(
-    cookies: Any,
-) -> Optional[datetime]:
-    value = get_cookie(
-        cookies,
-        LAST_ACTIVITY_COOKIE,
-    )
-
+def load_last_activity(cookies: Any) -> Optional[datetime]:
+    value = get_cookie(cookies, LAST_ACTIVITY_COOKIE)
     if not value:
         return None
-
     try:
         result = datetime.fromisoformat(value)
-
         if result.tzinfo is None:
-            result = result.replace(
-                tzinfo=timezone.utc
-            )
-
+            result = result.replace(tzinfo=timezone.utc)
         return result.astimezone(timezone.utc)
-
     except (TypeError, ValueError):
-        # Cookie 内容损坏时删除一次。
         try:
-            delete_cookie(
-                cookies,
-                LAST_ACTIVITY_COOKIE,
-            )
+            delete_cookie(cookies, LAST_ACTIVITY_COOKIE)
             persist_cookies(cookies)
         except Exception as error:
-            print(
-                f"清理无效活动 Cookie 失败：{error}"
-            )
-
+            print(f"清理无效活动 Cookie 失败：{error}")
         return None
 
 
-def is_chat_activity_expired(
-    last_activity: Optional[datetime],
-    timeout_minutes: int,
-) -> bool:
+def is_chat_activity_expired(last_activity: Optional[datetime], timeout_minutes: int) -> bool:
     if last_activity is None:
         return False
-
-    elapsed_seconds = (
-        datetime.now(timezone.utc)
-        - last_activity
-    ).total_seconds()
-
-    return (
-        elapsed_seconds
-        > max(int(timeout_minutes), 1) * 60
-    )
+    elapsed_seconds = (datetime.now(timezone.utc) - last_activity).total_seconds()
+    return elapsed_seconds > max(int(timeout_minutes), 1) * 60
