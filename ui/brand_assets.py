@@ -9,7 +9,6 @@ STATIC_DIR = APP_DIR / "static"
 LOGO_PATH = STATIC_DIR / "logo.png"
 USER_AVATAR = str(STATIC_DIR / "avatar-user.png")
 
-
 MODEL_AVATARS = {
     "DeepSeek": str(STATIC_DIR / "avatar-deepseek.png"),
     "Qwen": str(STATIC_DIR / "avatar-qwen.png"),
@@ -26,43 +25,55 @@ MODEL_AVATARS = {
 
 
 def model_avatar(model_name: str) -> str:
+    """返回模型对应的 Mango M 徽章。"""
     return MODEL_AVATARS.get(
         model_name,
         MODEL_AVATARS["Mango AI"],
     )
 
 
-def render_brand_header(compact: bool = False) -> None:
-    width = 92 if compact else 150
+def render_brand_header(width: int = 150) -> None:
+    """在登录页或空白欢迎页居中显示完整 App Logo。"""
+    left, center, right = st.columns([1, 1, 1])
+    with center:
+        st.image(str(LOGO_PATH), width=width)
 
-    c1, c2 = st.columns(
-        [1, 4],
-        vertical_alignment="center",
+
+def render_sidebar_logo(width: int = 72) -> None:
+    """聊天阶段在侧边栏顶部显示较小的完整 App Logo。"""
+    st.image(str(LOGO_PATH), width=width)
+
+
+def render_centered_text(text: str) -> None:
+    st.markdown(
+        f'<div class="mango-centered-text">{text}</div>',
+        unsafe_allow_html=True,
     )
-
-    with c1:
-        st.image(
-            str(LOGO_PATH),
-            width=width,
-        )
-
-    with c2:
-        st.markdown("# Mango AI")
 
 
 def apply_brand_css() -> None:
     st.markdown(
         """
         <style>
-        [data-testid="stChatMessage"]
-        [data-testid="stCaptionContainer"] p {
-            color: #6b7280 !important;
-            font-weight: 500;
+        .mango-centered-text {
+            text-align: center;
+            margin-top: 0.35rem;
+            margin-bottom: 1.25rem;
+            color: #31333f;
+            font-size: 1rem;
         }
 
         [data-testid="stChatMessageAvatarUser"],
         [data-testid="stChatMessageAvatarAssistant"] {
             border-radius: 13px !important;
+        }
+
+        /* 模型标题恢复为清晰的正常深色，不使用浅灰色。 */
+        .mango-model-title {
+            color: #31333f;
+            font-weight: 600;
+            margin: 0 0 0.45rem 0;
+            line-height: 1.25;
         }
         </style>
         """,

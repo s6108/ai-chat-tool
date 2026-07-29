@@ -73,11 +73,12 @@ from services.model_router import choose_auto_model
 from ui.chat_messages import render_chat_messages, render_user_content
 from ui.sidebar import render_sidebar_placeholder, render_language_selector
 from ui.brand_assets import (
-    LOGO_PATH,
     USER_AVATAR,
     apply_brand_css,
     model_avatar,
     render_brand_header,
+    render_centered_text,
+    render_sidebar_logo,
 )
 from i18n import initialize_language, t
 # ============================================================
@@ -590,8 +591,8 @@ if st.session_state.user:
 
 # ====================== Login / Register Page ======================
 if not st.session_state.user:
-    render_brand_header()
-    st.subheader(t("app_tagline"))
+    render_brand_header(width=132)
+    render_centered_text(t("sign_in_to_account"))
 
     tab1, tab2 = st.tabs([t("login_tab"), t("register_tab")])
 
@@ -690,10 +691,18 @@ if not st.session_state.user:
 
 
 # ====================== Main Page ======================
-render_brand_header(compact=True)
+user_email = getattr(
+    st.session_state.user,
+    "email",
+    t("user_fallback"),
+)
 
-user_email = getattr(st.session_state.user, "email", t("user_fallback"))
-st.write(t("welcome_back", email=user_email))
+# 只有空白欢迎页显示居中的大 Logo；开始聊天后自动隐藏。
+if not st.session_state.messages:
+    render_brand_header(width=150)
+    render_centered_text(
+        t("welcome_back_plain", email=user_email)
+    )
 
 # ====================== Sidebar ======================
 # 用户从付款页返回 Mango AI 时，自动刷新一次页面，
@@ -742,6 +751,7 @@ premium_checkout_url = get_premium_checkout_url(
 )
 render_sidebar_placeholder()
 with st.sidebar:
+    render_sidebar_logo(width=68)
     render_language_selector(cookies)
 
     if st.button(
