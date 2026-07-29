@@ -67,10 +67,19 @@ from services.date_service import (
 )
 from services.search_planner import plan_search
 from services.search_evaluator import evaluate_search_results
+from services.model_router import choose_auto_model
 
 
 from ui.chat_messages import render_chat_messages, render_user_content
-from ui.sidebar import render_sidebar_placeholder
+from ui.sidebar import render_sidebar_placeholder, render_language_selector
+from ui.brand_assets import (
+    LOGO_PATH,
+    USER_AVATAR,
+    apply_brand_css,
+    model_avatar,
+    render_brand_header,
+)
+from i18n import initialize_language, t
 # ============================================================
 # Mango AI v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
@@ -188,7 +197,7 @@ components.html(
 
 
 if not SUPABASE_URL or not SUPABASE_KEY or not SUPABASE_SERVICE_KEY:
-    st.error("Supabase 环境变量未配置完整，请检查 Render Environment Variables。")
+    st.error(t("supabase_missing"))
     st.stop()
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -204,6 +213,9 @@ cookies = create_cookie_manager()
 
 if not cookies_ready(cookies):
     st.stop()
+
+initialize_language(cookies)
+apply_brand_css()
 
 # ====================== Debug ======================
 DEBUG = False
@@ -264,41 +276,34 @@ model_options = {
     }
 }
 
-MODEL_ICONS = {
-    "DeepSeek": "🔴",
-    "GLM-4V": "🟠",
-    "GLM-4": "🟡",
-    "Kimi": "🔵",
-    "Doubao-Pro": "🟢",
-    "Qwen": "🟣",
-    "ChatGPT": "⚫", 
-}
+MODEL_ICONS = {name: model_avatar(name) for name in model_options}
 
-MODEL_SELECTOR_OPTIONS = [
-    "🔄 自动模式",
-    "🔴 DeepSeek",
-    "🟠 GLM-4V",
-    "🟡 GLM-4",
-    "🔵 Kimi",
-    "🟢 Doubao-Pro",
-    "🟣 Qwen",
-    "⚫ ChatGPT",
-]
+def get_model_selector_options():
+    return [
+        t("auto_mode"),
+        "DeepSeek",
+        "GLM-4V",
+        "GLM-4",
+        "Kimi",
+        "Doubao-Pro",
+        "Qwen",
+        "ChatGPT",
+    ]
 
 MODEL_LABEL_TO_NAME = {
-    "🔴 DeepSeek": "DeepSeek",
-    "🟠 GLM-4V": "GLM-4V",
-    "🟡 GLM-4": "GLM-4",
-    "🔵 Kimi": "Kimi",
-    "🟢 Doubao-Pro": "Doubao-Pro",
-    "🟣 Qwen": "Qwen",
-    "⚫ ChatGPT": "ChatGPT",
+    "DeepSeek": "DeepSeek",
+    "GLM-4V": "GLM-4V",
+    "GLM-4": "GLM-4",
+    "Kimi": "Kimi",
+    "Doubao-Pro": "Doubao-Pro",
+    "Qwen": "Qwen",
+    "ChatGPT": "ChatGPT",
 }
 # ====================== Chat Database Functions ======================
 def handle_model_selector_change():
     selected_label = st.session_state.model_selector
 
-    if selected_label == "🔄 自动模式":
+    if selected_label == t("auto_mode"):
         st.session_state.auto_mode = True
         return
 
@@ -431,18 +436,10 @@ for state_key, default_value in SESSION_DEFAULTS.items():
 if "model_selector" not in st.session_state:
     if st.session_state["auto_mode"]:
         st.session_state["model_selector"] = (
-            "🔄 自动模式"
+            t("auto_mode")
         )
     else:
-        current_icon = MODEL_ICONS.get(
-            st.session_state["selected_model"],
-            "🤖",
-        )
-
-        st.session_state["model_selector"] = (
-            f"{current_icon} "
-            f"{st.session_state['selected_model']}"
-        )
+        st.session_state["model_selector"] = st.session_state["selected_model"]
 
 
 if "current_session_id" not in st.session_state:
@@ -588,27 +585,27 @@ if st.session_state.user:
             st.query_params["chat"] = latest_session_id
 
     except Exception as e:
-        st.warning(f"加载历史会话失败：{e}")
+        st.warning(t("history_load_failed", error=e))
 
 
 # ====================== Login / Register Page ======================
 if not st.session_state.user:
-    st.title("🥭 Mango AI")
-    st.subheader("请登录或注册才能继续使用")
+    render_brand_header()
+    st.subheader(t("app_tagline"))
 
-    tab1, tab2 = st.tabs(["🔑 登录", "📝 注册"])
+    tab1, tab2 = st.tabs([t("login_tab"), t("register_tab")])
 
     with tab1:
-        email = st.text_input("邮箱地址", key="login_email")
-        password = st.text_input("密码", type="password", key="login_pass")
+        email = st.text_input(t("email"), key="login_email")
+        password = st.text_input(t("password"), type="password", key="login_pass")
 
         if st.button(
-            "登录",
+            t("sign_in"),
             use_container_width=True,
             key="login_btn",
         ):
             if not email or not password:
-                st.error("请输入邮箱地址和密码。")
+                st.error(t("missing_credentials"))
 
             else:
                 # 第一层只负责 Supabase 身份认证。
@@ -621,11 +618,11 @@ if not st.session_state.user:
                     )
 
                 except Exception as login_error:
-                    st.error(f"登录失败：{login_error}")
+                    st.error(t("sign_in_failed", error=login_error))
 
                 else:
                     if not res or not res.user:
-                        st.error("登录失败：没有返回有效用户。")
+                        st.error(t("no_valid_user"))
 
                     else:
                         # 认证已经成功。下面的附加任务即使失败，
@@ -671,32 +668,32 @@ if not st.session_state.user:
 
                         # 当前 Streamlit 会话已经登录成功，
                         # 直接进入主页面，不再强制刷新整个浏览器页面。
-                        st.success("登录成功！")
+                        st.success(t("sign_in_success"))
                         st.rerun()
 
             
 
     with tab2:
-        email_reg = st.text_input("注册邮箱", key="reg_email")
-        password_reg = st.text_input("设置密码（至少6位）", type="password", key="reg_pass")
+        email_reg = st.text_input(t("register_email"), key="reg_email")
+        password_reg = st.text_input(t("password_hint"), type="password", key="reg_pass")
 
-        if st.button("注册", use_container_width=True, key="reg_btn"):
+        if st.button(t("sign_up"), use_container_width=True, key="reg_btn"):
             try:
                 supabase.auth.sign_up(
                     {"email": email_reg, "password": password_reg}
                 )
-                st.success("注册成功！请查收邮箱验证邮件")
+                st.success(t("sign_up_success"))
             except Exception as e:
-                st.error(f"注册失败: {e}")
+                st.error(t("sign_up_failed", error=e))
 
     st.stop()
 
 
 # ====================== Main Page ======================
-st.title("🥭 Mango AI")
+render_brand_header(compact=True)
 
-user_email = getattr(st.session_state.user, "email", "用户")
-st.write(f"欢迎回来，**{user_email}**")
+user_email = getattr(st.session_state.user, "email", t("user_fallback"))
+st.write(t("welcome_back", email=user_email))
 
 # ====================== Sidebar ======================
 # 用户从付款页返回 Mango AI 时，自动刷新一次页面，
@@ -745,8 +742,10 @@ premium_checkout_url = get_premium_checkout_url(
 )
 render_sidebar_placeholder()
 with st.sidebar:
+    render_language_selector(cookies)
+
     if st.button(
-        "退出登录",
+        t("sign_out"),
         use_container_width=True,
     ):
         # 阻止本次 rerun 再进行自动恢复。
@@ -798,26 +797,26 @@ with st.sidebar:
         st.rerun()
     # ====================== Plan and Daily Usage ======================
 
-    with st.expander("👤 My Account", expanded=False):
+    with st.expander(t("my_account"), expanded=False):
         account = get_account_data(
             supabase_admin,
             st.session_state.user,
         )
 
-        st.caption("Email")
+        st.caption(t("email_caption"))
         st.write(account["email"])
 
-        st.caption("当前套餐")
+        st.caption(t("current_plan"))
 
         if account["is_premium"]:
-            st.success("💎 Premium")
+            st.success(t("premium"))
         else:
-            st.info("🆓 Free")
-        st.caption("今日使用")
+            st.info(t("free"))
+        st.caption(t("today_usage"))
 
         if account["is_premium"]:
-            st.markdown("💬 **今日聊天：无限**")
-            st.markdown("🖼️ **今日识图：无限**")
+            st.markdown(t("unlimited_chat"))
+            st.markdown(t("unlimited_images"))
 
         else:
             try:
@@ -875,8 +874,8 @@ with st.sidebar:
                     "Sidebar usage load failed: "
                     f"{usage_error}"
                 )
-                st.caption("暂时无法读取今日用量")
-        st.caption("订阅状态")
+                st.caption(t("usage_unavailable"))
+        st.caption(t("subscription_status"))
         st.write(
             account["status"]
             .replace("_", " ")
@@ -888,9 +887,9 @@ with st.sidebar:
             and account["period_end_display"] != "—"
         ):
             if account["status"] == "cancelled":
-                st.caption("Premium 有效期至")
+                st.caption(t("premium_until"))
             else:
-                st.caption("下次续费 / 当前周期结束")
+                st.caption(t("renewal_date"))
 
             st.write(account["period_end_display"])
 
@@ -906,7 +905,7 @@ with st.sidebar:
             subscription_id = account.get("subscription_id")
 
             if not subscription_id:
-                st.warning("暂时无法找到订阅记录，请联系支持。")
+                st.warning(t("subscription_not_found"))
 
             else:
                 portal_url = st.session_state.get(
@@ -935,13 +934,13 @@ with st.sidebar:
 
                 if portal_url:
                     st.link_button(
-                        "💳 管理订阅",
+                        t("manage_subscription"),
                         portal_url,
                         use_container_width=True,
                     )
                 else:
                     st.error(
-                        "暂时无法连接订阅管理中心，请稍后重试。"
+                        t("portal_unavailable")
                     )
 
         else:
@@ -955,7 +954,7 @@ with st.sidebar:
             )
 
             st.link_button(
-                "🚀 升级 Premium",
+                t("upgrade_premium"),
                 premium_checkout_url,
                 use_container_width=True,
     )
@@ -963,9 +962,9 @@ with st.sidebar:
 
 
     st.markdown("---")
-    st.markdown("### 历史会话")
+    st.markdown("### " + t("chat_history"))
 
-    if st.button("✏️ 新建聊天", use_container_width=True):
+    if st.button(t("new_chat"), use_container_width=True):
         st.session_state.page = "chat"
         st.session_state.current_session_id = None
         st.session_state.messages = []
@@ -1008,7 +1007,7 @@ with st.sidebar:
 
     if st.session_state.current_session_id:
         st.markdown("---")
-        if st.button("🗑 删除当前聊天", use_container_width=True):
+        if st.button(t("delete_chat"), use_container_width=True):
             delete_chat(st.session_state.current_session_id)
             remaining_sessions = [s for s in load_sessions(st.session_state.user.id) if s.get("title") != "新对话"]
 
@@ -1056,7 +1055,7 @@ with st.sidebar:
 
  
 # ====================== Clear Current Messages ======================
-if st.button("🗑️ 清空当前对话"):
+if st.button(t("clear_chat")):
     if st.session_state.current_session_id:
         clear_chat_messages(st.session_state.current_session_id)
 
@@ -1074,15 +1073,15 @@ render_chat_messages(
 # ====================== Upload + Chat Input ======================
 
 st.selectbox(
-    "选择模型",
-    MODEL_SELECTOR_OPTIONS,
+    t("model_label"),
+    get_model_selector_options(),
     key="model_selector",
     on_change=handle_model_selector_change,
     label_visibility="collapsed",
 )
 
 submission = st.chat_input(
-    "输入你的问题...",
+    t("ask_anything"),
     accept_file=True,
     file_type=["png", "jpg", "jpeg"],
     max_upload_size=20,
@@ -1106,9 +1105,9 @@ if submission and (prompt or uploaded_file):
     
     # 先检查文字聊天额度
     if not can_use_chat(supabase_admin, user_id, user_plan):
-        st.error("今日免费聊天额度已用完。升级 Premium 可继续无限使用。")
+        st.error(t("free_chat_exhausted"))
         st.link_button(
-            "🚀 升级 Premium",
+            t("upgrade_premium"),
             premium_checkout_url,
             use_container_width=True,
         )
@@ -1120,9 +1119,9 @@ if submission and (prompt or uploaded_file):
         user_id,
         user_plan,
     ):
-        st.error("今日免费图片识别额度已用完。升级 Premium 可继续使用。")
+        st.error(t("free_image_exhausted"))
         st.link_button(
-            "🚀 升级 Premium",
+            t("upgrade_premium"),
             premium_checkout_url,
             use_container_width=True,
         )
@@ -1149,13 +1148,13 @@ if st.session_state.processing:
     if uploaded_file:
         b64 = base64.b64encode(uploaded_file.getvalue()).decode()
         user_content = [
-            {"type": "text", "text": prompt or "请描述这张图片"},
+            {"type": "text", "text": prompt or t("describe_image")},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
         ]
 
     st.session_state.messages.append({"role": "user", "content": user_content})
 
-    display_user_text = prompt if prompt else "📸 图片已上传"
+    display_user_text = prompt if prompt else t("image_uploaded")
     content_to_save = (
         json.dumps(user_content, ensure_ascii=False)
         if isinstance(user_content, list)
@@ -1170,18 +1169,21 @@ if st.session_state.processing:
     update_chat_title_if_needed(st.session_state.current_session_id, prompt)
     
 
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=USER_AVATAR):
         render_user_content(user_content)
 
+    # 联网判断和模型调度都使用本地规则，不额外增加模型请求。
+    needs_web_search = should_search(prompt)
+    route_decision = None
+
     if st.session_state.auto_mode:
-        if uploaded_file:
-            st.session_state.selected_model = "GLM-4V"
-        elif len(prompt or "") > 800:
-            st.session_state.selected_model = "Kimi"
-        elif len(prompt or "") > 300:
-            st.session_state.selected_model = "Doubao-Pro"
-        else:
-            st.session_state.selected_model = "DeepSeek"
+        route_decision = choose_auto_model(
+            prompt,
+            has_image=bool(uploaded_file),
+            needs_search=needs_web_search,
+        )
+        st.session_state.selected_model = route_decision.model
+
     used_model = st.session_state.selected_model
     used_model_icon = MODEL_ICONS.get(
         used_model,
@@ -1189,18 +1191,23 @@ if st.session_state.processing:
     )
     with st.chat_message(
         "assistant",
-        avatar=used_model_icon,
+        avatar=model_avatar(used_model),
     ):
+        # 对用户只显示当前模型名称，不展示自动路由原因。
         st.caption(used_model)
 
+        status_placeholder = st.empty()
         placeholder = st.empty()
         full_response = ""
+
+        if needs_web_search:
+            status_placeholder.info(t("searching"))
 
         try:
             cfg = model_options[st.session_state.selected_model]
 
             if not cfg["key"]:
-                placeholder.error(f"{st.session_state.selected_model} 的 API Key 未配置。")
+                placeholder.error(t("api_key_missing", model=st.session_state.selected_model))
                 st.session_state.processing = False
                 st.stop()
 
@@ -1222,16 +1229,27 @@ if st.session_state.processing:
                 "stream": True,
             }
 
+            selected_max_tokens = (
+                route_decision.max_tokens
+                if route_decision is not None
+                else 1200
+            )
+            selected_temperature = (
+                route_decision.temperature
+                if route_decision is not None
+                else 0.7
+            )
+
             if st.session_state.selected_model == "ChatGPT":
-                request_params["max_completion_tokens"] = 1200
+                request_params["max_completion_tokens"] = selected_max_tokens
             else:
-                request_params["temperature"] = 0.7
-                request_params["max_tokens"] = 1200
+                request_params["temperature"] = selected_temperature
+                request_params["max_tokens"] = selected_max_tokens
 
             # ===== 自动判断并执行联网搜索 =====
             print(f"🧠 判断是否联网：{prompt}")
 
-            if should_search(prompt):
+            if needs_web_search:
                 print("🌐 需要联网搜索")
 
                 search_queries = plan_search(prompt)
@@ -1334,18 +1352,25 @@ if st.session_state.processing:
                     web_instruction,
                     *api_messages,
                 ]
-              
+
 
             else:
                 print("📚 不需要联网")
 
             stream = client.chat.completions.create(**request_params)
 
+            first_token_received = False
+
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
+                    if not first_token_received:
+                        first_token_received = True
+                        status_placeholder.empty()
+
                     full_response += chunk.choices[0].delta.content
                     placeholder.markdown(full_response + "▌")
 
+            status_placeholder.empty()
             placeholder.markdown(full_response)
 
 
