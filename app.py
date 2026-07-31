@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 import streamlit as st
 import streamlit.components.v1 as components
-from openai import OpenAI
 from PIL import Image
 from services.cookie_service import (
     create_cookie_manager,
@@ -18,15 +17,9 @@ from services.cookie_service import (
 from supabase import create_client
 
 from config import (
-    DASHSCOPE_API_KEY,
-    DEEPSEEK_API_KEY,
-    DOUBAO_API_KEY,
-    KIMI_API_KEY,
     SUPABASE_KEY,
     SUPABASE_SERVICE_KEY,
     SUPABASE_URL,
-    ZHIPU_API_KEY,
-    OPENAI_API_KEY,
     AUTO_NEW_CHAT_AFTER_MINUTES,
 )
 from services.account_service import get_account_data
@@ -68,6 +61,15 @@ from services.date_service import (
 from services.search_planner import plan_search
 from services.search_evaluator import evaluate_search_results
 from services.model_router import choose_auto_model
+from services.model_config import (
+    MODEL_CONFIGS,
+    get_model_config,
+    get_model_names,
+)
+from services.provider_service import (
+    prepare_messages,
+    stream_model_response,
+)
 
 
 from ui.chat_messages import render_chat_messages, render_user_content
@@ -239,67 +241,22 @@ if not device_id:
     st.session_state["fallback_device_id"] = device_id
 
 # ====================== Model Config ======================
-model_options = {
-    "DeepSeek": {
-        "base_url": "https://api.deepseek.com",
-        "model": "deepseek-v4-flash",
-        "key": DEEPSEEK_API_KEY,
-    },
-    "GLM-4V": {
-        "base_url": "https://open.bigmodel.cn/api/paas/v4/",
-        "model": "glm-4v-plus",
-        "key": ZHIPU_API_KEY,
-    },
-    "GLM-4": {
-        "base_url": "https://open.bigmodel.cn/api/paas/v4/",
-        "model": "glm-4-plus",
-        "key": ZHIPU_API_KEY,
-    },
-    "Kimi": {
-        "base_url": "https://api.moonshot.cn/v1",
-        "model": "moonshot-v1-8k",
-        "key": KIMI_API_KEY,
-    },
-    "Doubao-Pro": {
-        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-        "model": "ep-20260415022601-jm5b7",
-        "key": DOUBAO_API_KEY,
-    },
-    "Qwen": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "model": "qwen-plus",
-        "key": DASHSCOPE_API_KEY,
-    },
-    "ChatGPT": {
-        "base_url": "https://api.openai.com/v1",
-        "model": "gpt-5.4-mini",
-        "key": OPENAI_API_KEY,
-    }
-}
+# Provider URLs, model IDs and API keys are centralized in
+# services/model_config.py. Provider-specific request logic lives in
+# services/provider_service.py.
+model_options = MODEL_CONFIGS
+MODEL_ICONS = {name: model_avatar(name) for name in get_model_names()}
 
-MODEL_ICONS = {name: model_avatar(name) for name in model_options}
 
 def get_model_selector_options():
-    return [
-        t("auto_mode"),
-        "DeepSeek",
-        "GLM-4V",
-        "GLM-4",
-        "Kimi",
-        "Doubao-Pro",
-        "Qwen",
-        "ChatGPT",
-    ]
+    return [t("auto_mode"), *get_model_names()]
+
 
 MODEL_LABEL_TO_NAME = {
-    "DeepSeek": "DeepSeek",
-    "GLM-4V": "GLM-4V",
-    "GLM-4": "GLM-4",
-    "Kimi": "Kimi",
-    "Doubao-Pro": "Doubao-Pro",
-    "Qwen": "Qwen",
-    "ChatGPT": "ChatGPT",
+    model_name: model_name
+    for model_name in get_model_names()
 }
+
 # ====================== Chat Database Functions ======================
 def handle_model_selector_change():
     selected_label = st.session_state.model_selector
@@ -1214,30 +1171,20 @@ if st.session_state.processing:
             status_placeholder.info(t("searching"))
 
         try:
-            cfg = model_options[st.session_state.selected_model]
+            selected_model_name = st.session_state.selected_model
+            selected_config = get_model_config(selected_model_name)
 
-            if not cfg["key"]:
-                placeholder.error(t("api_key_missing", model=st.session_state.selected_model))
+            if not selected_config.api_key:
+                placeholder.error(t("api_key_missing", model=selected_model_name))
                 st.session_state.processing = False
                 st.stop()
 
-            client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
-
-            # 只发送最近对话，显著减少首字延迟和 token 成本。
-            recent_messages = st.session_state.messages[-12:]
-            if st.session_state.selected_model == "GLM-4V":
-                api_messages = recent_messages
-            else:
-                api_messages = [
-                    m for m in recent_messages
-                    if isinstance(m.get("content"), str)
-                ]
-
-            request_params = {
-                "model": cfg["model"],
-                "messages": api_messages,
-                "stream": True,
-            }
+            # The unified provider layer handles message-format differences.
+            api_messages = prepare_messages(
+                selected_model_name,
+                st.session_state.messages,
+                history_limit=12,
+            )
 
             selected_max_tokens = (
                 route_decision.max_tokens
@@ -1249,12 +1196,6 @@ if st.session_state.processing:
                 if route_decision is not None
                 else 0.7
             )
-
-            if st.session_state.selected_model == "ChatGPT":
-                request_params["max_completion_tokens"] = selected_max_tokens
-            else:
-                request_params["temperature"] = selected_temperature
-                request_params["max_tokens"] = selected_max_tokens
 
             # ===== 自动判断并执行联网搜索 =====
             print(f"🧠 判断是否联网：{prompt}")
@@ -1358,7 +1299,7 @@ if st.session_state.processing:
                     ),
                 }
 
-                request_params["messages"] = [
+                api_messages = [
                     web_instruction,
                     *api_messages,
                 ]
@@ -1367,18 +1308,22 @@ if st.session_state.processing:
             else:
                 print("📚 不需要联网")
 
-            stream = client.chat.completions.create(**request_params)
+            stream = stream_model_response(
+                model_name=selected_model_name,
+                messages=api_messages,
+                max_tokens=selected_max_tokens,
+                temperature=selected_temperature,
+            )
 
             first_token_received = False
 
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    if not first_token_received:
-                        first_token_received = True
-                        status_placeholder.empty()
+            for text_chunk in stream:
+                if not first_token_received:
+                    first_token_received = True
+                    status_placeholder.empty()
 
-                    full_response += chunk.choices[0].delta.content
-                    placeholder.markdown(full_response + "▌")
+                full_response += text_chunk
+                placeholder.markdown(full_response + "▌")
 
             status_placeholder.empty()
             placeholder.markdown(full_response)

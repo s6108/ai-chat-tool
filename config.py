@@ -37,6 +37,7 @@ KIMI_API_KEY = get_key("KIMI_API_KEY")
 DOUBAO_API_KEY = get_key("DOUBAO_API_KEY")
 DASHSCOPE_API_KEY = get_key("DASHSCOPE_API_KEY")
 OPENAI_API_KEY = get_key("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ================= Tavily =================
 
