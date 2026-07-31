@@ -4,6 +4,40 @@ import streamlit as st
 
 from ui.brand_assets import USER_AVATAR, model_avatar
 
+import re
+
+
+def clean_repeated_speaker_label(
+    content: str,
+    model_name: str,
+) -> str:
+    """只删除回答开头一个或多个重复的模型发言标签。"""
+    if not content or not model_name:
+        return content
+
+    escaped_name = re.escape(model_name)
+
+    pattern = (
+        rf"^\s*(?:"
+        rf"[【\[]\s*{escaped_name}\s*的?\s*(?:发言|观点|回答)\s*[】\]]"
+        rf"|{escaped_name}\s*的?\s*(?:发言|观点|回答)\s*[:：]?"
+        rf")\s*"
+    )
+
+    cleaned = content
+
+    # 连续删除多个重复标签
+    while re.match(pattern, cleaned, flags=re.IGNORECASE):
+        cleaned = re.sub(
+            pattern,
+            "",
+            cleaned,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
+    return cleaned.lstrip()
+
 
 def render_user_content(content):
     if isinstance(content, str):

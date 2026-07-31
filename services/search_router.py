@@ -2,9 +2,9 @@ import re
 
 REALTIME_KEYWORDS = (
     "天气", "气温", "温度", "降雨", "下雨", "下雪", "湿度", "风速", "空气质量",
-    "最新", "今天", "今日", "现在", "当前", "实时", "近期", "刚刚",
+    "最新", "今天", "今日","明天","明日", "现在", "当前", "实时", "近期", "刚刚",
     "新闻", "股价", "股票价格", "汇率", "比分", "赛程", "价格", "现任", "政策",
-    "weather", "temperature", "latest", "today", "current", "live", "news",
+    "weather", "temperature", "latest", "today","tomorrow", "current", "live", "news",
     "stock price", "exchange rate", "score", "schedule", "price",
 )
 

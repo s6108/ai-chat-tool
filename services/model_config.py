@@ -10,6 +10,8 @@ from config import (
     KIMI_API_KEY,
     OPENAI_API_KEY,
     ZHIPU_API_KEY,
+    XAI_API_KEY,
+    ANTHROPIC_API_KEY,
 )
 
 
@@ -70,7 +72,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
     ),
     "Gemini": ModelConfig(
         name="Gemini",
-        provider="google",
+        provider="gemini",
         base_url=(
             "https://generativelanguage.googleapis.com/"
             "v1beta/openai/"
@@ -85,6 +87,20 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         model_id="gpt-5.4-mini",
         api_key=OPENAI_API_KEY,
         uses_max_completion_tokens=True,
+    ),
+    "Grok": ModelConfig(
+        name="Grok",
+        provider="xai",
+        base_url="https://api.x.ai/v1",
+        model_id="grok-4.5",
+        api_key=XAI_API_KEY,
+    ),
+    "Claude": ModelConfig(
+        name="Claude",
+        provider="anthropic",
+        base_url="https://api.anthropic.com",
+        model_id="claude-sonnet-5",
+        api_key=ANTHROPIC_API_KEY,
     ),
     
 }

@@ -1,11 +1,21 @@
-"""Model provider implementations for Mango AI."""
+"""Provider adapters used by Mango AI's unified model layer."""
 
 from services.providers.base_provider import BaseProvider
-from services.providers.openai_compatible_provider import OpenAICompatibleProvider
-from services.providers.provider_factory import ProviderFactory
+from services.providers.deepseek_provider import DeepSeekProvider
+from services.providers.doubao_provider import DoubaoProvider
+from services.providers.glm_provider import GLMProvider
+from services.providers.kimi_provider import KimiProvider
+from services.providers.openai_provider import OpenAIProvider
+from services.providers.qwen_provider import QwenProvider
+from services.providers.gemini_provider import GeminiProvider
 
 __all__ = [
     "BaseProvider",
-    "OpenAICompatibleProvider",
-    "ProviderFactory",
+    "DeepSeekProvider",
+    "DoubaoProvider",
+    "GLMProvider",
+    "KimiProvider",
+    "OpenAIProvider",
+    "QwenProvider",
+    "GeminiProvider"
 ]
