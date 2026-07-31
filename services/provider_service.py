@@ -3,9 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from openai import OpenAI
-
 from services.model_config import get_model_config
+from services.providers.provider_factory import ProviderFactory
 
 
 class MissingModelApiKeyError(RuntimeError):
@@ -39,37 +38,16 @@ def stream_model_response(
     max_tokens: int = 1200,
     temperature: float = 0.7,
 ) -> Iterator[str]:
-    """Stream text from any currently configured OpenAI-compatible provider."""
+    """Stream text through the provider adapter selected for the model."""
     config = get_model_config(model_name)
 
     if not config.api_key:
         raise MissingModelApiKeyError(model_name)
 
-    client = OpenAI(
-        base_url=config.base_url,
-        api_key=config.api_key,
-        timeout=45.0,
-        max_retries=1,
+    provider = ProviderFactory.create(config)
+
+    yield from provider.stream_chat(
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
     )
-
-    request_params: dict[str, Any] = {
-        "model": config.model_id,
-        "messages": messages,
-        "stream": True,
-    }
-
-    if config.uses_max_completion_tokens:
-        request_params["max_completion_tokens"] = max_tokens
-    else:
-        request_params["max_tokens"] = max_tokens
-        request_params["temperature"] = temperature
-
-    stream = client.chat.completions.create(**request_params)
-
-    for chunk in stream:
-        if not chunk.choices:
-            continue
-
-        text = chunk.choices[0].delta.content
-        if text:
-            yield text
