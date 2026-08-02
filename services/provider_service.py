@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 from collections.abc import Iterator
 from typing import Any
 
@@ -10,24 +10,61 @@ from services.providers.provider_factory import ProviderFactory
 class MissingModelApiKeyError(RuntimeError):
     """Raised when the selected model has no configured API key."""
 
+def _is_roundtable_context(
+    model_name: str,
+    messages: list[dict[str, Any]],
+) -> bool:
+    """历史中出现其他模型时，才进入多模型讨论模式。"""
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
 
-def _build_identity_prompt(model_name: str) -> dict[str, str]:
+        speaker = (
+            message.get("model_name")
+            or message.get("model")
+        )
+
+        if speaker and speaker != model_name:
+            return True
+
+    return False
+
+
+def _build_identity_prompt(
+    model_name: str,
+    *,
+    roundtable_mode: bool,
+) -> dict[str, str]:
+    if not roundtable_mode:
+        return {
+            "role": "system",
+            "content": (
+                f"你是 {model_name}。"
+                f"你必须始终明确自己的身份是 {model_name}，不得冒充其他模型。"
+                "请直接、自然地回答用户当前问题。"
+                "页面已经显示你的模型名称，"
+                "不要在回答开头输出“某某的发言”“某某的观点”等身份标签。"
+                "不要无故提及多模型讨论、圆桌会议或邀请其他模型参与。"
+                "使用与用户最新问题相同的语言回答。"
+            ),
+        }
+
     return {
         "role": "system",
         "content": (
-            f"你是 {model_name}。你正在参与由用户主导的 Mango AI 多模型讨论。\n"
-            "请始终遵守以下规则：\n"
-            f"1. 你必须明确知道自己的身份是 {model_name}，不得冒充其他模型。\n"
-            "2.  不要在回答开头写“【某某的发言】”，\n"
-            "3.  页面已经显示你的身份，请直接开始发表观点。\n"
-            "4.  你可以阅读当前主题中此前各模型的发言。\n"
-            "5.  引用或回应其他模型时，必须明确写出模型名称。\n"
-            "6.  不要使用“上面说的”“他们认为”“之前的模型”等模糊表达。\n"
-            "7.  如果不同意，应明确说明：‘我不同意 Gemini 关于……的观点，因为……’。\n"
-            "8.  如果同意，应明确说明：‘我同意 Claude 关于……的判断，并补充……’。\n"
-            "9.  不要为了制造分歧而刻意反驳；有不同意见时应清楚说明依据。\n"
-            "10. 优先回答用户本次提出的问题，不要擅自替所有模型作最终总结。\n"
-            "11. 使用与用户最新问题相同的语言回答。"
+            f"你是 {model_name}，正在参与由用户主导的 Mango AI 多模型讨论。\n"
+            "请遵守以下规则：\n"
+            f"1. 明确自己的身份是 {model_name}，不得冒充其他模型。\n"
+            "2. 页面已经显示你的名称，请直接发表观点，"
+            "不要在回答开头写“某某的发言”或“某某的观点”。\n"
+            "3. 你可以阅读当前主题中此前各模型的发言。\n"
+            "4. 引用或回应其他模型时，必须明确写出模型名称。\n"
+            "5. 不要使用“上面说的”“他们认为”“之前的模型”等模糊表达。\n"
+            "6. 如果不同意，应明确指出不同意哪个模型的哪项观点及理由。\n"
+            "7. 如果同意，应明确指出同意哪个模型，并补充自己的观点。\n"
+            "8. 不要为了制造分歧而刻意反驳。\n"
+            "9. 优先回答用户本次提出的问题，不要擅自替所有模型总结。\n"
+            "10. 使用与用户最新问题相同的语言回答。"
         ),
     }
 
@@ -95,10 +132,17 @@ def prepare_messages(
     """Build model-ready history with explicit speaker identity labels."""
     config = get_model_config(model_name)
     recent_messages = messages[-history_limit:]
-    prepared_messages: list[dict[str, Any]] = [
-        _build_identity_prompt(model_name)
-    ]
+    roundtable_mode = _is_roundtable_context(
+        model_name,
+        recent_messages,
+    )
 
+    prepared_messages: list[dict[str, Any]] = [
+        _build_identity_prompt(
+            model_name,
+            roundtable_mode=roundtable_mode,
+        )
+    ]
     for message in recent_messages:
         role = message.get("role")
 
@@ -128,6 +172,57 @@ def prepare_messages(
 
     return prepared_messages
 
+def _clean_speaker_label_stream(
+    stream: Iterator[str],
+    model_name: str,
+) -> Iterator[str]:
+    """删除回答开头一个或多个重复的模型发言标签。"""
+    escaped_name = re.escape(model_name)
+
+    pattern = re.compile(
+        rf"^\s*(?:"
+        rf"[【\[]\s*{escaped_name}\s*的?\s*(?:发言|發言|观点|觀點|回答)"
+        rf"\s*[】\]]\s*[:：\-—]?"
+        rf"|"
+        rf"{escaped_name}\s*的?\s*(?:发言|發言|观点|觀點|回答)"
+        rf"\s*[:：\-—]?"
+        rf")\s*",
+        flags=re.IGNORECASE,
+    )
+
+    buffer = ""
+    checked = False
+
+    for chunk in stream:
+        if checked:
+            yield chunk
+            continue
+
+        buffer += chunk
+
+        # 等到标签完整出现，避免流式内容被拆成多个 chunk
+        if len(buffer) < 100 and "\n" not in buffer:
+            continue
+
+        previous = None
+        while previous != buffer:
+            previous = buffer
+            buffer = pattern.sub("", buffer, count=1)
+
+        checked = True
+
+        if buffer:
+            yield buffer
+
+    if not checked and buffer:
+        previous = None
+        while previous != buffer:
+            previous = buffer
+            buffer = pattern.sub("", buffer, count=1)
+
+        if buffer:
+            yield buffer
+
 
 def stream_model_response(
     *,
@@ -144,8 +239,13 @@ def stream_model_response(
 
     provider = ProviderFactory.create(config)
 
-    yield from provider.stream_chat(
+    raw_stream = provider.stream_chat(
         messages=messages,
         max_tokens=max_tokens,
         temperature=temperature,
+    )
+
+    yield from _clean_speaker_label_stream(
+        raw_stream,
+        model_name,
     )
