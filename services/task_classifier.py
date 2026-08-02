@@ -56,7 +56,9 @@ CODE_KEYWORDS = (
 
 COMPLEX_CODE_KEYWORDS = (
     "完整项目", "大型项目", "系统设计", "复杂架构", "跨文件", "重构整个",
-    "代码审查", "安全审计", "性能瓶颈", "并发", "异步", "生产环境",
+    "代码审查", "安全审计", "性能瓶颈", "并发", "异步", "生产环境","大型",
+    "大型项目","项目重构","系统架构","微服务架构","架构设计","整体架构","代码重构",
+    "跨模块","跨文件","生产系统",
     "complex", "architecture", "code review", "security audit",
     "concurrency", "production", "refactor the whole",
 )
@@ -100,7 +102,8 @@ CREATIVE_LONG_WRITING_KEYWORDS = (
 LONG_CONTEXT_KEYWORDS = (
     "全文", "整篇", "完整文档", "逐段", "长文", "长文本", "合同", "论文",
     "会议记录", "大量内容", "full document", "long document", "paper",
-    "contract", "transcript",
+    "contract", "transcript","pdf","PDF","文档","全文","整份","完整文件",
+    "报告","合同","论文",
 )
 
 FAST_TASK_KEYWORDS = (
@@ -203,7 +206,7 @@ def classify_task(
 
     if _contains_any(lowered, CODE_KEYWORDS):
         complex_code = (
-            length > 1600
+            length > 800
             or _contains_any(lowered, COMPLEX_CODE_KEYWORDS)
         )
         return TaskInfo(

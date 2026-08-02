@@ -46,6 +46,8 @@ def _build_identity_prompt(
                 "不要在回答开头输出“某某的发言”“某某的观点”等身份标签。"
                 "不要无故提及多模型讨论、圆桌会议或邀请其他模型参与。"
                 "使用与用户最新问题相同的语言回答。"
+                "历史记录中的“【某某的发言】”只是发言者标识。"
+                "不要复制、复述或输出这些标签，请直接回答用户。"
             ),
         }
 
@@ -65,6 +67,8 @@ def _build_identity_prompt(
             "8. 不要为了制造分歧而刻意反驳。\n"
             "9. 优先回答用户本次提出的问题，不要擅自替所有模型总结。\n"
             "10. 使用与用户最新问题相同的语言回答。"
+            "11. 历史记录中的“【某某的发言】”仅用于帮助你识别发言者。"
+            "12. 不得把任何历史模型的身份标签复制到自己回答的开头。"
         ),
     }
 
@@ -176,17 +180,30 @@ def _clean_speaker_label_stream(
     stream: Iterator[str],
     model_name: str,
 ) -> Iterator[str]:
-    """删除回答开头一个或多个重复的模型发言标签。"""
-    escaped_name = re.escape(model_name)
+    """
+    删除回答开头一个或多个模型身份标签。
+
+    不管标签写的是当前模型还是其他模型，都会删除，例如：
+    【Kimi 的发言】
+    【Qwen 的发言】
+    【Claude 的观点】
+    Grok 的回答：
+    """
+    del model_name  # 保留参数接口，但清理时不限定模型名称
 
     pattern = re.compile(
-        rf"^\s*(?:"
-        rf"[【\[]\s*{escaped_name}\s*的?\s*(?:发言|發言|观点|觀點|回答)"
-        rf"\s*[】\]]\s*[:：\-—]?"
-        rf"|"
-        rf"{escaped_name}\s*的?\s*(?:发言|發言|观点|觀點|回答)"
-        rf"\s*[:：\-—]?"
-        rf")\s*",
+        r"^\s*(?:"
+        r"[【\[]\s*"
+        r"[A-Za-z0-9_.+\-\u4e00-\u9fff]+"
+        r"\s*的?\s*"
+        r"(?:发言|發言|观点|觀點|回答)"
+        r"\s*[】\]]\s*[:：\-—]?"
+        r"|"
+        r"[A-Za-z0-9_.+\-\u4e00-\u9fff]+"
+        r"\s*的?\s*"
+        r"(?:发言|發言|观点|觀點|回答)"
+        r"\s*[:：\-—]?"
+        r")\s*",
         flags=re.IGNORECASE,
     )
 
@@ -200,11 +217,13 @@ def _clean_speaker_label_stream(
 
         buffer += chunk
 
-        # 等到标签完整出现，避免流式内容被拆成多个 chunk
-        if len(buffer) < 100 and "\n" not in buffer:
+        # 防止流式输出把标签拆成多个 chunk
+        if len(buffer) < 120 and "\n" not in buffer:
             continue
 
         previous = None
+
+        # 连续清除多个开头标签
         while previous != buffer:
             previous = buffer
             buffer = pattern.sub("", buffer, count=1)
@@ -216,6 +235,7 @@ def _clean_speaker_label_stream(
 
     if not checked and buffer:
         previous = None
+
         while previous != buffer:
             previous = buffer
             buffer = pattern.sub("", buffer, count=1)
