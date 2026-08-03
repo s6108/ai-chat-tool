@@ -33,6 +33,7 @@ from services.history_service import (
     load_sessions,
     update_chat_title_if_needed,
 )
+from services.task_classifier import classify_task
 from services.subscription_service import get_customer_portal_url
 from services.usage_service import (
     FREE_CHAT_LIMIT,
@@ -50,6 +51,9 @@ from services.remember_service import (
     save_last_activity,
     load_last_activity,
     is_chat_activity_expired,
+)
+from services.search.search_router import (
+    get_search_provider,
 )
 
 from services.search_router import should_search
@@ -1166,12 +1170,46 @@ if st.session_state.processing:
         status_placeholder = st.empty()
         placeholder = st.empty()
         full_response = ""
+        selected_model_name = st.session_state.selected_model
+        
+
+        task_info = classify_task(
+            prompt,
+            has_image=bool(uploaded_file),
+        )
+
+        search_provider = get_search_provider(
+            selected_model_name,
+            task_info.task_type,
+        )
+        
 
         if needs_web_search:
             status_placeholder.info(t("searching"))
 
         try:
-            selected_model_name = st.session_state.selected_model
+            
+            if (
+                selected_model_name == "Grok"
+                and task_info.task_type == "news"
+                and search_provider is not None
+            ):
+                full_response = search_provider.search(
+                    prompt
+                )
+
+                placeholder.markdown(full_response)
+
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": full_response,
+                        "model_name": selected_model_name,
+                    }
+                )
+                
+                st.session_state.processing = False
+                st.stop()
             selected_config = get_model_config(selected_model_name)
 
             if not selected_config.api_key:
@@ -1200,8 +1238,30 @@ if st.session_state.processing:
             # ===== 自动判断并执行联网搜索 =====
             print(f"🧠 判断是否联网：{prompt}")
 
-            if needs_web_search:
+            if (
+                needs_web_search
+                and search_provider is not None
+            ):
+                
                 print("🌐 需要联网搜索")
+                if type(search_provider).__name__ == "GrokSearchProvider":
+
+                    
+
+                    full_response = search_provider.search(prompt)
+
+                    placeholder.markdown(full_response)
+
+                    st.session_state.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": full_response,
+                            "model_name": selected_model_name,
+                        }
+                    )
+
+                    st.session_state.processing = False
+                    st.stop()
 
                 search_queries = plan_search(prompt)
 

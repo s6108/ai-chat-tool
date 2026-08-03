@@ -16,12 +16,63 @@ class TaskInfo:
 
 NEWS_KEYWORDS = (
     "新闻", "时事", "国际局势", "国际新闻", "突发", "最新消息",
-    "政治", "政府", "总统", "首相", "选举", "议会", "外交",
+    "政治", "选举", "议会", "外交",
     "战争", "冲突", "军事", "制裁", "地缘政治", "社会事件",
     "白宫", "国会", "联合国", "欧盟", "北约",
-    "news", "breaking news", "current affairs", "politics", "government",
-    "president", "prime minister", "election", "parliament", "diplomacy",
+    "news", "breaking news", "current affairs", "politics",
+    "prime minister", "election", "parliament", "diplomacy",
     "war", "conflict", "military", "sanction", "geopolitics",
+)
+
+REALTIME_INDICATORS = (
+    "今天",
+    "今日",
+    "刚刚",
+    "最新",
+    "近期",
+    "最近",
+    "目前",
+    "现在",
+    "当前",
+    "实时",
+
+    "today",
+    "latest",
+    "breaking",
+    "breaking news",
+    "just now",
+    "right now",
+    "currently",
+    "current",
+    "recent",
+    "recently",
+    "update",
+    "updates",
+    "latest update",
+    "latest news",
+    "news today",
+    "what happened",
+    "what's happening",
+    "live",
+    "live update",
+    "real time",
+    "realtime",
+    "as of now",
+)
+
+NEWS_ACTION_KEYWORDS = (
+    "news",
+    "report",
+    "reported",
+    "announced",
+    "statement",
+    "speech",
+    "meeting",
+    "decision",
+    "policy",
+    "development",
+    "situation",
+    "crisis",
 )
 
 UTILITY_REALTIME_KEYWORDS = (
