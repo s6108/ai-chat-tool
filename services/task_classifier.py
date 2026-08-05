@@ -21,8 +21,11 @@ NEWS_KEYWORDS = (
     "白宫", "国会", "联合国", "欧盟", "北约",
     "news", "breaking news", "current affairs", "politics",
     "prime minister", "election", "parliament", "diplomacy",
-    "war", "conflict", "military", "sanction", "geopolitics",
-)
+    "war", "conflict", "military", "sanction", "geopolitics","新聞",
+    "國際新聞",
+    "戰爭",
+    "衝突",
+    )
 
 REALTIME_INDICATORS = (
     "今天",
@@ -35,6 +38,8 @@ REALTIME_INDICATORS = (
     "现在",
     "当前",
     "实时",
+    "當前",
+    "現在",
 
     "today",
     "latest",
@@ -211,7 +216,23 @@ def classify_task(
             language=language,
             reason="天气、股票、汇率或其他实时数据",
         )
+    print("DEBUG TEXT:", repr(lowered))
 
+    print(
+        "DEBUG NEWS HIT:",
+        [
+            k for k in NEWS_KEYWORDS
+            if k in lowered
+        ]
+    )
+
+    print(
+        "DEBUG REALTIME HIT:",
+        [
+            k for k in GENERAL_REALTIME_KEYWORDS
+            if k in lowered
+        ]
+    )
     if _contains_any(lowered, NEWS_KEYWORDS):
         return TaskInfo(
             task_type="news",
@@ -222,7 +243,10 @@ def classify_task(
             reason="新闻、政治或国际时事",
         )
 
-    if _contains_any(lowered, GENERAL_REALTIME_KEYWORDS):
+    if (
+        _contains_any(lowered, GENERAL_REALTIME_KEYWORDS)
+        and not _contains_any(lowered, NEWS_KEYWORDS)
+    ):
         return TaskInfo(
             task_type="general_realtime",
             need_search=True,

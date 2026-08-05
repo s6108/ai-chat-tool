@@ -1145,6 +1145,23 @@ if st.session_state.processing:
 
     # 联网判断和模型调度都使用本地规则，不额外增加模型请求。
     needs_web_search = should_search(prompt)
+
+    task_debug = classify_task(
+        prompt,
+        has_image=bool(uploaded_file),
+    )
+
+    print(
+        "DEBUG CLASSIFY:",
+        task_debug.task_type,
+        task_debug.need_search,
+        task_debug.reason,
+    )
+
+    print(
+        "DEBUG SHOULD_SEARCH:",
+        needs_web_search,
+    )
     route_decision = None
 
     if st.session_state.auto_mode:
@@ -1249,6 +1266,11 @@ if st.session_state.processing:
                     
 
                     full_response = search_provider.search(prompt)
+                    if not full_response:
+                        placeholder.error(
+                            "联网搜索暂时不可用，请稍后重试。"
+                        )
+                        st.stop()
 
                     placeholder.markdown(full_response)
 
