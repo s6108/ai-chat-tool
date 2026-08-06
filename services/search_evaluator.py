@@ -20,3 +20,45 @@ def evaluate_search_results(user_prompt: str, results: list[dict]) -> dict[str, 
         "reason": "已获得可用搜索资料" if enough else "可用搜索结果不足",
         "missing": "" if enough else "需要更直接的来源",
     }
+
+def evaluate_news_results(
+    results: list[dict],
+) -> dict:
+
+    if len(results) < 3:
+        return {
+            "enough": False,
+            "reason": "新闻结果数量不足",
+            "missing": "需要至少3条新闻来源",
+        }
+
+
+    domains = set()
+
+    for result in results:
+
+        url = result.get("url", "")
+
+        if url:
+            domain = (
+                url.split("/")[2]
+                if "//" in url
+                else ""
+            )
+
+            domains.add(domain)
+
+
+    if len(domains) < 2:
+        return {
+            "enough": False,
+            "reason": "新闻来源不足",
+            "missing": "需要多个独立来源",
+        }
+
+
+    return {
+        "enough": True,
+        "reason": "新闻来源数量满足要求",
+        "missing": "",
+    }

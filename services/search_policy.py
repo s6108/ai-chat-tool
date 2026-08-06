@@ -21,65 +21,27 @@ def decide_search_strategy(
     """
     决定搜索来源。
 
-    当前只负责决策，不执行搜索。
+    第一阶段：
+    所有需要联网的任务统一使用 Mango Search。
+    模型只负责分析和生成最终回答。
     """
 
-    capability = get_search_capability(model_name)
-    if capability is None:
-        return SearchDecision(
-            search_type="mango",
-            provider="tavily",
-            reason="未知模型，默认使用 Mango Search",
-        )
-
-
-    # 新闻类优先国际模型原生搜索
-    if task_type == "news":
-
-        if capability.search_type == "native":
-
-            return SearchDecision(
-                search_type="native",
-                provider=capability.provider,
-                reason=(
-                    "新闻和国际时事优先使用模型原生搜索"
-                ),
-            )
-
-
-    # 普通实时数据继续 Mango Search
-    if task_type in (
+    searchable_task_types = {
+        "news",
         "utility_realtime",
         "general_realtime",
-    ):
+        "research",
+    }
 
+    if task_type in searchable_task_types:
         return SearchDecision(
             search_type="mango",
             provider="mango",
-            reason=(
-                "天气、股票、汇率等数据使用 Mango Search "
-                "降低成本"
-            ),
+            reason="第一阶段所有联网任务统一使用 Mango Search",
         )
 
-
-    # 研究类
-    if task_type == "research":
-
-        if capability.search_type == "native":
-
-            return SearchDecision(
-                search_type="native",
-                provider=capability.provider,
-                reason=(
-                    "研究类任务优先使用原生搜索"
-                ),
-            )
-
-
-    # 默认
     return SearchDecision(
         search_type="none",
         provider="none",
-        reason="当前任务不需要搜索",
+        reason="当前任务不需要联网搜索",
     )

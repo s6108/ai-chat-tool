@@ -12,10 +12,21 @@ LANGUAGE_OPTIONS = {"English": "en", "简体中文": "zh-CN"}
 
 def _browser_language() -> str:
     try:
-        locale = str(st.context.locale or "").lower()
+        lang = st.context.headers.get(
+            "Accept-Language",
+            ""
+        ).lower()
+
+        if "zh" in lang:
+            return "zh-CN"
+
+        if "en" in lang:
+            return "en"
+
     except Exception:
-        locale = ""
-    return "zh-CN" if locale.startswith("zh") else "en"
+        pass
+
+    return "en"
 
 
 def initialize_language(cookies: Any = None) -> str:

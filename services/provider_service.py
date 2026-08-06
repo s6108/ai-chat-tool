@@ -160,6 +160,12 @@ def prepare_messages(
             continue
 
         if config.supports_vision:
+            print(
+                "DEBUG VISION:",
+                model_name,
+                config.supports_vision,
+                type(message.get("content"))
+            )
             content = message.get("content")
             if isinstance(content, (str, list)):
                 prepared_messages.append(

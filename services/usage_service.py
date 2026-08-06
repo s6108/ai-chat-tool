@@ -1,8 +1,18 @@
 from datetime import date
 
 
-FREE_CHAT_LIMIT = 30
-FREE_IMAGE_LIMIT = 5
+FREE_DAILY_CHAT_LIMIT = 8
+FREE_DAILY_IMAGE_LIMIT = 3
+
+PREMIUM_DAILY_CHAT_LIMIT = 100
+PREMIUM_DAILY_IMAGE_LIMIT = 25
+
+# backward compatibility
+FREE_CHAT_LIMIT = FREE_DAILY_CHAT_LIMIT
+FREE_IMAGE_LIMIT = FREE_DAILY_IMAGE_LIMIT
+
+PREMIUM_CHAT_LIMIT = PREMIUM_DAILY_CHAT_LIMIT
+PREMIUM_IMAGE_LIMIT = PREMIUM_DAILY_IMAGE_LIMIT
 
 
 def get_today_usage(supabase_admin, user_id: str) -> dict:
@@ -62,16 +72,30 @@ def increase_image_usage(supabase_admin, user_id: str) -> int:
 
 
 def can_use_chat(supabase_admin, user_id: str, plan: str = "free") -> bool:
-    if plan == "premium":
-        return True
-
     usage = get_today_usage(supabase_admin, user_id)
-    return int(usage.get("chat_count", 0)) < FREE_CHAT_LIMIT
+
+    if plan == "premium":
+        return (
+            int(usage.get("chat_count", 0))
+            < PREMIUM_DAILY_CHAT_LIMIT
+        )
+
+    return (
+        int(usage.get("chat_count", 0))
+        < FREE_DAILY_CHAT_LIMIT
+    )
 
 
 def can_use_image(supabase_admin, user_id: str, plan: str = "free") -> bool:
-    if plan == "premium":
-        return True
-
     usage = get_today_usage(supabase_admin, user_id)
-    return int(usage.get("image_count", 0)) < FREE_IMAGE_LIMIT
+
+    if plan == "premium":
+        return (
+            int(usage.get("image_count", 0))
+            < PREMIUM_DAILY_IMAGE_LIMIT
+        )
+
+    return (
+        int(usage.get("image_count", 0))
+        < FREE_DAILY_IMAGE_LIMIT
+    )

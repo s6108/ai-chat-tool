@@ -36,13 +36,15 @@ from services.history_service import (
 from services.task_classifier import classify_task
 from services.subscription_service import get_customer_portal_url
 from services.usage_service import (
-    FREE_CHAT_LIMIT,
-    FREE_IMAGE_LIMIT,
     can_use_chat,
     can_use_image,
     get_today_usage,
     increase_chat_usage,
     increase_image_usage,
+    FREE_CHAT_LIMIT,
+    FREE_IMAGE_LIMIT,
+    PREMIUM_DAILY_CHAT_LIMIT,
+    PREMIUM_DAILY_IMAGE_LIMIT,
 )
 from services.remember_service import (
     clear_remember_session,
@@ -253,11 +255,31 @@ MODEL_ICONS = {name: model_avatar(name) for name in get_model_names()}
 
 
 def get_model_selector_options():
-    return [t("auto_mode"), *get_model_names()]
+    return [
+        t("auto_mode"),
+        *[
+            MODEL_DISPLAY_NAMES.get(
+                model_name,
+                model_name
+            )
+            for model_name in sorted(get_model_names())
+        ],
+    ]
 
 
+MODEL_DISPLAY_NAMES = {
+    "ChatGPT": "ChatGPT — GPT-5.4 Mini",
+    "Claude": "Claude — Sonnet 5",
+    "DeepSeek": "DeepSeek — V4 Flash",
+    "Doubao-Pro": "Doubao — Doubao Pro",
+    "Gemini": "Gemini — 3.6 Flash",
+    "GLM-4V": "ZhiPu — GLM-4V Plus",
+    "Grok": "Grok — Grok 4.5",
+    "Kimi": "Kimi — Kimi K2.5",
+    "Qwen": "Qwen — Qwen3.6 Flash",
+}
 MODEL_LABEL_TO_NAME = {
-    model_name: model_name
+    MODEL_DISPLAY_NAMES.get(model_name, model_name): model_name
     for model_name in get_model_names()
 }
 
@@ -318,7 +340,7 @@ def get_user_plan(user_id: str) -> str:
 
 
 def enforce_device_limit(user_id: str, current_device_id: str, plan: str = "free"):
-    max_devices = 3 if plan == "premium" else 2
+    max_devices = 3 if plan == "premium" else 1
 
     result = (
         supabase_admin.table("device_sessions")
@@ -786,8 +808,26 @@ with st.sidebar:
         st.caption(t("today_usage"))
 
         if account["is_premium"]:
-            st.markdown(t("unlimited_chat"))
-            st.markdown(t("unlimited_images"))
+            user_id = st.session_state.user.id
+            today_usage = get_today_usage(
+                supabase_admin,
+                user_id,
+            )
+            st.markdown(
+                t(
+                    "chat_usage",
+                    used=int(today_usage.get("chat_count", 0)),
+                    limit=PREMIUM_DAILY_CHAT_LIMIT,
+                )
+            )
+
+            st.markdown(
+                t(
+                    "image_usage",
+                    used=int(today_usage.get("image_count", 0)),
+                    limit=PREMIUM_DAILY_IMAGE_LIMIT,
+                )
+            )
 
         else:
             try:
@@ -1044,11 +1084,21 @@ render_chat_messages(
 # ====================== Upload + Chat Input ======================
 
 st.selectbox(
-    t("model_label"),
+    "",
     get_model_selector_options(),
     key="model_selector",
     on_change=handle_model_selector_change,
     label_visibility="collapsed",
+)
+st.markdown(
+"""
+<style>
+div[data-testid="stSelectbox"] {
+    max-width: 240px;
+}
+</style>
+""",
+unsafe_allow_html=True
 )
 
 submission = st.chat_input(
@@ -1144,12 +1194,13 @@ if st.session_state.processing:
         render_user_content(user_content)
 
     # 联网判断和模型调度都使用本地规则，不额外增加模型请求。
-    needs_web_search = should_search(prompt)
-
-    task_debug = classify_task(
+    task_info = classify_task(
         prompt,
         has_image=bool(uploaded_file),
     )
+
+    needs_web_search = task_info.need_search
+    task_debug = task_info
 
     print(
         "DEBUG CLASSIFY:",
@@ -1190,11 +1241,6 @@ if st.session_state.processing:
         selected_model_name = st.session_state.selected_model
         
 
-        task_info = classify_task(
-            prompt,
-            has_image=bool(uploaded_file),
-        )
-
         search_provider = get_search_provider(
             selected_model_name,
             task_info.task_type,
@@ -1206,27 +1252,6 @@ if st.session_state.processing:
 
         try:
             
-            if (
-                selected_model_name == "Grok"
-                and task_info.task_type == "news"
-                and search_provider is not None
-            ):
-                full_response = search_provider.search(
-                    prompt
-                )
-
-                placeholder.markdown(full_response)
-
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": full_response,
-                        "model_name": selected_model_name,
-                    }
-                )
-                
-                st.session_state.processing = False
-                st.stop()
             selected_config = get_model_config(selected_model_name)
 
             if not selected_config.api_key:
@@ -1261,30 +1286,7 @@ if st.session_state.processing:
             ):
                 
                 print("🌐 需要联网搜索")
-                if type(search_provider).__name__ == "GrokSearchProvider":
-
-                    
-
-                    full_response = search_provider.search(prompt)
-                    if not full_response:
-                        placeholder.error(
-                            "联网搜索暂时不可用，请稍后重试。"
-                        )
-                        st.stop()
-
-                    placeholder.markdown(full_response)
-
-                    st.session_state.messages.append(
-                        {
-                            "role": "assistant",
-                            "content": full_response,
-                            "model_name": selected_model_name,
-                        }
-                    )
-
-                    st.session_state.processing = False
-                    st.stop()
-
+                
                 search_queries = plan_search(prompt)
 
                 print(f"🧭 Search Planner 生成 {len(search_queries)} 条搜索词：")
@@ -1440,15 +1442,21 @@ if st.session_state.processing:
                 user_plan = get_user_plan(user_id) or "free"
                 user_plan = str(user_plan).lower()
 
-                if user_plan != "premium":
-                    increase_chat_usage(supabase_admin, user_id)
+                increase_chat_usage(
+                    supabase_admin,
+                    user_id,
+                )
 
-                    if uploaded_file:
-                        increase_image_usage(supabase_admin, user_id)
+                if uploaded_file:
+                    increase_image_usage(
+                        supabase_admin,
+                        user_id,
+                    )
 
             except Exception as usage_error:
-                # 用量统计失败不能影响用户已经得到的回答
-                print(f"Usage update failed: {usage_error}")
+                print(
+                    f"Usage update failed: {usage_error}"
+                )
             st.session_state.processing = False
 
             if uploaded_file:

@@ -35,12 +35,17 @@ class OpenAICompatibleProvider(BaseProvider):
             "messages": messages,
             "stream": True,
         }
+        
 
         if self.config.uses_max_completion_tokens:
             request_params["max_completion_tokens"] = max_tokens
         else:
             request_params["max_tokens"] = max_tokens
-            request_params["temperature"] = temperature
+
+            if self.config.provider == "moonshot":
+                request_params["temperature"] = 1
+            else:
+                request_params["temperature"] = temperature
 
         return client.chat.completions.create(**request_params)
 

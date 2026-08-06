@@ -33,6 +33,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         base_url="https://api.deepseek.com",
         model_id="deepseek-v4-flash",
         api_key=DEEPSEEK_API_KEY,
+        
     ),
     "GLM-4V": ModelConfig(
         name="GLM-4V",
@@ -42,19 +43,21 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         api_key=ZHIPU_API_KEY,
         supports_vision=True,
     ),
-    "GLM-4": ModelConfig(
-        name="GLM-4",
-        provider="zhipu",
-        base_url="https://open.bigmodel.cn/api/paas/v4/",
-        model_id="glm-4-plus",
-        api_key=ZHIPU_API_KEY,
-    ),
+    # "GLM-4": ModelConfig(
+    #     name="GLM-4",
+    #     provider="zhipu",
+    #     base_url="https://open.bigmodel.cn/api/paas/v4/",
+    #     model_id="glm-4-plus",
+    #     api_key=ZHIPU_API_KEY,
+    # ),
+    
     "Kimi": ModelConfig(
         name="Kimi",
         provider="moonshot",
         base_url="https://api.moonshot.cn/v1",
-        model_id="moonshot-v1-8k",
+        model_id="kimi-k2.5",
         api_key=KIMI_API_KEY,
+        supports_vision=True,
     ),
     "Doubao-Pro": ModelConfig(
         name="Doubao-Pro",
@@ -62,13 +65,15 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         base_url="https://ark.cn-beijing.volces.com/api/v3",
         model_id="ep-20260415022601-jm5b7",
         api_key=DOUBAO_API_KEY,
+        supports_vision=True,
     ),
     "Qwen": ModelConfig(
         name="Qwen",
         provider="dashscope",
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        model_id="qwen-plus",
+        model_id="qwen3.6-flash",
         api_key=DASHSCOPE_API_KEY,
+        supports_vision=True,
     ),
     "Gemini": ModelConfig(
         name="Gemini",
@@ -79,6 +84,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         ),
         model_id="gemini-3.6-flash",
         api_key=GEMINI_API_KEY,
+        supports_vision=True,
     ),
     "ChatGPT": ModelConfig(
         name="ChatGPT",
@@ -86,6 +92,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         base_url="https://api.openai.com/v1",
         model_id="gpt-5.4-mini",
         api_key=OPENAI_API_KEY,
+        supports_vision=True,
         uses_max_completion_tokens=True,
     ),
     "Grok": ModelConfig(
@@ -94,6 +101,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         base_url="https://api.x.ai/v1",
         model_id="grok-4.5",
         api_key=XAI_API_KEY,
+        supports_vision=True,
     ),
     "Claude": ModelConfig(
         name="Claude",
@@ -101,6 +109,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         base_url="https://api.anthropic.com",
         model_id="claude-sonnet-5",
         api_key=ANTHROPIC_API_KEY,
+        supports_vision=True,
     ),
     
 }

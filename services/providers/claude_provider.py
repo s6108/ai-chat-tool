@@ -37,7 +37,45 @@ class ClaudeProvider(BaseProvider):
             role = message.get("role")
             content = message.get("content", "")
 
-            if not isinstance(content, str):
+            if isinstance(content, list):
+                claude_content = []
+
+                for part in content:
+
+                    if part.get("type") == "text":
+                        claude_content.append({
+                            "type": "text",
+                            "text": part.get("text", "")
+                        })
+
+                    elif part.get("type") == "image_url":
+                        image_url = part.get("image_url", {}).get("url", "")
+
+                        if image_url.startswith("data:image"):
+                            header, data = image_url.split(",", 1)
+
+                            media_type = header.split(";")[0].replace(
+                                "data:",
+                                ""
+                            )
+
+                            claude_content.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": data,
+                                },
+                            })
+
+                if claude_content:
+                    claude_messages.append(
+                        {
+                            "role": role,
+                            "content": claude_content,
+                        }
+                    )
+
                 continue
 
             if role == "system":
