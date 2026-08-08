@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from typing import Any
+import time
 
 from openai import OpenAI
 
@@ -65,7 +66,7 @@ class OpenAICompatibleProvider(BaseProvider):
         """
         last_error: Exception | None = None
 
-        for attempt in range(1, 3):
+        for attempt in range(1, 4):
             emitted_text = False
 
             try:
@@ -75,11 +76,18 @@ class OpenAICompatibleProvider(BaseProvider):
                     temperature=temperature,
                 )
 
+                completed_normally = False
+
                 for chunk in stream:
                     if not chunk.choices:
                         continue
 
-                    text = chunk.choices[0].delta.content
+                    choice = chunk.choices[0]
+
+                    if choice.finish_reason is not None:
+                        completed_normally = True
+
+                    text = choice.delta.content
                     if not text:
                         continue
 
@@ -87,7 +95,12 @@ class OpenAICompatibleProvider(BaseProvider):
                     yield text
 
                 if emitted_text:
-                    return
+                    if completed_normally:
+                        return
+
+                    raise RuntimeError(
+                        f"{self.config.name} stream ended before receiving a finish reason."
+                    )
 
                 last_error = EmptyProviderResponseError(
                     f"{self.config.name} returned an empty response."
@@ -101,12 +114,18 @@ class OpenAICompatibleProvider(BaseProvider):
 
                 last_error = error
 
-            if attempt == 1:
+            if attempt < 3:
+                wait_seconds = 0.6 * attempt
+
                 print(
                     "Provider request returned no text before completion; "
-                    f"retrying once: model={self.config.name}, "
+                    f"retrying: model={self.config.name}, "
+                    f"attempt={attempt}/3, "
+                    f"wait={wait_seconds:.1f}s, "
                     f"error={last_error}"
                 )
+
+                time.sleep(wait_seconds)
 
         raise RuntimeError(
             f"{self.config.name} failed before returning any text: "

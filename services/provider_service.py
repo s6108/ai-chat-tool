@@ -187,15 +187,10 @@ def _clean_speaker_label_stream(
     model_name: str,
 ) -> Iterator[str]:
     """
-    删除回答开头一个或多个模型身份标签。
-
-    不管标签写的是当前模型还是其他模型，都会删除，例如：
-    【Kimi 的发言】
-    【Qwen 的发言】
-    【Claude 的观点】
-    Grok 的回答：
+    只清除回答最开头的模型身份标签。
+    尽量不缓存正常正文，避免影响流式输出速度。
     """
-    del model_name  # 保留参数接口，但清理时不限定模型名称
+    del model_name
 
     pattern = re.compile(
         r"^\s*(?:"
@@ -217,19 +212,28 @@ def _clean_speaker_label_stream(
     checked = False
 
     for chunk in stream:
+        if not chunk:
+            continue
+
         if checked:
             yield chunk
             continue
 
         buffer += chunk
 
-        # 防止流式输出把标签拆成多个 chunk
-        if len(buffer) < 120 and "\n" not in buffer:
+        # 模型身份标签通常非常短。
+        # 最多只缓存前 48 个字符，避免正常回答被长时间扣住。
+        if (
+            len(buffer) < 48
+            and "\n" not in buffer
+            and "：" not in buffer
+            and ":" not in buffer
+            and "】" not in buffer
+            and "]" not in buffer
+        ):
             continue
 
         previous = None
-
-        # 连续清除多个开头标签
         while previous != buffer:
             previous = buffer
             buffer = pattern.sub("", buffer, count=1)
@@ -239,9 +243,9 @@ def _clean_speaker_label_stream(
         if buffer:
             yield buffer
 
+    # 极短回答，流已经结束但还没有达到检查阈值
     if not checked and buffer:
         previous = None
-
         while previous != buffer:
             previous = buffer
             buffer = pattern.sub("", buffer, count=1)

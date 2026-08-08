@@ -56,7 +56,7 @@ def search_web(query: str, max_results: int = 10):
             "topic": "news",
             "days": 3,
         },
-        timeout=(3.5, 8),
+        timeout=(5, 15),
     )
     response.raise_for_status()
     results = response.json().get(
