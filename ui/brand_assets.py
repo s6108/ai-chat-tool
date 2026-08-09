@@ -34,32 +34,25 @@ def model_avatar(model_name: str) -> str:
     )
 
 
-def render_brand_header(width: int = 68) -> None:
-    col1, col2 = st.columns([0.08, 0.92])
+def render_brand_header(width: int = 56) -> None:
+    st.image(
+        str(ICON_PATH),
+        width=width,
+    )
 
-    with col1:
-        st.image(
-            str(ICON_PATH),
-            width=width,
-        )
-
-    with col2:
-        st.markdown(
-            """
-            <div style="
-                margin-left:-35px;
-                font-size:65px;
-                font-weight:700;
-                line-height:1;
-                display:flex;
-                align-items:flex-end;
-                height:lem;
-            ">
-            Megor
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    st.markdown(
+        """
+        <div style="
+            font-size:36px;
+            font-weight:700;
+            margin-top:-64px;
+            margin-left:80px;
+        ">
+        Megor
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def render_sidebar_logo(width: int = 72) -> None:
     """
@@ -87,6 +80,13 @@ def apply_brand_css() -> None:
             margin-bottom: 1.25rem;
             color: #31333f;
             font-size: 1rem;
+        }
+        div[data-testid="stSelectbox"] {
+            width:220px;
+        }
+
+        div[data-testid="stButton"] button {
+            width:220px;
         }
 
         [data-testid="stChatMessageAvatarUser"],
