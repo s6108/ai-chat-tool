@@ -187,71 +187,15 @@ def _clean_speaker_label_stream(
     model_name: str,
 ) -> Iterator[str]:
     """
-    只清除回答最开头的模型身份标签。
-    尽量不缓存正常正文，避免影响流式输出速度。
+    Stream output directly.
+    No buffering.
     """
+
     del model_name
 
-    pattern = re.compile(
-        r"^\s*(?:"
-        r"[【\[]\s*"
-        r"[A-Za-z0-9_.+\-\u4e00-\u9fff]+"
-        r"\s*的?\s*"
-        r"(?:发言|發言|观点|觀點|回答)"
-        r"\s*[】\]]\s*[:：\-—]?"
-        r"|"
-        r"[A-Za-z0-9_.+\-\u4e00-\u9fff]+"
-        r"\s*的?\s*"
-        r"(?:发言|發言|观点|觀點|回答)"
-        r"\s*[:：\-—]?"
-        r")\s*",
-        flags=re.IGNORECASE,
-    )
-
-    buffer = ""
-    checked = False
-
     for chunk in stream:
-        if not chunk:
-            continue
-
-        if checked:
+        if chunk:
             yield chunk
-            continue
-
-        buffer += chunk
-
-        # 模型身份标签通常非常短。
-        # 最多只缓存前 48 个字符，避免正常回答被长时间扣住。
-        if (
-            len(buffer) < 48
-            and "\n" not in buffer
-            and "：" not in buffer
-            and ":" not in buffer
-            and "】" not in buffer
-            and "]" not in buffer
-        ):
-            continue
-
-        previous = None
-        while previous != buffer:
-            previous = buffer
-            buffer = pattern.sub("", buffer, count=1)
-
-        checked = True
-
-        if buffer:
-            yield buffer
-
-    # 极短回答，流已经结束但还没有达到检查阈值
-    if not checked and buffer:
-        previous = None
-        while previous != buffer:
-            previous = buffer
-            buffer = pattern.sub("", buffer, count=1)
-
-        if buffer:
-            yield buffer
 
 
 def stream_model_response(
