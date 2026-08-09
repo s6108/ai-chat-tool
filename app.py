@@ -1111,35 +1111,29 @@ with st.sidebar:
             )
 
 # ====================== Model Selector + Clear Chat ======================
+options = get_model_selector_options()
 
-model_col, clear_col, spacer_col = st.columns(
-    [1.2, 1.2, 6.6]
-)
+button_col, _ = st.columns([0.8, 4])
 
-with model_col:
-    st.selectbox(
-        "",
-        get_model_selector_options(),
-        key="model_selector",
-        on_change=handle_model_selector_change,
-        label_visibility="collapsed",
-    )
-
-with clear_col:
+with button_col:
     if st.button(
         t("clear_chat"),
         use_container_width=True,
+        key="clear_chat_btn",
     ):
-        if st.session_state.current_session_id:
-            clear_chat_messages(
-                st.session_state.current_session_id
-            )
-
         st.session_state.messages = []
-        st.session_state.uploader_key += 1
-        st.session_state.processing = False
         st.rerun()
 
+
+mode_col, _ = st.columns([0.8, 4])
+
+with mode_col:
+    mode = st.selectbox(
+        t("mode"),
+        options,
+        key="mode_selector",
+        label_visibility="collapsed",
+    )
 
 # ====================== Display Messages ======================
 render_chat_messages(
