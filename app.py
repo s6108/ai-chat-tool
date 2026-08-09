@@ -1113,30 +1113,25 @@ with st.sidebar:
 # ====================== Model Selector + Clear Chat ======================
 options = get_model_selector_options()
 
-st.markdown(
-"""
-<style>
-div[data-testid="stButton"] button {
-    width: 220px;
-}
-</style>
-""",
-unsafe_allow_html=True,
-)
+button_col, _ = st.columns([1, 4])
 
-st.button(
-    t("clear_chat"),
-    key="clear_chat_btn",
-)
+with button_col:
+    st.button(
+        t("clear_chat"),
+        use_container_width=False,
+        key="clear_chat_btn",
+    )
 
+mode_col, _ = st.columns([1, 4])
 
+with mode_col:
+    mode = st.selectbox(
+        "",
+        options,
+        key="mode_selector",
+        label_visibility="collapsed",
+    )
 
-mode = st.selectbox(
-    "",
-    options,
-    key="mode_selector",
-    label_visibility="collapsed",
-)
 
 # ====================== Display Messages ======================
 render_chat_messages(

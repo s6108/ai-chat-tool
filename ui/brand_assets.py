@@ -43,9 +43,9 @@ def render_brand_header(width: int = 56) -> None:
     st.markdown(
         """
         <div style="
-            font-size:36px;
+            font-size:45px;
             font-weight:700;
-            margin-top:-64px;
+            margin-top:-84px;
             margin-left:80px;
         ">
         Megor
@@ -82,12 +82,10 @@ def apply_brand_css() -> None:
             font-size: 1rem;
         }
         div[data-testid="stSelectbox"] {
-            width:220px;
+            width:180px;
         }
 
-        div[data-testid="stButton"] button {
-            width:220px;
-        }
+        
 
         [data-testid="stChatMessageAvatarUser"],
         [data-testid="stChatMessageAvatarAssistant"] {
