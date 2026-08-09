@@ -44,7 +44,7 @@ def _select_from_policy(
 
 def choose_model_for_task(task: TaskInfo) -> RouteDecision:
     """
-    Mango Brain V1.3：
+    Megor Brain V1.3：
 
     Task Classifier
         ↓

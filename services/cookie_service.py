@@ -4,8 +4,8 @@ from typing import Any, Optional
 
 import streamlit as st
 
-COOKIE_PREFIX = "mango_ai_"
-_PENDING_KEY = "_mango_pending_cookie_changes"
+COOKIE_PREFIX = "megor_ai_"
+_PENDING_KEY = "_megor_pending_cookie_changes"
 
 
 def create_cookie_manager() -> None:

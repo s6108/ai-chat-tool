@@ -13,11 +13,11 @@ st.title("🍪 EncryptedCookieManager 最小测试")
 
 password = os.getenv(
     "COOKIE_PASSWORD",
-    "mango-local-cookie-test-password-change-me",
+    "megor-local-cookie-test-password-change-me",
 )
 
 cookies = EncryptedCookieManager(
-    prefix="mango_ai_test_",
+    prefix="megor_ai_test_",
     password=password,
 )
 

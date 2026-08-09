@@ -74,7 +74,8 @@ SEARCH_CAPABILITIES = {
 
 }
 
-def get_search_capability(model_name: str) -> SearchCapability:
+def get_search_capability(model_name: str):
+    return SEARCH_CAPABILITIES.get(model_name)
     """
     根据模型名称获取搜索能力配置
     """

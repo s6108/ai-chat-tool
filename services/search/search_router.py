@@ -44,5 +44,5 @@ def get_search_provider(
         )
 
     # Gemini 和 Claude 原生搜索尚未接入执行层。
-    # 暂时回退至 Mango Search，防止运行时中断。
+    # 暂时回退至 Megor Search，防止运行时中断。
     return MangoSearchProvider()

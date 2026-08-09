@@ -9,7 +9,7 @@ from services.task_classifier import TaskInfo
 @dataclass(frozen=True)
 class BrainPolicy:
     """
-    Mango Brain 的明确任务政策。
+    Megor Brain 的明确任务政策。
 
     preferred_model:
         该任务的固定首选模型。
@@ -74,7 +74,7 @@ BRAIN_POLICIES: Final[dict[str, BrainPolicy]] = {
         prefer_chinese_models=True,
         max_tokens=1000,
         temperature=0.2,
-        reason="天气、股票、汇率等实时数据经 Mango Search 后由 DeepSeek 整理",
+        reason="天气、股票、汇率等实时数据经 Megor Search 后由 DeepSeek 整理",
     ),
 
     "news": BrainPolicy(
@@ -99,7 +99,7 @@ BRAIN_POLICIES: Final[dict[str, BrainPolicy]] = {
         prefer_chinese_models=True,
         max_tokens=1100,
         temperature=0.3,
-        reason="普通实时资料经 Mango Search 后优先由低成本中国模型整理",
+        reason="普通实时资料经 Megor Search 后优先由低成本中国模型整理",
     ),
 
     "math": BrainPolicy(

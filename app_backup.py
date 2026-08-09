@@ -9,14 +9,14 @@ from streamlit_js_eval import streamlit_js_eval
 
 
 # ============================================================
-# Mango AI v2 Stable
+# Megor v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
 # ============================================================
 
 
 # ====================== Page Config ======================
 st.set_page_config(
-    page_title="Mango AI",
+    page_title="Megor",
     page_icon="🥭",
     layout="centered",
 )
@@ -47,10 +47,10 @@ def get_key(name: str):
 # ====================== Device ID ======================
 device_id = streamlit_js_eval(
     js_expressions="""
-    let id = localStorage.getItem("mango_device_id");
+    let id = localStorage.getItem("megor_device_id");
     if (!id) {
         id = crypto.randomUUID();
-        localStorage.setItem("mango_device_id", id);
+        localStorage.setItem("megor_device_id", id);
     }
     id;
     """,
@@ -330,7 +330,7 @@ if (
 
 # ====================== Login / Register Page ======================
 if not st.session_state.user:
-    st.title("🥭 Mango AI")
+    st.title("Megor")
     st.subheader("请登录或注册才能继续使用")
 
     tab1, tab2 = st.tabs(["🔑 登录", "📝 注册"])
@@ -376,7 +376,7 @@ if not st.session_state.user:
 
 
 # ====================== Main Page ======================
-st.title("🥭 Mango AI")
+st.title("Megor")
 
 user_email = getattr(st.session_state.user, "email", "用户")
 st.write(f"欢迎回来，**{user_email}**")

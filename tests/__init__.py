@@ -1,1 +1,1 @@
-"""Mango AI test suite."""
+"""Megor test suite."""

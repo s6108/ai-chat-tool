@@ -219,7 +219,7 @@ def determine_plan(
     period_end: Optional[str],
 ) -> str:
     """
-    根据 LemonSqueezy 订阅事件及状态决定 Mango AI 套餐。
+    根据 LemonSqueezy 订阅事件及状态决定 Megor 套餐。
 
     cancelled 表示停止自动续费，但在有效期结束前
     仍然保留 Premium；真正 expired 后才降级。
@@ -280,7 +280,7 @@ def resolve_user_id(
     summary: dict[str, Any],
 ) -> Optional[str]:
     """
-    查找付款对应的 Mango AI 用户。
+    查找付款对应的 Megor 用户。
 
     顺序：
     1. LemonSqueezy meta.custom_data.user_id
@@ -603,7 +603,7 @@ def process_subscription_event(
         email = summary.get("customer_email")
 
         raise WebhookProcessingError(
-            "无法确定对应 Mango AI 用户。"
+            "无法确定对应 Megor 用户。"
             f" customer_email={email!r}；"
             "请在 Checkout custom_data 中传入 user_id。"
         )

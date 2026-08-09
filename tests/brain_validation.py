@@ -14,7 +14,7 @@ def main() -> int:
     failures: list[str] = []
 
     print("=" * 88)
-    print("Mango Brain Validation Suite")
+    print("Megor Brain Validation Suite")
     print("=" * 88)
 
     for index, case in enumerate(VALIDATION_CASES, start=1):

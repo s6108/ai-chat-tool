@@ -6,7 +6,9 @@ import streamlit as st
 APP_DIR = Path(__file__).resolve().parents[1]
 STATIC_DIR = APP_DIR / "static"
 
-LOGO_PATH = STATIC_DIR / "logo.png"
+BRAND_LOGO_PATH = STATIC_DIR / "megor-logo.png"
+
+ICON_PATH = STATIC_DIR / "megor-icon.png"
 USER_AVATAR = str(STATIC_DIR / "avatar-user.png")
 
 MODEL_AVATARS = {
@@ -20,33 +22,57 @@ MODEL_AVATARS = {
     "Gemini": str(STATIC_DIR / "avatar-gemini.png"),
     "Grok": str(STATIC_DIR / "avatar-grok.png"),
     "Claude": str(STATIC_DIR / "avatar-claude.png"),
-    "Mango AI": str(STATIC_DIR / "avatar-mango-ai.png"),
+    "Megor": str(STATIC_DIR / "avatar-megor.png"),
 }
 
 
 def model_avatar(model_name: str) -> str:
-    """返回模型对应的 Mango M 徽章。"""
+    """返回模型对应的 Megor M 徽章。"""
     return MODEL_AVATARS.get(
         model_name,
-        MODEL_AVATARS["Mango AI"],
+        MODEL_AVATARS["Megor"],
     )
 
 
-def render_brand_header(width: int = 150) -> None:
-    """在登录页或空白欢迎页居中显示完整 App Logo。"""
-    left, center, right = st.columns([1, 1, 1])
-    with center:
-        st.image(str(LOGO_PATH), width=width)
+def render_brand_header(width: int = 68) -> None:
+    col1, col2 = st.columns([0.08, 0.92])
 
+    with col1:
+        st.image(
+            str(ICON_PATH),
+            width=width,
+        )
+
+    with col2:
+        st.markdown(
+            """
+            <div style="
+                margin-left:-35px;
+                font-size:65px;
+                font-weight:700;
+                line-height:1;
+                display:flex;
+                align-items:flex-end;
+                height:lem;
+            ">
+            Megor
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 def render_sidebar_logo(width: int = 72) -> None:
-    """聊天阶段在侧边栏顶部显示较小的完整 App Logo。"""
-    st.image(str(LOGO_PATH), width=width)
-
+    """
+    Sidebar 顶部显示完整品牌 Logo。
+    """
+    st.image(
+        str(BRAND_LOGO_PATH),
+        width=width,
+    )
 
 def render_centered_text(text: str) -> None:
     st.markdown(
-        f'<div class="mango-centered-text">{text}</div>',
+        f'<div class="megor-centered-text">{text}</div>',
         unsafe_allow_html=True,
     )
 
@@ -55,7 +81,7 @@ def apply_brand_css() -> None:
     st.markdown(
         """
         <style>
-        .mango-centered-text {
+        .megor-centered-text {
             text-align: center;
             margin-top: 0.35rem;
             margin-bottom: 1.25rem;
@@ -69,7 +95,7 @@ def apply_brand_css() -> None:
         }
 
         /* 模型标题恢复为清晰的正常深色，不使用浅灰色。 */
-        .mango-model-title {
+        .megor-model-title {
             color: #31333f;
             font-weight: 600;
             margin: 0 0 0.45rem 0;

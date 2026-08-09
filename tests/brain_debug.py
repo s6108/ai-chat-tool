@@ -9,7 +9,7 @@ from services.task_classifier import classify_task
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="查看 Mango Brain 对单个问题的完整路由结果。"
+        description="查看 Megor Brain 对单个问题的完整路由结果。"
     )
     parser.add_argument("prompt", help="需要分析的问题")
     parser.add_argument("--image", action="store_true", help="模拟用户上传图片")

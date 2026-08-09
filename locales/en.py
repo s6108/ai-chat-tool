@@ -134,4 +134,9 @@ TEXT = {
 
     # Login
     "sign_in_to_account": "Sign in to your account",
+    "brand_tagline": "Multiple AIs. One conversation. You lead.",
+    "brand_description": "The first AI discussion platform where multiple AI models collaborate under your guidance.",
+    "brand_description_cn": "A user-led platform where multiple AI models collaborate in discussion.",
+    "login_title": "Sign in to your account",
+    "welcome_plain": "Welcome",
 }

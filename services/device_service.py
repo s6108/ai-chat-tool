@@ -16,18 +16,18 @@ def get_device_id():
             document.cookie = `${name}=${value}; path=/; max-age=${maxAge}; SameSite=Lax`;
         }
 
-        let id = getCookie("mango_device_id");
+        let id = getCookie("megor_device_id");
 
         if (!id) {
-            id = localStorage.getItem("mango_device_id");
+            id = localStorage.getItem("megor_device_id");
         }
 
         if (!id) {
             id = crypto.randomUUID();
         }
 
-        localStorage.setItem("mango_device_id", id);
-        setCookie("mango_device_id", id, 365);
+        localStorage.setItem("megor_device_id", id);
+        setCookie("megor_device_id", id, 365);
 
         id;
         """,

@@ -1,4 +1,4 @@
-"""Provider adapters used by Mango AI's unified model layer."""
+"""Provider adapters used by Megor's unified model layer."""
 
 from services.providers.base_provider import BaseProvider
 from services.providers.deepseek_provider import DeepSeekProvider

@@ -15,7 +15,7 @@ from services.webhook_service import (
 
 
 app = FastAPI(
-    title="Mango AI Webhook Service",
+    title="Megor Webhook Service",
     version="2.0.0",
 )
 
@@ -23,7 +23,7 @@ app = FastAPI(
 @app.get("/")
 def root() -> dict[str, str]:
     return {
-        "service": "Mango AI Webhook",
+        "service": "Megor Webhook",
         "status": "running",
         "version": "2.0.0",
     }

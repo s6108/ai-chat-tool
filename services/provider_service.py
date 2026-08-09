@@ -54,7 +54,7 @@ def _build_identity_prompt(
     return {
         "role": "system",
         "content": (
-            f"你是 {model_name}，正在参与由用户主导的 Mango AI 多模型讨论。\n"
+            f"你是 {model_name}，正在参与由用户主导的 Megor 多模型讨论。\n"
             "请遵守以下规则：\n"
             f"1. 明确自己的身份是 {model_name}，不得冒充其他模型。\n"
             "2. 页面已经显示你的名称，请直接发表观点，"
@@ -82,7 +82,7 @@ def _label_assistant_message(message: dict[str, Any]) -> dict[str, Any] | None:
     speaker = (
         message.get("model_name")
         or message.get("model")
-        or "Mango AI"
+        or "Megor"
     )
 
     return {

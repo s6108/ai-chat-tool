@@ -22,7 +22,7 @@ def decide_search_strategy(
     决定搜索来源。
 
     第一阶段：
-    所有需要联网的任务统一使用 Mango Search。
+    所有需要联网的任务统一使用 Megor Search。
     模型只负责分析和生成最终回答。
     """
 
@@ -37,7 +37,7 @@ def decide_search_strategy(
         return SearchDecision(
             search_type="mango",
             provider="mango",
-            reason="第一阶段所有联网任务统一使用 Mango Search",
+            reason="第一阶段所有联网任务统一使用 Megor Search",
         )
 
     return SearchDecision(

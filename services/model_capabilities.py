@@ -6,7 +6,7 @@ from typing import Final
 
 @dataclass(frozen=True)
 class ModelCapability:
-    """Mango Brain 模型能力元数据；评分 0～10。"""
+    """Megor Brain 模型能力元数据；评分 0～10。"""
 
     name: str
     provider: str

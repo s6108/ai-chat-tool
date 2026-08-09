@@ -16,7 +16,7 @@ if "cookie_controller" not in st.session_state:
 
 cookies = st.session_state.cookie_controller
 
-COOKIE_NAME = "mango_cookie_test"
+COOKIE_NAME = "megor_cookie_test"
 
 try:
     all_cookies = cookies.getAll() or {}

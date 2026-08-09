@@ -90,23 +90,23 @@ from ui.brand_assets import (
 )
 from i18n import initialize_language, t
 # ============================================================
-# Mango AI v2 Stable
+# Megor v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
 # ============================================================
 
 
 # ====================== Page Config ======================
 APP_DIR = Path(__file__).resolve().parent
-MANGO_ICON_PATH = APP_DIR / "static" / "apple-touch-icon.png"
+MEGOR_ICON_PATH = APP_DIR / "static" / "megor-icon.png"
 
 try:
-    mango_page_icon = Image.open(MANGO_ICON_PATH)
+    megor_page_icon = Image.open(MEGOR_ICON_PATH)
 except Exception:
-    mango_page_icon = "🥭"
+    megor_page_icon = "M"
 
 st.set_page_config(
-    page_title="Mango AI",
-    page_icon=mango_page_icon,
+    page_title="Megor",
+    page_icon=megor_page_icon,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -178,7 +178,7 @@ components.html(
             head.appendChild(appTitle);
         }
 
-        appTitle.setAttribute("content", "Mango AI");
+        appTitle.setAttribute("content", "Megor");
 
         let statusBar = head.querySelector(
             'meta[name="apple-mobile-web-app-status-bar-style"]'
@@ -268,15 +268,15 @@ def get_model_selector_options():
 
 
 MODEL_DISPLAY_NAMES = {
-    "ChatGPT": "ChatGPT — GPT-5.4 Mini",
-    "Claude": "Claude — Sonnet 5",
-    "DeepSeek": "DeepSeek — V4 Flash",
-    "Doubao-Pro": "Doubao — Doubao Pro",
-    "Gemini": "Gemini — 3.6 Flash",
-    "GLM-4V": "ZhiPu — GLM-4V Plus",
-    "Grok": "Grok — Grok 4.5",
-    "Kimi": "Kimi — Kimi K2.5",
-    "Qwen": "Qwen — Qwen3.6 Flash",
+    "ChatGPT": "ChatGPT-5.4 Mini",
+    "Claude": "Claude-Sonnet 5",
+    "DeepSeek": "DeepSeek-V4 Flash",
+    "Doubao-Pro": "Doubao-Doubao Pro",
+    "Gemini": "Gemini-3.6 Flash",
+    "GLM-4V": "ZhiPu-GLM-4V Plus",
+    "Grok": "Grok-Grok 4.5",
+    "Kimi": "Kimi-K2.5",
+    "Qwen": "Qwen-3.6 Flash",
 }
 MODEL_LABEL_TO_NAME = {
     MODEL_DISPLAY_NAMES.get(model_name, model_name): model_name
@@ -310,7 +310,7 @@ LEMONSQUEEZY_CHECKOUT_URL = (
 
 
 def get_premium_checkout_url(user) -> str:
-    """生成绑定当前 Mango AI 用户的 LemonSqueezy 付款链接。"""
+    """生成绑定当前 Megor AI 用户的 LemonSqueezy 付款链接。"""
     params = {
         "lang": "en",
         "checkout[email]": user.email or "",
@@ -574,8 +574,47 @@ if st.session_state.user:
 
 # ====================== Login / Register Page ======================
 if not st.session_state.user:
-    render_brand_header(width=132)
-    render_centered_text(t("sign_in_to_account"))
+    render_brand_header(width=72)
+
+    st.markdown(
+        f"""
+    <div style="text-align:center;">
+
+    <div style="
+    font-size:33px;
+    font-weight:600;
+    margin-bottom:21px;
+    ">
+    {t("brand_tagline")}
+    </div>
+
+    <div style="
+    font-size:18px;
+    color:#666;
+    ">
+    {t("brand_description")}
+    </div>
+
+    </div>
+
+
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <h3 style="
+        text-align:center;
+        font-size:21px;
+        font-weight:600;
+        margin-top:30px;
+        ">
+        {t("login_title")}
+        </h3>
+        """,
+        unsafe_allow_html=True,
+    )
 
     tab1, tab2 = st.tabs([t("login_tab"), t("register_tab")])
 
@@ -674,21 +713,28 @@ if not st.session_state.user:
 
 
 # ====================== Main Page ======================
+render_brand_header(width=68)
+
+st.markdown(
+    f"""
+    **{t("brand_tagline")}**
+    """
+)
+
 user_email = getattr(
     st.session_state.user,
     "email",
     t("user_fallback"),
 )
 
-# 只有空白欢迎页显示居中的大 Logo；开始聊天后自动隐藏。
 if not st.session_state.messages:
-    render_brand_header(width=150)
-    render_centered_text(
-        t("welcome_back_plain", email=user_email)
+    st.markdown(
+        f"### {t('welcome_plain')}"
     )
+    st.markdown(user_email)
 
 # ====================== Sidebar ======================
-# 用户从付款页返回 Mango AI 时，自动刷新一次页面，
+# 用户从付款页返回 Megor 时，自动刷新一次页面，
 # 以便重新读取最新的订阅状态。
 components.html(
     """
@@ -697,11 +743,11 @@ components.html(
         const parentWindow = window.parent;
         const parentDocument = parentWindow.document;
 
-        if (parentWindow.__mangoVisibilityRefreshInstalled) {
+        if (parentWindow.__megorVisibilityRefreshInstalled) {
             return;
         }
 
-        parentWindow.__mangoVisibilityRefreshInstalled = true;
+        parentWindow.__megorVisibilityRefreshInstalled = true;
 
         let wasHidden = parentDocument.hidden;
 
@@ -1064,16 +1110,35 @@ with st.sidebar:
                 st.session_state.processing
             )
 
- 
-# ====================== Clear Current Messages ======================
-if st.button(t("clear_chat")):
-    if st.session_state.current_session_id:
-        clear_chat_messages(st.session_state.current_session_id)
+# ====================== Model Selector + Clear Chat ======================
 
-    st.session_state.messages = []
-    st.session_state.uploader_key += 1
-    st.session_state.processing = False
-    st.rerun()
+model_col, clear_col, spacer_col = st.columns(
+    [1.2, 1.2, 6.6]
+)
+
+with model_col:
+    st.selectbox(
+        "",
+        get_model_selector_options(),
+        key="model_selector",
+        on_change=handle_model_selector_change,
+        label_visibility="collapsed",
+    )
+
+with clear_col:
+    if st.button(
+        t("clear_chat"),
+        use_container_width=True,
+    ):
+        if st.session_state.current_session_id:
+            clear_chat_messages(
+                st.session_state.current_session_id
+            )
+
+        st.session_state.messages = []
+        st.session_state.uploader_key += 1
+        st.session_state.processing = False
+        st.rerun()
 
 
 # ====================== Display Messages ======================
@@ -1083,23 +1148,7 @@ render_chat_messages(
 
 # ====================== Upload + Chat Input ======================
 
-st.selectbox(
-    "",
-    get_model_selector_options(),
-    key="model_selector",
-    on_change=handle_model_selector_change,
-    label_visibility="collapsed",
-)
-st.markdown(
-"""
-<style>
-div[data-testid="stSelectbox"] {
-    max-width: 240px;
-}
-</style>
-""",
-unsafe_allow_html=True
-)
+
 
 submission = st.chat_input(
     t("ask_anything"),

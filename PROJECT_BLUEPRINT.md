@@ -1,8 +1,8 @@
-# Mango AI Project Blueprint
+# Megor Project Blueprint
 
 ## 1. Product Goal
 
-Mango AI is an AI workspace for overseas users, starting as a multi-model AI chat app and gradually evolving into a productivity SaaS.
+Metor is an AI workspace for overseas users, starting as a multi-model AI chat app and gradually evolving into a productivity SaaS.
 
 Primary goal:
 - Get real overseas users

@@ -66,9 +66,9 @@ def render_user_content(content):
 
 
 def render_model_title(model_name: str) -> None:
-    safe_name = html.escape(model_name or "Mango AI")
+    safe_name = html.escape(model_name or "Megor")
     st.markdown(
-        f'<div class="mango-model-title">{safe_name}</div>',
+        f'<div class="megor-model-title">{safe_name}</div>',
         unsafe_allow_html=True,
     )
 
@@ -79,7 +79,7 @@ def render_chat_messages(messages):
         content = msg.get("content", "")
 
         if role == "assistant":
-            model_name = msg.get("model_name") or "Mango AI"
+            model_name = msg.get("model_name") or "Megor"
 
             with st.chat_message(
                 "assistant",
