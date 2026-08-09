@@ -1136,10 +1136,10 @@ with mode_col:
     mode = st.selectbox(
         "",
         options,
-        key="mode_selector",
+        key="model_selector",
         label_visibility="collapsed",
     )
-
+handle_model_selector_change()
 
 # ====================== Display Messages ======================
 render_chat_messages(
