@@ -1116,11 +1116,19 @@ options = get_model_selector_options()
 button_col, _ = st.columns([1, 4])
 
 with button_col:
-    st.button(
+    if st.button(
         t("clear_chat"),
         use_container_width=False,
         key="clear_chat_btn",
-    )
+    ):
+        if st.session_state.current_session_id:
+            clear_chat_messages(
+                st.session_state.current_session_id
+            )
+
+        st.session_state.messages = []
+        st.session_state.uploader_key += 1
+        st.rerun()
 
 mode_col, _ = st.columns([1, 4])
 
