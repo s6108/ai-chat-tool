@@ -6,7 +6,7 @@ import streamlit as st
 APP_DIR = Path(__file__).resolve().parents[1]
 STATIC_DIR = APP_DIR / "static"
 
-BRAND_LOGO_PATH = STATIC_DIR / "megor-logo.png"
+BRAND_LOGO_PATH = STATIC_DIR / "megor-icon-transparent.png"
 
 ICON_PATH = STATIC_DIR / "megor-icon.png"
 USER_AVATAR = str(STATIC_DIR / "avatar-user.png")
@@ -45,7 +45,7 @@ def render_brand_header(width: int = 56) -> None:
         <div style="
             font-size:45px;
             font-weight:700;
-            margin-top:-84px;
+            margin-top:-97px;
             margin-left:80px;
         ">
         Megor
