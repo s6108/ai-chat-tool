@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from services.freshness_service import judge_freshness
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,7 @@ class TaskInfo:
     complexity: str
     language: str
     reason: str
+    freshness_score: float = 0.0
 
 
 NEWS_KEYWORDS = (
@@ -197,159 +199,232 @@ def classify_task(
     length = len(text)
     language = _detect_language(text)
 
+    # ==================================================
+    # AI Freshness Layer
+    # 是否联网不再由关键词决定。
+    # ==================================================
+    freshness = judge_freshness(text)
+
+    need_search = freshness.need_search
+    freshness_score = freshness.confidence
+
+    print(
+        "AI FRESHNESS:",
+        need_search,
+        freshness_score,
+        freshness.reason,
+    )
+
+    # ==================================================
+    # 以下规则只负责判断任务类型和模型路由，
+    # 不再负责决定是否联网。
+    # ==================================================
+
     if has_image:
         return TaskInfo(
             task_type="vision",
-            need_search=False,
+            need_search=need_search,
             need_vision=True,
             complexity="medium",
             language=language,
             reason="用户上传了图片",
+            freshness_score=freshness_score,
         )
 
-    if _contains_any(lowered, UTILITY_REALTIME_KEYWORDS):
+    if _contains_any(
+        lowered,
+        UTILITY_REALTIME_KEYWORDS,
+    ):
         return TaskInfo(
             task_type="utility_realtime",
-            need_search=True,
+            need_search=need_search,
             need_vision=False,
             complexity="low",
             language=language,
             reason="天气、股票、汇率或其他实时数据",
+            freshness_score=freshness_score,
         )
-    print("DEBUG TEXT:", repr(lowered))
 
-    print(
-        "DEBUG NEWS HIT:",
-        [
-            k for k in NEWS_KEYWORDS
-            if k in lowered
-        ]
-    )
-
-    print(
-        "DEBUG REALTIME HIT:",
-        [
-            k for k in GENERAL_REALTIME_KEYWORDS
-            if k in lowered
-        ]
-    )
-    if _contains_any(lowered, NEWS_KEYWORDS):
+    if _contains_any(
+        lowered,
+        NEWS_KEYWORDS,
+    ):
         return TaskInfo(
             task_type="news",
-            need_search=True,
+            need_search=need_search,
             need_vision=False,
             complexity="medium",
             language=language,
             reason="新闻、政治或国际时事",
+            freshness_score=freshness_score,
+        )
+
+    if _contains_any(
+        lowered,
+        GENERAL_REALTIME_KEYWORDS,
+    ):
+        return TaskInfo(
+            task_type="general_realtime",
+            need_search=need_search,
+            need_vision=False,
+            complexity="low",
+            language=language,
+            reason="包含当前或动态信息",
+            freshness_score=freshness_score,
         )
 
     if (
-        _contains_any(lowered, GENERAL_REALTIME_KEYWORDS)
-        and not _contains_any(lowered, NEWS_KEYWORDS)
-    ):
-        return TaskInfo(
-            task_type="general_realtime",
-            need_search=True,
-            need_vision=False,
-            complexity="low",
-            language=language,
-            reason="包含明确的当前时间或最新信息要求",
+        re.search(
+            r"\b(20\d{2}|19\d{2})\b",
+            lowered,
         )
-
-    if re.search(r"\b(20\d{2}|19\d{2})\b", lowered) and _contains_any(
-        lowered,
-        ("发生", "发布", "价格", "数据", "新闻", "政策", "选举", "上市"),
+        and _contains_any(
+            lowered,
+            (
+                "发生",
+                "发布",
+                "价格",
+                "数据",
+                "新闻",
+                "政策",
+                "选举",
+                "上市",
+            ),
+        )
     ):
         return TaskInfo(
             task_type="general_realtime",
-            need_search=True,
+            need_search=need_search,
             need_vision=False,
             complexity="low",
             language=language,
-            reason="要求核实特定年份的动态事实",
+            reason="涉及特定年份的动态事实",
+            freshness_score=freshness_score,
         )
 
     if _looks_like_math(lowered):
-            return TaskInfo(
-                task_type="math",
-                need_search=False,
-                need_vision=False,
-                complexity="medium",
-                language=language,
-                reason="数学、计算或逻辑题",
-            )
+        return TaskInfo(
+            task_type="math",
+            need_search=need_search,
+            need_vision=False,
+            complexity="medium",
+            language=language,
+            reason="数学、计算或逻辑题",
+            freshness_score=freshness_score,
+        )
 
-    if _contains_any(lowered, CODE_KEYWORDS):
+    if _contains_any(
+        lowered,
+        CODE_KEYWORDS,
+    ):
         complex_code = (
             length > 800
-            or _contains_any(lowered, COMPLEX_CODE_KEYWORDS)
+            or _contains_any(
+                lowered,
+                COMPLEX_CODE_KEYWORDS,
+            )
         )
+
         return TaskInfo(
             task_type="coding",
-            need_search=False,
+            need_search=need_search,
             need_vision=False,
-            complexity="high" if complex_code else "medium",
+            complexity=(
+                "high"
+                if complex_code
+                else "medium"
+            ),
             language=language,
-            reason="复杂代码或系统任务" if complex_code else "普通编程或调试",
+            reason=(
+                "复杂代码或系统任务"
+                if complex_code
+                else "普通编程或调试"
+            ),
+            freshness_score=freshness_score,
         )
 
-    
-
-    if length > 2200 or _contains_any(lowered, LONG_CONTEXT_KEYWORDS):
+    if (
+        length > 2200
+        or _contains_any(
+            lowered,
+            LONG_CONTEXT_KEYWORDS,
+        )
+    ):
         return TaskInfo(
             task_type="long_context",
-            need_search=False,
+            need_search=need_search,
             need_vision=False,
             complexity="high",
             language=language,
             reason="超长文本或完整文档处理",
+            freshness_score=freshness_score,
         )
 
-    if _contains_any(lowered, CREATIVE_LONG_WRITING_KEYWORDS):
+    if _contains_any(
+        lowered,
+        CREATIVE_LONG_WRITING_KEYWORDS,
+    ):
         return TaskInfo(
             task_type="creative_writing",
-            need_search=False,
+            need_search=need_search,
             need_vision=False,
             complexity="high",
             language=language,
             reason="长篇创意、营销或商业写作",
+            freshness_score=freshness_score,
         )
 
-    if _contains_any(lowered, WRITING_KEYWORDS):
+    if _contains_any(
+        lowered,
+        WRITING_KEYWORDS,
+    ):
         return TaskInfo(
             task_type="writing",
-            need_search=False,
+            need_search=need_search,
             need_vision=False,
             complexity="medium",
             language=language,
             reason="写作、总结、改写或润色",
+            freshness_score=freshness_score,
         )
 
-    if _contains_any(lowered, REASONING_KEYWORDS):
+    if _contains_any(
+        lowered,
+        REASONING_KEYWORDS,
+    ):
         return TaskInfo(
             task_type="reasoning",
-            need_search=False,
+            need_search=need_search,
             need_vision=False,
             complexity="medium",
             language=language,
             reason="分析、比较、规划或决策",
+            freshness_score=freshness_score,
         )
 
-    if length <= 220 or _contains_any(lowered, FAST_TASK_KEYWORDS):
+    if (
+        length <= 220
+        or _contains_any(
+            lowered,
+            FAST_TASK_KEYWORDS,
+        )
+    ):
         return TaskInfo(
             task_type="fast",
-            need_search=False,
+            need_search=need_search,
             need_vision=False,
             complexity="low",
             language=language,
             reason="简短轻量任务",
+            freshness_score=freshness_score,
         )
 
     return TaskInfo(
         task_type="general",
-        need_search=False,
+        need_search=need_search,
         need_vision=False,
         complexity="medium",
         language=language,
         reason="普通常识或综合问答",
+        freshness_score=freshness_score,
     )

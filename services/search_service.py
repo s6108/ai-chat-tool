@@ -41,39 +41,54 @@ def is_valid_news_result(result: dict) -> bool:
     return True
 
 
-def search_web(query: str, max_results: int = 10):
+def search_web(
+    query: str,
+    max_results: int = 10,
+    *,
+    search_type: str = "general_web",
+    include_domains: list[str] | None = None,
+):
     if not query.strip():
         return []
+
+    payload = {
+        "api_key": TAVILY_API_KEY,
+        "query": query,
+        "search_depth": "advanced",
+        "max_results": max_results,
+        "include_answer": False,
+        "include_raw_content": False,
+        "topic": "general",
+    }
+
+    if include_domains:
+        payload["include_domains"] = include_domains
+
+    if search_type == "recent_event":
+        payload["topic"] = "news"
+        payload["days"] = 7
+
     response = _SESSION.post(
         "https://api.tavily.com/search",
-        json={
-            "api_key": TAVILY_API_KEY,
-            "query": query,
-            "search_depth": "advanced",
-            "max_results": max_results,
-            "include_answer": False,
-            "include_raw_content": False,
-            "topic": "news",
-            "days": 3,
-        },
+        json=payload,
         timeout=(5, 15),
     )
+
     response.raise_for_status()
+
     results = response.json().get(
         "results",
-        []
+        [],
     )
 
+    if search_type == "recent_event":
+        return [
+            result
+            for result in results
+            if is_valid_news_result(result)
+        ]
 
-    filtered_results = []
-
-    for result in results:
-
-        if is_valid_news_result(result):
-            filtered_results.append(result)
-
-    return filtered_results
-
+    return results
 
 def format_search_results(results: list) -> str:
     parts = []
