@@ -54,6 +54,6 @@ VALIDATION_CASES: tuple[ValidationCase, ...] = (
     ValidationCase("creative_writing", "写一个品牌营销方案", "Doubao-Pro"),
     ValidationCase("creative_writing", "写一篇长篇品牌故事", "Doubao-Pro"),
 
-    ValidationCase("vision", "评价一下这张图片", "GLM-4V", has_image=True),
-    ValidationCase("vision", "识别图中的内容", "GLM-4V", has_image=True),
+    ValidationCase("vision", "评价一下这张图片", "GLM", has_image=True),
+    ValidationCase("vision", "识别图中的内容", "GLMV", has_image=True),
 )

@@ -56,19 +56,18 @@ MODEL_CAPABILITIES: Final[dict[str, ModelCapability]] = {
         ("long_context", "summarization", "research"),
         ("Qwen", "Claude", "Gemini"),
     ),
-    "GLM-4": ModelCapability(
-        "GLM-4", "zhipu", "Zhipu AI", "CN",
-        9, 8, 8, 7, 8, 8, 0, 8, 9, 7, 4, 7,
-        False, False, True,
-        ("general", "writing", "reasoning"),
-        ("Qwen", "DeepSeek"),
-    ),
-    "GLM-4V": ModelCapability(
-        "GLM-4V", "zhipu", "Zhipu AI", "CN",
-        9, 8, 8, 6, 7, 7, 9, 7, 9, 7, 4, 7,
+    "GLM": ModelCapability(
+        "GLM", "zhipu", "Zhipu AI", "CN",
+        9, 8, 8, 8, 8, 8, 9, 9, 9, 7, 4, 7,
         True, False, True,
-        ("vision", "image_analysis"),
-        ("Gemini", "ChatGPT"),
+        {
+            "general",
+            "writing",
+            "reasoning",
+            "vision",
+            "image_analysis",
+        },
+        {"Gemini", "ChatGPT"},
     ),
     "Doubao-Pro": ModelCapability(
         "Doubao-Pro", "volcengine", "ByteDance", "CN",

@@ -64,7 +64,10 @@ from services.date_service import (
     get_search_query,
     build_date_prompt,
 )
-from services.search_planner import plan_search
+from services.search_planner import (
+    plan_search,
+    resolve_search_query,
+)
 from services.search_evaluator import evaluate_search_results
 from services.model_router import choose_auto_model
 from services.model_config import (
@@ -77,6 +80,8 @@ from services.provider_service import (
     stream_model_response,
 )
 from services.freshness_service import judge_freshness
+
+from services.native_search.native_search_factory import NativeSearchFactory
 
 
 from ui.chat_messages import render_chat_messages, render_user_content
@@ -274,7 +279,7 @@ MODEL_DISPLAY_NAMES = {
     "DeepSeek": "DeepSeek-V4 Flash",
     "Doubao-Pro": "Doubao-Doubao Pro",
     "Gemini": "Gemini-3.6 Flash",
-    "GLM-4V": "ZhiPu-GLM-4V Plus",
+    "GLM": "ZhiPu-GLM 5.2 ",
     "Grok": "Grok-Grok 4.5",
     "Kimi": "Kimi-K2.5",
     "Qwen": "Qwen-3.6 Flash",
@@ -1249,7 +1254,47 @@ if st.session_state.processing:
         has_image=bool(uploaded_file),
     )
 
+    # ===== 最终联网判定 =====
     needs_web_search = task_info.need_search
+
+    # 图片本身不是联网理由。
+    # 普通的看图、描述、识别、分析任务直接交给视觉模型。
+    # 只有用户明确要求查询外部/实时信息时，才允许 Vision + Search。
+    if task_info.task_type == "vision":
+        prompt_lower = prompt.casefold()
+
+        vision_search_keywords = (
+            "搜索",
+            "搜一下",
+            "查一下",
+            "查询",
+            "联网",
+            "最新",
+            "现在",
+            "目前",
+            "当前",
+            "今天",
+            "最近",
+            "实时",
+            "新闻",
+            "价格",
+            "多少钱",
+            "售价",
+            "官网",
+            "官方网站",
+            "行情",
+            "上市",
+            "开放时间",
+        )
+
+        has_explicit_search_intent = any(
+            keyword in prompt_lower
+            for keyword in vision_search_keywords
+        )
+
+        if not has_explicit_search_intent:
+            needs_web_search = False
+
     task_debug = task_info
 
     print(
@@ -1335,124 +1380,165 @@ if st.session_state.processing:
                 print("🌐 需要联网搜索")
 
                 # ==================================================
-                # Freshness + Search Plan
+                # 先解析当前完整搜索问题
                 # ==================================================
-                freshness_decision = judge_freshness(prompt)
-                search_type = freshness_decision.search_type
-
-                search_plan = plan_search(prompt)
-
-                search_queries = search_plan.queries
-                preferred_domains = search_plan.preferred_domains
-
-                print(
-                    f"🧭 Search Planner 生成 "
-                    f"{len(search_queries)} 条搜索词："
+                resolved_search_prompt = resolve_search_query(
+                    prompt,
+                    api_messages,
                 )
 
-                for index, query in enumerate(
-                    search_queries,
-                    start=1,
-                ):
-                    print(f"  {index}. {query}")
-
                 print(
-                    "🏛️ Preferred domains:",
-                    preferred_domains,
+                    "🧩 Resolved search prompt:",
+                    resolved_search_prompt,
                 )
 
-                search_results = []
-                seen_urls = set()
+                # ==================================================
+                # 优先尝试当前模型自己的原生搜索
+                # ==================================================
+                native_search_used = False
+                native_search_response = None
 
-                # ==================================================
-                # CURRENT FACT
-                # 优先搜索第一方权威来源
-                # ==================================================
-                if (
-                    search_type == "current_fact"
-                    and preferred_domains
-                ):
+                if NativeSearchFactory.supports(selected_model_name):
                     print(
-                        "🏛️ 当前事实查询："
-                        "优先搜索第一方权威来源"
+                        f"🧠 尝试 {selected_model_name} 原生搜索"
+                    )
+
+                    try:
+                        native_search = NativeSearchFactory.create(
+                            selected_model_name
+                        )
+
+                        if native_search is not None:
+                            native_search_response = native_search.search(
+                                query=resolved_search_prompt,
+                                messages=api_messages,
+                                max_results=8,
+                            )
+
+                            if native_search_response.success:
+                                native_search_used = True
+
+                                print(
+                                    f"✅ {selected_model_name} 原生搜索成功"
+                                )
+
+                            else:
+                                print(
+                                    f"⚠️ {selected_model_name} 原生搜索失败，"
+                                    "进入 Tavily Safety Net"
+                                )
+
+                                if native_search_response.error:
+                                    print(
+                                        "   原因：",
+                                        native_search_response.error,
+                                    )
+
+                    except Exception as error:
+                        print(
+                            f"⚠️ {selected_model_name} 原生搜索异常：",
+                            error,
+                        )
+
+                # ==================================================
+                # 原生搜索成功
+                # ==================================================
+                if native_search_used and native_search_response is not None:
+
+                    date_prompt = build_date_prompt()
+
+                    native_sources_text = ""
+
+                    if native_search_response.results:
+                        source_lines = []
+
+                        for index, result in enumerate(
+                            native_search_response.results,
+                            start=1,
+                        ):
+                            source_lines.append(
+                                f"{index}. "
+                                f"{result.title or 'Untitled'}\n"
+                                f"{result.url}"
+                            )
+
+                        native_sources_text = (
+                            "\n\n【原生搜索来源】\n"
+                            + "\n".join(source_lines)
+                        )
+
+                    native_content = (
+                        f"{date_prompt}\n\n"
+                        "【当前模型原生搜索结果】\n\n"
+                        f"{native_search_response.answer}"
+                        f"{native_sources_text}"
+                    )
+
+                    web_instruction = {
+                        "role": "system",
+                        "content": (
+                            "下面内容来自当前模型自己的原生联网搜索。\n"
+                            "回答当前问题时，请优先依据这些最新搜索结果，"
+                            "不要使用过时的内部训练记忆推翻可靠搜索证据。\n"
+                            "如果搜索结果本身存在冲突或证据不足，"
+                            "请明确说明，不要猜测。\n\n"
+                            f"{native_content}"
+                        ),
+                    }
+
+                    api_messages = [
+                        web_instruction,
+                        *api_messages,
+                    ]
+
+                # ==================================================
+                # 原生搜索失败 / 当前模型尚未接原生搜索
+                # → Tavily Safety Net
+                # ==================================================
+                else:
+                    
+                    freshness_decision = judge_freshness(
+                        resolved_search_prompt
+                    )
+                    search_type = freshness_decision.search_type
+
+                    search_plan = plan_search(
+                        resolved_search_prompt
+                    )
+
+                    search_queries = search_plan.queries
+                    preferred_domains = search_plan.preferred_domains
+
+                    print(
+                        f"🧭 Search Planner 生成 "
+                        f"{len(search_queries)} 条搜索词："
                     )
 
                     for index, query in enumerate(
                         search_queries,
                         start=1,
                     ):
-                        print(
-                            f"🔎 官方来源搜索 "
-                            f"{index}/{len(search_queries)}："
-                            f"{query}"
-                        )
-
-                        try:
-                            current_results = search_web(
-                                query,
-                                max_results=5,
-                                search_type=search_type,
-                                include_domains=preferred_domains,
-                            )
-
-                        except Exception as error:
-                            print(
-                                "⚠️ 官方来源搜索失败："
-                                f"{error}"
-                            )
-                            current_results = []
-
-                        print(
-                            f"   官方范围找到 "
-                            f"{len(current_results)} 条结果"
-                        )
-
-                        for result in current_results:
-                            url = (
-                                result.get("url")
-                                or ""
-                            ).strip()
-
-                            if url:
-                                normalized_url = (
-                                    url
-                                    .rstrip("/")
-                                    .casefold()
-                                )
-
-                                if normalized_url in seen_urls:
-                                    continue
-
-                                seen_urls.add(
-                                    normalized_url
-                                )
-
-                            search_results.append(
-                                result
-                            )
-
-                    evaluation = evaluate_search_results(
-                        user_prompt=prompt,
-                        results=search_results,
-                        search_type=search_type,
-                        preferred_domains=preferred_domains,
-                    )
+                        print(f"  {index}. {query}")
 
                     print(
-                        "🏛️ 官方来源评估：",
-                        evaluation,
+                        "🏛️ Preferred domains:",
+                        preferred_domains,
                     )
 
+                    search_results = []
+                    seen_urls = set()
+
                     # ==================================================
-                    # 官方资料不足时，再进行普通互联网搜索
+                    # CURRENT FACT
+                    # 优先搜索第一方权威来源
                     # ==================================================
-                    if not evaluation.get(
-                        "enough",
-                        False,
+                    if (
+                        search_type == "current_fact"
+                        and preferred_domains
                     ):
                         print(
-                            "⚠️ 官方来源不足，"
-                            "开始普通搜索补充资料"
+                            "🏛️ 当前事实查询："
+                            "优先搜索第一方权威来源"
                         )
 
                         for index, query in enumerate(
@@ -1460,7 +1546,7 @@ if st.session_state.processing:
                             start=1,
                         ):
                             print(
-                                f"🌐 普通搜索 "
+                                f"🔎 官方来源搜索 "
                                 f"{index}/{len(search_queries)}："
                                 f"{query}"
                             )
@@ -1470,17 +1556,18 @@ if st.session_state.processing:
                                     query,
                                     max_results=5,
                                     search_type=search_type,
+                                    include_domains=preferred_domains,
                                 )
 
                             except Exception as error:
                                 print(
-                                    "⚠️ 普通搜索失败："
+                                    "⚠️ 官方来源搜索失败："
                                     f"{error}"
                                 )
                                 current_results = []
 
                             print(
-                                f"   找到 "
+                                f"   官方范围找到 "
                                 f"{len(current_results)} 条结果"
                             )
 
@@ -1515,181 +1602,258 @@ if st.session_state.processing:
                             preferred_domains=preferred_domains,
                         )
 
-                # ==================================================
-                # 其他联网类型
-                # recent_event / realtime_data / general_web
-                # ==================================================
-                else:
-                    for index, query in enumerate(
-                        search_queries,
-                        start=1,
-                    ):
                         print(
-                            f"🔎 执行第 "
-                            f"{index}/{len(search_queries)} "
-                            f"次搜索：{query}"
+                            "🏛️ 官方来源评估：",
+                            evaluation,
                         )
 
-                        try:
-                            current_results = search_web(
-                                query,
-                                max_results=5,
+                        # ==================================================
+                        # 官方资料不足时，再进行普通互联网搜索
+                        # ==================================================
+                        if not evaluation.get(
+                            "enough",
+                            False,
+                        ):
+                            print(
+                                "⚠️ 官方来源不足，"
+                                "开始普通搜索补充资料"
+                            )
+
+                            for index, query in enumerate(
+                                search_queries,
+                                start=1,
+                            ):
+                                print(
+                                    f"🌐 普通搜索 "
+                                    f"{index}/{len(search_queries)}："
+                                    f"{query}"
+                                )
+
+                                try:
+                                    current_results = search_web(
+                                        query,
+                                        max_results=5,
+                                        search_type=search_type,
+                                    )
+
+                                except Exception as error:
+                                    print(
+                                        "⚠️ 普通搜索失败："
+                                        f"{error}"
+                                    )
+                                    current_results = []
+
+                                print(
+                                    f"   找到 "
+                                    f"{len(current_results)} 条结果"
+                                )
+
+                                for result in current_results:
+                                    url = (
+                                        result.get("url")
+                                        or ""
+                                    ).strip()
+
+                                    if url:
+                                        normalized_url = (
+                                            url
+                                            .rstrip("/")
+                                            .casefold()
+                                        )
+
+                                        if normalized_url in seen_urls:
+                                            continue
+
+                                        seen_urls.add(
+                                            normalized_url
+                                        )
+
+                                    search_results.append(
+                                        result
+                                    )
+
+                            evaluation = evaluate_search_results(
+                                user_prompt=prompt,
+                                results=search_results,
+                                search_type=search_type,
+                                preferred_domains=preferred_domains,
+                            )
+
+                    # ==================================================
+                    # 其他联网类型
+                    # recent_event / realtime_data / general_web
+                    # ==================================================
+                    else:
+                        for index, query in enumerate(
+                            search_queries,
+                            start=1,
+                        ):
+                            print(
+                                f"🔎 执行第 "
+                                f"{index}/{len(search_queries)} "
+                                f"次搜索：{query}"
+                            )
+
+                            try:
+                                current_results = search_web(
+                                    query,
+                                    max_results=5,
+                                    search_type=search_type,
+                                )
+
+                            except Exception as error:
+                                print(
+                                    f"⚠️ 第 {index} 次搜索失败："
+                                    f"{error}"
+                                )
+                                current_results = []
+
+                            print(
+                                f"   找到 "
+                                f"{len(current_results)} 条结果"
+                            )
+
+                            for result in current_results:
+                                url = (
+                                    result.get("url")
+                                    or ""
+                                ).strip()
+
+                                if url:
+                                    normalized_url = (
+                                        url
+                                        .rstrip("/")
+                                        .casefold()
+                                    )
+
+                                    if normalized_url in seen_urls:
+                                        continue
+
+                                    seen_urls.add(
+                                        normalized_url
+                                    )
+
+                                search_results.append(
+                                    result
+                                )
+
+                            evaluation = evaluate_search_results(
+                                user_prompt=prompt,
+                                results=search_results,
                                 search_type=search_type,
                             )
 
-                        except Exception as error:
                             print(
-                                f"⚠️ 第 {index} 次搜索失败："
-                                f"{error}"
+                                f"🧪 搜索评估："
+                                f"{'资料足够' if evaluation['enough'] else '资料不足'}"
                             )
-                            current_results = []
 
-                        print(
-                            f"   找到 "
-                            f"{len(current_results)} 条结果"
-                        )
+                            print(
+                                f"   原因："
+                                f"{evaluation['reason']}"
+                            )
 
-                        for result in current_results:
-                            url = (
-                                result.get("url")
-                                or ""
-                            ).strip()
-
-                            if url:
-                                normalized_url = (
-                                    url
-                                    .rstrip("/")
-                                    .casefold()
+                            if evaluation["missing"]:
+                                print(
+                                    f"   仍缺少："
+                                    f"{evaluation['missing']}"
                                 )
 
-                                if normalized_url in seen_urls:
-                                    continue
+                            if evaluation["enough"]:
+                                print(
+                                    "✅ 已找到足够资料，"
+                                    "提前停止搜索"
+                                )
+                                break
 
-                                seen_urls.add(
-                                    normalized_url
+                            if index < len(search_queries):
+                                print(
+                                    "🔁 当前资料不足，"
+                                    "继续下一轮搜索"
                                 )
 
-                            search_results.append(
-                                result
-                            )
-
-                        evaluation = evaluate_search_results(
-                            user_prompt=prompt,
-                            results=search_results,
-                            search_type=search_type,
-                        )
-
-                        print(
-                            f"🧪 搜索评估："
-                            f"{'资料足够' if evaluation['enough'] else '资料不足'}"
-                        )
-
-                        print(
-                            f"   原因："
-                            f"{evaluation['reason']}"
-                        )
-
-                        if evaluation["missing"]:
-                            print(
-                                f"   仍缺少："
-                                f"{evaluation['missing']}"
-                            )
-
-                        if evaluation["enough"]:
-                            print(
-                                "✅ 已找到足够资料，"
-                                "提前停止搜索"
-                            )
-                            break
-
-                        if index < len(search_queries):
-                            print(
-                                "🔁 当前资料不足，"
-                                "继续下一轮搜索"
-                            )
-
-                # ==================================================
-                # 最终搜索评估
-                # ==================================================
-                print(
-                    "📊 搜索结果最终评估：",
-                    evaluation,
-                )
-
-                print(
-                    f"✅ 合并去重后共 "
-                    f"{len(search_results)} 条结果"
-                )
-
-                search_results = search_results[:10]
-
-                print(
-                    f"📚 最终选取前 "
-                    f"{len(search_results)} 条结果供模型分析"
-                )
-
-                for result in search_results:
+                    # ==================================================
+                    # 最终搜索评估
+                    # ==================================================
                     print(
-                        result.get(
-                            "title",
-                            "无标题",
-                        )
+                        "📊 搜索结果最终评估：",
+                        evaluation,
                     )
 
-                # ==================================================
-                # 搜索结果 → 模型上下文
-                # ==================================================
-                date_prompt = build_date_prompt()
+                    print(
+                        f"✅ 合并去重后共 "
+                        f"{len(search_results)} 条结果"
+                    )
 
-                search_context = format_search_results(
-                    search_results
-                )
+                    search_results = search_results[:10]
 
-                content = (
-                    f"{date_prompt}\n\n"
-                    "【联网搜索结果】\n\n"
-                    f"{search_context}"
-                )
+                    print(
+                        f"📚 最终选取前 "
+                        f"{len(search_results)} 条结果供模型分析"
+                    )
 
-                web_instruction = {
-                    "role": "system",
-                    "content": (
-                        "你可以使用下面提供的联网搜索结果回答用户问题。\n\n"
+                    for result in search_results:
+                        print(
+                            result.get(
+                                "title",
+                                "无标题",
+                            )
+                        )
 
-                        "【联网回答最高优先级规则】\n"
-                        "1. 对于会随时间变化的当前事实，"
-                        "联网搜索结果优先于你的内部训练知识。\n"
-                        "2. 不得使用内部记忆推翻可靠的最新搜索证据。\n"
-                        "3. 如果你的内部知识与可靠搜索结果冲突，"
-                        "必须采用可靠搜索结果。\n"
-                        "4. 对现任政府领导人、公司高管、当前职位、"
-                        "法律政策、产品版本、价格、市场数据等动态事实，"
-                        "只能依据提供的搜索证据回答。\n"
-                        "5. 如果搜索证据不足、来源互相矛盾或无法确认当前状态，"
-                        "必须明确告诉用户“目前无法可靠确认”，不得猜测。\n"
-                        "6. 优先采用官方机构、政府网站、公司官网"
-                        "及其他第一方权威来源。\n"
-                        "7. 不得因为某个旧来源排名靠前，"
-                        "就把旧信息当成当前事实。\n\n"
+                    # ==================================================
+                    # 搜索结果 → 模型上下文
+                    # ==================================================
+                    date_prompt = build_date_prompt()
 
-                        "【日期与时效规则】\n"
-                        "请严格遵守前面的日期校验规则。\n"
-                        "不得把历史新闻当作最新新闻。\n"
-                        "如果搜索结果日期不明确，请主动说明。\n"
-                        "如果多个来源时间或数据冲突，请说明存在冲突。\n"
-                        "除非来源明确提供带时区的更新时间，"
-                        "否则不要输出准确的当地当前时间。\n"
-                        "天气观测时间必须标注为数据更新时间，"
-                        "不能当作当前系统时间。\n\n"
+                    search_context = format_search_results(
+                        search_results
+                    )
 
-                        f"{content}"
-                    ),
-                }
+                    content = (
+                        f"{date_prompt}\n\n"
+                        "【联网搜索结果】\n\n"
+                        f"{search_context}"
+                    )
 
-                api_messages = [
-                    web_instruction,
-                    *api_messages,
-                ]
+                    web_instruction = {
+                        "role": "system",
+                        "content": (
+                            "你可以使用下面提供的联网搜索结果回答用户问题。\n\n"
+
+                            "【联网回答最高优先级规则】\n"
+                            "1. 对于会随时间变化的当前事实，"
+                            "联网搜索结果优先于你的内部训练知识。\n"
+                            "2. 不得使用内部记忆推翻可靠的最新搜索证据。\n"
+                            "3. 如果你的内部知识与可靠搜索结果冲突，"
+                            "必须采用可靠搜索结果。\n"
+                            "4. 对现任政府领导人、公司高管、当前职位、"
+                            "法律政策、产品版本、价格、市场数据等动态事实，"
+                            "只能依据提供的搜索证据回答。\n"
+                            "5. 如果搜索证据不足、来源互相矛盾或无法确认当前状态，"
+                            "必须明确告诉用户“目前无法可靠确认”，不得猜测。\n"
+                            "6. 优先采用官方机构、政府网站、公司官网"
+                            "及其他第一方权威来源。\n"
+                            "7. 不得因为某个旧来源排名靠前，"
+                            "就把旧信息当成当前事实。\n\n"
+
+                            "【日期与时效规则】\n"
+                            "请严格遵守前面的日期校验规则。\n"
+                            "不得把历史新闻当作最新新闻。\n"
+                            "如果搜索结果日期不明确，请主动说明。\n"
+                            "如果多个来源时间或数据冲突，请说明存在冲突。\n"
+                            "除非来源明确提供带时区的更新时间，"
+                            "否则不要输出准确的当地当前时间。\n"
+                            "天气观测时间必须标注为数据更新时间，"
+                            "不能当作当前系统时间。\n\n"
+
+                            f"{content}"
+                        ),
+                    }
+
+                    api_messages = [
+                        web_instruction,
+                        *api_messages,
+                    ]
 
             else:
                 print("📚 不需要联网")

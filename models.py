@@ -14,14 +14,10 @@ model_options = {
         "model": "deepseek-v4-flash",
         "key": DEEPSEEK_API_KEY,
     },
-    "GLM-4V": {
+    "GLM": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4/",
-        "model": "glm-4v-plus",
-        "key": ZHIPU_API_KEY,
-    },
-    "GLM-4": {
-        "base_url": "https://open.bigmodel.cn/api/paas/v4/",
-        "model": "glm-4-plus",
+        "model": "glm-5.2",
+        "vision_model": "glm-5v-turbo",
         "key": ZHIPU_API_KEY,
     },
     "Kimi": {

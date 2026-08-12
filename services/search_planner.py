@@ -268,6 +268,158 @@ def _plan_preferred_domains(
 
         return ()
 
+CONTEXT_RESOLVER_PROMPT = """
+You rewrite the user's latest message into a standalone web-search question.
+
+Use the recent conversation only to resolve:
+- omitted subjects
+- pronouns
+- references such as "this", "that", "him", "her", "it"
+- follow-up requests such as "search again", "check again", "what about now"
+
+Rules:
+
+1. Do NOT answer the question.
+2. Do NOT invent or correct facts.
+3. Preserve the user's actual intent.
+4. Use prior conversation only to recover missing context.
+5. If the latest user message is already a complete standalone question,
+   return it unchanged.
+6. Return ONLY the rewritten question.
+"""
+
+
+def resolve_search_query(
+    prompt: str,
+    messages: list[dict],
+) -> str:
+    """
+    将依赖上下文的追问补全成可独立搜索的问题。
+
+    例如：
+
+    历史：
+    User: 加拿大总理是谁？
+    Assistant: 加拿大现任总理是 Mark Carney。
+
+    当前：
+    User: 你再搜索一下
+
+    输出类似：
+    重新搜索并核实加拿大现任总理是谁？
+    """
+
+    prompt = (prompt or "").strip()
+
+    if not prompt:
+        return ""
+
+    # 只取最近几轮，避免上下文过长
+    recent_messages = messages[-8:] if messages else []
+
+    context_lines: list[str] = []
+
+    for message in recent_messages:
+        role = message.get("role")
+        content = message.get("content")
+
+        if role not in {"user", "assistant"}:
+            continue
+
+        if not isinstance(content, str):
+            continue
+
+        content = content.strip()
+
+        if not content:
+            continue
+
+        # 避免把完整长回答全部交给 resolver
+        if len(content) > 800:
+            content = content[:800]
+
+        context_lines.append(
+            f"{role.upper()}: {content}"
+        )
+
+    context_text = "\n".join(context_lines)
+
+    try:
+        config = get_model_config("DeepSeek")
+
+        if not config.api_key:
+            return prompt
+
+        client = OpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout=8.0,
+        )
+
+        request_params = {
+            "model": config.model_id,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": CONTEXT_RESOLVER_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Recent conversation:\n"
+                        f"{context_text}\n\n"
+                        "Latest user message:\n"
+                        f"{prompt}\n\n"
+                        "Standalone search question:"
+                    ),
+                },
+            ],
+            "temperature": 0,
+        }
+
+        if getattr(
+            config,
+            "uses_max_completion_tokens",
+            False,
+        ):
+            request_params["max_completion_tokens"] = 160
+        else:
+            request_params["max_tokens"] = 160
+
+        response = client.chat.completions.create(
+            **request_params
+        )
+
+        if not response.choices:
+            return prompt
+
+        resolved = (
+            response.choices[0]
+            .message
+            .content
+            or ""
+        ).strip()
+
+        if not resolved:
+            return prompt
+
+        print(
+            "🧩 SEARCH QUERY RESOLVED:",
+            repr(prompt),
+            "→",
+            repr(resolved),
+        )
+
+        return resolved
+
+    except Exception as error:
+        print(
+            "Search query resolver failed:",
+            repr(error),
+        )
+
+        return prompt
+
 
 def plan_search(prompt: str) -> SearchPlan:
     """

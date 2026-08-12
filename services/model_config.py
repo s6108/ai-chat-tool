@@ -20,10 +20,17 @@ class ModelConfig:
     name: str
     provider: str
     base_url: str
+
+    # 默认文本模型
     model_id: str
+
     api_key: str | None
+
     supports_vision: bool = False
     uses_max_completion_tokens: bool = False
+
+    # 可选：同一品牌专用视觉模型
+    vision_model_id: str | None = None
 
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {
@@ -35,21 +42,23 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         api_key=DEEPSEEK_API_KEY,
         
     ),
-    "GLM-4V": ModelConfig(
-        name="GLM-4V",
+
+    "GLM": ModelConfig(
+        name="GLM",
         provider="zhipu",
         base_url="https://open.bigmodel.cn/api/paas/v4/",
-        model_id="glm-4v-plus",
+
+        # 普通文本 / 推理 / 圆桌 / 原生搜索
+        model_id="glm-5.2",
+
         api_key=ZHIPU_API_KEY,
+
+        # GLM 品牌仍然支持图片
         supports_vision=True,
+
+        # 图片 / 多模态请求专用
+        vision_model_id="glm-5v-turbo",
     ),
-    # "GLM-4": ModelConfig(
-    #     name="GLM-4",
-    #     provider="zhipu",
-    #     base_url="https://open.bigmodel.cn/api/paas/v4/",
-    #     model_id="glm-4-plus",
-    #     api_key=ZHIPU_API_KEY,
-    # ),
     
     "Kimi": ModelConfig(
         name="Kimi",

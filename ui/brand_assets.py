@@ -14,8 +14,7 @@ USER_AVATAR = str(STATIC_DIR / "avatar-user.png")
 MODEL_AVATARS = {
     "DeepSeek": str(STATIC_DIR / "avatar-deepseek.png"),
     "Qwen": str(STATIC_DIR / "avatar-qwen.png"),
-    "GLM-4V": str(STATIC_DIR / "avatar-glm-4v.png"),
-    "GLM-4": str(STATIC_DIR / "avatar-glm-4.png"),
+    "GLM": str(STATIC_DIR / "avatar-glm-4v.png"),
     "Kimi": str(STATIC_DIR / "avatar-kimi.png"),
     "Doubao-Pro": str(STATIC_DIR / "avatar-doubao-pro.png"),
     "ChatGPT": str(STATIC_DIR / "avatar-chatgpt.png"),

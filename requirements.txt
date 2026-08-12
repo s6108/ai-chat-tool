@@ -9,3 +9,4 @@ streamlit-cookies-manager-v2==0.3.1
 anthropic==0.120.2
 pydantic==2.13.4
 pydantic-core==2.46.4
+google-genai
