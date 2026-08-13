@@ -1116,35 +1116,99 @@ with st.sidebar:
                 st.session_state.processing
             )
 
-# ====================== Model Selector + Clear Chat ======================
+
+# ====================== Fixed Top Model Selector ======================
+
+st.markdown(
+    """
+    <style>
+    /* 顶部固定模型选择区 */
+    .st-key-top_model_selector {
+        position: fixed !important;
+        top: 0.45rem;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 330px;
+        z-index: 1000000;
+    }
+
+    /* 横排布局 */
+    .st-key-top_model_selector > div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* “模型选择”文字 */
+    .megor-model-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        white-space: nowrap;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* 下拉框 */
+    .st-key-top_model_selector div[data-testid="stSelectbox"] {
+        width: 180px !important;
+        flex-shrink: 0;
+    }
+    /* 缩小模型选择框高度 */
+    .st-key-top_model_selector div[data-baseweb="select"] > div {
+        min-height: 34px !important;
+        height: 34px !important;
+    }
+
+    /* 让框内文字和图标垂直居中 */
+    .st-key-top_model_selector div[data-baseweb="select"] {
+        min-height: 34px !important;
+    }
+
+    /* 手机端 */
+    @media (max-width: 768px) {
+        .st-key-top_model_selector {
+            top: 0.30rem;
+            width: 280px;
+        }
+
+        .megor-model-label {
+            font-size: 0.75rem;
+        }
+
+        .st-key-top_model_selector div[data-testid="stSelectbox"] {
+            width: 190px !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 options = get_model_selector_options()
 
-button_col, _ = st.columns([1, 4])
-
-with button_col:
-    if st.button(
-        t("clear_chat"),
-        use_container_width=False,
-        key="clear_chat_btn",
-    ):
-        if st.session_state.current_session_id:
-            clear_chat_messages(
-                st.session_state.current_session_id
-            )
-
-        st.session_state.messages = []
-        st.session_state.uploader_key += 1
-        st.rerun()
-
-mode_col, _ = st.columns([1, 4])
-
-with mode_col:
-    mode = st.selectbox(
-        "",
-        options,
-        key="model_selector",
-        label_visibility="collapsed",
+with st.container(
+    key="top_model_selector",
+):
+    label_col, select_col = st.columns(
+        [0.62, 2.38],
+        gap="small",
+        vertical_alignment="center",
     )
+
+    with label_col:
+        st.markdown(
+            '<div class="megor-model-label">模型选择</div>',
+            unsafe_allow_html=True,
+        )
+
+    with select_col:
+        mode = st.selectbox(
+            "",
+            options,
+            key="model_selector",
+            label_visibility="collapsed",
+        )
+
 handle_model_selector_change()
 
 # ====================== Display Messages ======================
