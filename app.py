@@ -1216,6 +1216,8 @@ render_chat_messages(
     st.session_state.messages
 )
 
+
+
 # ====================== Upload + Chat Input ======================
 
 
@@ -1235,7 +1237,6 @@ if submission:
 
     if submission.files:
         uploaded_file = submission.files[0]
-
 
 # ====================== Process User Input ======================
 if submission and (prompt or uploaded_file):
@@ -1394,20 +1395,70 @@ if st.session_state.processing:
         # 对用户只显示当前模型名称，不展示自动路由原因。
         st.caption(used_model)
 
+        # ==================================================
+        # 当前回答区域定位点
+        #
+        # 位置放在模型名称下方。
+        # 定位到这里时，上方可以看到用户刚发送的问题，
+        # 下方可以看到当前模型及搜索 / 回答状态。
+        # ==================================================
+        st.html(
+            '<div id="megor-response-start-anchor" style="height:1px;"></div>'
+        )
+
         status_placeholder = st.empty()
         placeholder = st.empty()
         full_response = ""
         selected_model_name = st.session_state.selected_model
-        
 
         search_provider = get_search_provider(
             selected_model_name,
             task_info.task_type,
         )
-        
 
         if needs_web_search:
-            status_placeholder.info(t("searching"))
+            status_placeholder.info(
+                t("searching")
+            )
+
+        # ==================================================
+        # 用户发送后立即定位到“本轮回答起点”
+        #
+        # 此时：
+        # 1. 最新用户问题已经显示
+        # 2. 当前模型名称已经显示
+        # 3. 如果需要联网，“正在搜索”状态也已经显示
+        #
+        # 所以用户无需等待第一个 token。
+        # ==================================================
+        st.html(
+            """
+            <script>
+            (() => {
+                const scrollToResponseStart = () => {
+                    const anchor = document.getElementById(
+                        "megor-response-start-anchor"
+                    );
+
+                    if (!anchor) {
+                        return;
+                    }
+
+                    anchor.scrollIntoView({
+                        behavior: "auto",
+                        block: "center"
+                    });
+                };
+
+                scrollToResponseStart();
+                setTimeout(scrollToResponseStart, 80);
+                setTimeout(scrollToResponseStart, 200);
+                setTimeout(scrollToResponseStart, 400);
+            })();
+            </script>
+            """,
+            unsafe_allow_javascript=True,
+        )
 
         try:
             
@@ -1930,6 +1981,11 @@ if st.session_state.processing:
                 temperature=selected_temperature,
             )
 
+            # 当前模型回答的位置锚点
+            st.html(
+                '<div id="megor-current-answer-anchor" style="height:1px;"></div>'
+            )
+
             first_token_received = False
 
             for text_chunk in stream:
@@ -1937,8 +1993,41 @@ if st.session_state.processing:
                     first_token_received = True
                     status_placeholder.empty()
 
+                    # 第一个 token 出现时，
+                    # 把当前模型回答真正带入可视区域。
+                    st.html(
+                        """
+                        <script>
+                        (() => {
+                            const scrollToAnswer = () => {
+                                const anchor = document.getElementById(
+                                    "megor-current-answer-anchor"
+                                );
+
+                                if (!anchor) {
+                                    return;
+                                }
+
+                                anchor.scrollIntoView({
+                                    behavior: "auto",
+                                    block: "start"
+                                });
+                            };
+
+                            scrollToAnswer();
+                            setTimeout(scrollToAnswer, 80);
+                            setTimeout(scrollToAnswer, 200);
+                        })();
+                        </script>
+                        """,
+                        unsafe_allow_javascript=True,
+                    )
+
                 full_response += text_chunk
-                placeholder.markdown(full_response + "▌")
+
+                placeholder.markdown(
+                    full_response + "▌"
+                )
 
             status_placeholder.empty()
             placeholder.markdown(full_response)
