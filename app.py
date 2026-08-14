@@ -1178,26 +1178,28 @@ st.markdown(
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
             width: 190px !important;
         }
-        /* 手机端强制“模型选择 + 下拉框”保持横排 */
+        /* 手机端保持横排，并让文字和下拉框紧挨 */
         .st-key-top_model_selector div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
             flex-wrap: nowrap !important;
             flex-direction: row !important;
+            justify-content: flex-start !important;
             align-items: center !important;
-            gap: 6px !important;
+            gap: 4px !important;
         }
 
-        /* 左侧“模型选择” */
+        /* 左侧文字只占实际需要的宽度 */
         .st-key-top_model_selector div[data-testid="column"]:first-child {
-            width: 68px !important;
-            min-width: 68px !important;
-            flex: 0 0 68px !important;
+            width: auto !important;
+            min-width: auto !important;
+            flex: 0 0 auto !important;
         }
 
-        /* 右侧模型下拉框 */
+        /* 右侧下拉框固定宽度，不再被撑到右边 */
         .st-key-top_model_selector div[data-testid="column"]:last-child {
             width: 190px !important;
-            min-width: 0 !important;
-            flex: 1 1 auto !important;
+            min-width: 190px !important;
+            flex: 0 0 190px !important;
         }
     }
     </style>
@@ -1217,8 +1219,14 @@ with st.container(
     )
 
     with label_col:
+        model_label = (
+            "模型选择"
+            if st.session_state.get("language") == "中文"
+            else "Model"
+        )
+
         st.markdown(
-            '<div class="megor-model-label">模型选择</div>',
+            f'<div class="megor-model-label">{model_label}</div>',
             unsafe_allow_html=True,
         )
 
