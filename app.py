@@ -1185,7 +1185,7 @@ st.markdown(
             flex-direction: row !important;
             justify-content: center !important;
             align-items: center !important;
-            gap: 0 !important;
+            gap: 6 !important;
             width: auto !important;
         }
 
