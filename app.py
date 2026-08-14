@@ -1168,7 +1168,7 @@ st.markdown(
     @media (max-width: 768px) {
         .st-key-top_model_selector {
             top: 0.30rem;
-            width: 280px;
+            width: auto !important;
         }
 
         .megor-model-label {
@@ -1178,9 +1178,10 @@ st.markdown(
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
             width: 190px !important;
         }
-        /* 手机端保持横排，并让文字和下拉框紧挨 */
+        /* 手机端：整个模型选择区按内容自然收缩 */
         .st-key-top_model_selector div[data-testid="stHorizontalBlock"] {
-            display: flex !important;
+            display: inline-flex !important;
+            width: auto !important;
             flex-wrap: nowrap !important;
             flex-direction: row !important;
             justify-content: flex-start !important;
@@ -1188,18 +1189,16 @@ st.markdown(
             gap: 4px !important;
         }
 
-        /* 左侧文字只占实际需要的宽度 */
-        .st-key-top_model_selector div[data-testid="column"]:first-child {
+        /* 两列都不要再占整行宽度 */
+        .st-key-top_model_selector div[data-testid="column"] {
             width: auto !important;
-            min-width: auto !important;
+            min-width: 0 !important;
             flex: 0 0 auto !important;
         }
 
-        /* 右侧下拉框固定宽度，不再被撑到右边 */
-        .st-key-top_model_selector div[data-testid="column"]:last-child {
-            width: 190px !important;
-            min-width: 190px !important;
-            flex: 0 0 190px !important;
+        /* 下拉框本身控制宽度 */
+        .st-key-top_model_selector div[data-testid="stSelectbox"] {
+            width: 160px !important;
         }
     }
     </style>
