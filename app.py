@@ -1178,27 +1178,38 @@ st.markdown(
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
             width: 190px !important;
         }
-        /* 手机端：整个模型选择区按内容自然收缩 */
+        /* 手机端：模型文字和下拉框强制紧贴 */
         .st-key-top_model_selector div[data-testid="stHorizontalBlock"] {
-            display: inline-flex !important;
-            width: auto !important;
+            display: flex !important;
             flex-wrap: nowrap !important;
             flex-direction: row !important;
-            justify-content: flex-start !important;
+            justify-content: center !important;
             align-items: center !important;
-            gap: 4px !important;
+            gap: 0 !important;
+            width: auto !important;
         }
 
-        /* 两列都不要再占整行宽度 */
-        .st-key-top_model_selector div[data-testid="column"] {
+        /* 左侧 Model / 模型选择 */
+        .st-key-top_model_selector div[data-testid="column"]:first-child {
             width: auto !important;
             min-width: 0 !important;
             flex: 0 0 auto !important;
+            padding-right: 4px !important;
+            margin-right: 0 !important;
         }
 
-        /* 下拉框本身控制宽度 */
+        /* 右侧下拉框 */
+        .st-key-top_model_selector div[data-testid="column"]:last-child {
+            width: 170px !important;
+            min-width: 170px !important;
+            flex: 0 0 170px !important;
+            padding-left: 0 !important;
+            margin-left: -8px !important;
+        }
+
+        /* 下拉框本体 */
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
-            width: 160px !important;
+            width: 170px !important;
         }
     }
     </style>
