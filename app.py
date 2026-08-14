@@ -1178,6 +1178,27 @@ st.markdown(
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
             width: 190px !important;
         }
+        /* 手机端强制“模型选择 + 下拉框”保持横排 */
+        .st-key-top_model_selector div[data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 6px !important;
+        }
+
+        /* 左侧“模型选择” */
+        .st-key-top_model_selector div[data-testid="column"]:first-child {
+            width: 68px !important;
+            min-width: 68px !important;
+            flex: 0 0 68px !important;
+        }
+
+        /* 右侧模型下拉框 */
+        .st-key-top_model_selector div[data-testid="column"]:last-child {
+            width: 190px !important;
+            min-width: 0 !important;
+            flex: 1 1 auto !important;
+        }
     }
     </style>
     """,
