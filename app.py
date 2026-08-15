@@ -1173,6 +1173,7 @@ st.markdown(
 
         .megor-model-label {
             font-size: 0.75rem;
+            margin-left: 16px !important;
         }
 
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
@@ -1195,7 +1196,7 @@ st.markdown(
             min-width: 0 !important;
             flex: 0 0 auto !important;
             padding-right: 4px !important;
-            margin-right: 11 !important;
+            margin-right: 0 !important;
         }
 
         /* 右侧下拉框 */
