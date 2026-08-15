@@ -1178,8 +1178,8 @@ st.markdown(
         }
 
         .megor-model-label {
-            font-size: 1.5rem;
-            transform: translateX(126px) !important;
+            font-size: 1rem;
+            transform: translateX(138px) !important;
         }
 
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
