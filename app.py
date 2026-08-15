@@ -1185,7 +1185,7 @@ st.markdown(
             flex-direction: row !important;
             justify-content: center !important;
             align-items: center !important;
-            gap: 6 !important;
+            gap: 0 !important;
             width: auto !important;
         }
 
@@ -1195,7 +1195,7 @@ st.markdown(
             min-width: 0 !important;
             flex: 0 0 auto !important;
             padding-right: 4px !important;
-            margin-right: 0 !important;
+            margin-right: 5 !important;
         }
 
         /* 右侧下拉框 */
