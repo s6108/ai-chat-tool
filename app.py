@@ -1195,7 +1195,7 @@ st.markdown(
             min-width: 0 !important;
             flex: 0 0 auto !important;
             padding-right: 4px !important;
-            margin-right: 5 !important;
+            margin-right: 11 !important;
         }
 
         /* 右侧下拉框 */
