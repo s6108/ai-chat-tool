@@ -73,7 +73,7 @@ TEXT = {
     "clear_chat": "🗑️ Clear Chat",
 
     # Model
-    "model_label": "Choose a model",
+    "model_label": "Model",
     "auto_mode": "🔄 Auto",
 
     # Input

@@ -447,7 +447,7 @@ if "new_chat_mode" not in st.session_state:
 # ====================== Auto Login ======================
 
 # Cookie 组件准备完成后，
-# 每个新的 Streamlit 会话只检查一次长期登录。
+# 每个新的 Streamlit 会话检查长期登录。
 if (
     st.session_state["user"] is None
     and not st.session_state["auth_checked"]
@@ -463,11 +463,17 @@ if (
     except Exception as restore_error:
         print(
             "长期登录恢复失败:",
-            restore_error,
+            repr(restore_error),
         )
 
-    # 无论成功或失败，本次 Streamlit 会话都已经完成认证检查。
-    st.session_state["auth_checked"] = True
+        # ⚠️ 临时恢复失败时，不立即标记认证检查完成
+        # 允许下一次 rerun 再尝试恢复长期登录
+        st.session_state["auth_checked"] = False
+
+    else:
+        # 只有 restore_login_from_remember 正常执行完成，
+        # 才认为本次认证检查已经完成
+        st.session_state["auth_checked"] = True
 
     if restored_user is not None:
         st.session_state["user"] = restored_user
@@ -1172,7 +1178,7 @@ st.markdown(
         }
 
         .megor-model-label {
-            font-size: 0.86rem;
+            font-size: 1.5rem;
             transform: translateX(126px) !important;
         }
 
@@ -1230,11 +1236,7 @@ with st.container(
     )
 
     with label_col:
-        model_label = (
-            "模型选择"
-            if st.session_state.get("language") == "中文"
-            else "Model"
-        )
+        model_label = t("model_label")
 
         st.markdown(
             f'<div class="megor-model-label">{model_label}</div>',

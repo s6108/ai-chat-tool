@@ -58,7 +58,7 @@ TEXT = {
     "clear_chat": "🗑️ 清空当前对话",
 
     # 模型
-    "model_label": "选择模型",
+    "model_label": "模型",
     "auto_mode": "🔄 自动模式",
 
     # 输入

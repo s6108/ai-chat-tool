@@ -50,33 +50,94 @@ def save_remember_session(user, cookies, device_id: str) -> None:
     print("✅ 长期登录 Cookie 已提交保存")
 
 
-def restore_login_from_remember(cookies, device_id: str) -> Optional[SimpleNamespace]:
-    """仅凭不可猜测的 remember_token 恢复登录，不依赖 Safari 中不稳定的 device_id。"""
+def restore_login_from_remember(
+    cookies,
+    device_id: str
+) -> Optional[SimpleNamespace]:
+    """仅凭 remember_token 恢复登录，不依赖 Safari 中不稳定的 device_id。"""
+
     token = get_cookie(cookies, REMEMBER_COOKIE)
+
     if not token:
         print("ℹ️ 未读取到 remember_token")
         return None
 
     token_hash = hash_remember_token(token)
+
+    # ==================================================
+    # 1. 查询 remember_session
+    #    如果这里发生异常，必须继续抛给外层，
+    #    不能把临时网络/数据库错误当成“未登录”
+    # ==================================================
     try:
-        result = (supabase_admin.table("remember_sessions").select("*")
-                  .eq("token_hash", token_hash)
-                  .gt("expires_at", now_utc()).limit(1).execute())
-        if not result.data:
-            print("ℹ️ remember_token 无匹配记录或已过期")
-            return None
+        result = (
+            supabase_admin
+            .table("remember_sessions")
+            .select("*")
+            .eq("token_hash", token_hash)
+            .gt("expires_at", now_utc())
+            .limit(1)
+            .execute()
+        )
 
-        saved = result.data[0]
-        (supabase_admin.table("remember_sessions").update({
-            "last_seen": now_utc(),
-            # 新 device_id 可用于后续设备列表更新，但不影响认证。
-            "device_id": device_id or saved.get("device_id"),
-        }).eq("id", saved["id"]).execute())
-
-        return SimpleNamespace(id=saved["user_id"], email=saved.get("email", "用户"))
     except Exception as error:
-        print(f"长期登录恢复失败：{error}")
+        print(
+            "❌ 查询 remember_session 失败：",
+            repr(error),
+        )
+
+        # 关键：
+        # 让外层知道这是“恢复过程异常”，
+        # 而不是“remember_token 不存在”
+        raise
+
+    # ==================================================
+    # 2. 查询成功，但确实没有有效记录
+    # ==================================================
+    if not result.data:
+        print("ℹ️ remember_token 无匹配记录或已过期")
         return None
+
+    saved = result.data[0]
+
+    # ==================================================
+    # 3. 到这里已经可以确认用户身份
+    #    last_seen / device_id 更新失败不能影响登录
+    # ==================================================
+    try:
+        (
+            supabase_admin
+            .table("remember_sessions")
+            .update({
+                "last_seen": now_utc(),
+                "device_id": (
+                    device_id
+                    or saved.get("device_id")
+                ),
+            })
+            .eq("id", saved["id"])
+            .execute()
+        )
+
+    except Exception as error:
+        print(
+            "⚠️ remember_session 状态更新失败，"
+            "但不影响登录：",
+            repr(error),
+        )
+
+    # ==================================================
+    # 4. 返回已恢复用户
+    # ==================================================
+    print(
+        "✅ remember_token 验证成功：",
+        saved["user_id"],
+    )
+
+    return SimpleNamespace(
+        id=saved["user_id"],
+        email=saved.get("email", "用户"),
+    )
 
 
 def clear_remember_session(cookies: Any, device_id: str) -> None:
