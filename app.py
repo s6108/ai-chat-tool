@@ -492,45 +492,77 @@ if (
         )
         st.stop()
 
-# ====================== Password Recovery Link ======================
+# ====================== Set New Password ======================
 
-recovery_type = st.query_params.get("type")
-recovery_token_hash = st.query_params.get("token_hash")
+if st.session_state["password_recovery_mode"]:
 
-if (
-    recovery_type == "recovery"
-    and recovery_token_hash
-    and not st.session_state["password_recovery_mode"]
-):
     try:
-        recovery_res = supabase.auth.verify_otp(
-            {
-                "token_hash": str(recovery_token_hash),
-                "type": "recovery",
-            }
+        supabase.auth.set_session(
+            st.session_state["recovery_access_token"],
+            st.session_state["recovery_refresh_token"],
         )
-
-        if recovery_res and recovery_res.session:
-            st.session_state["password_recovery_mode"] = True
-            st.session_state["recovery_access_token"] = (
-                recovery_res.session.access_token
-            )
-            st.session_state["recovery_refresh_token"] = (
-                recovery_res.session.refresh_token
-            )
-
-            # 验证成功后清除敏感 token，保持地址栏干净
-            params = st.query_params.to_dict()
-            params.pop("token_hash", None)
-            params.pop("type", None)
-            st.query_params.from_dict(params)
-
-    except Exception as recovery_error:
+    except Exception as session_error:
         st.error(
-            f"Password recovery link is invalid or expired: "
-            f"{recovery_error}"
+            f"Password recovery session expired: {session_error}"
         )
         st.stop()
+
+    render_brand_header(width=72)
+
+    st.markdown("### 设置新密码")
+
+    new_password = st.text_input(
+        "新密码",
+        type="password",
+        key="new_password",
+    )
+
+    confirm_password = st.text_input(
+        "确认新密码",
+        type="password",
+        key="confirm_new_password",
+    )
+
+    if st.button(
+        "更新密码",
+        key="update_password_btn",
+    ):
+        if not new_password or not confirm_password:
+            st.error("请输入并确认新密码。")
+
+        elif new_password != confirm_password:
+            st.error("两次输入的密码不一致。")
+
+        else:
+            try:
+                supabase.auth.update_user(
+                    {
+                        "password": new_password
+                    }
+                )
+
+                # 修改完成，不继续保留 recovery session
+                try:
+                    supabase.auth.sign_out()
+                except Exception:
+                    pass
+
+                st.session_state["password_recovery_mode"] = False
+                st.session_state["recovery_access_token"] = None
+                st.session_state["recovery_refresh_token"] = None
+                st.session_state["user"] = None
+                st.session_state["auth_checked"] = False
+
+                st.success(
+                    "密码已更新，请使用新密码重新登录。"
+                )
+
+            except Exception as update_error:
+                st.error(
+                    f"更新密码失败：{update_error}"
+                )
+
+    st.stop()
 
 
 if "model_selector" not in st.session_state:
