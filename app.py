@@ -401,27 +401,31 @@ def remove_chat_id_from_url():
     params.pop("chat", None)
     st.query_params.from_dict(params)
 
-def remove_auth_error_from_url():
-    """清理 Supabase 验证链接留下的错误参数，保留 chat 等其他参数。"""
-    params = st.query_params.to_dict()
+def clean_auth_fragment():
+    """清理 Supabase 验证链接留下的 #error 参数，不刷新页面。"""
+    st.html(
+        """
+        <script>
+        const hash = window.location.hash;
 
-    auth_error_keys = (
-        "error",
-        "error_code",
-        "error_description",
-        "sb",
+        if (
+            hash.includes("error=") ||
+            hash.includes("error_code=") ||
+            hash.includes("error_description=")
+        ) {
+            history.replaceState(
+                null,
+                "",
+                window.location.pathname + window.location.search
+            );
+        }
+        </script>
+        """,
+        unsafe_allow_javascript=True,
     )
 
-    # 只有真的存在这些参数时才修改 URL
-    if any(key in params for key in auth_error_keys):
-        for key in auth_error_keys:
-            params.pop(key, None)
 
-        st.query_params.from_dict(params)
-
-
-# 页面初始化时先清理 Supabase 验证错误参数
-remove_auth_error_from_url()
+clean_auth_fragment()
 
 SESSION_DEFAULTS = {
     "user": None,
