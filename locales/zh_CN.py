@@ -108,4 +108,10 @@ TEXT = {
     "brand_tagline": "多个 AI,一场对话,由你主导。",
     "brand_description": "全球首个由用户主导、多 AI 协同讨论的平台。",
     "login_title": "登录你的账户",
+
+    "forgot_password": "忘记密码？",
+    "reset_email": "邮箱地址",
+    "send_reset_email": "发送重置邮件",
+    "reset_email_sent": "密码重置邮件已发送，请检查你的邮箱。",
+    "enter_reset_email": "请输入你的邮箱地址。",
 }

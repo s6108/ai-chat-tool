@@ -436,6 +436,11 @@ SESSION_DEFAULTS = {
     "uploader_key": 0,
     "processing": False,
     "page": "chat",
+
+    # 密码找回
+    "password_recovery_mode": False,
+    "recovery_access_token": None,
+    "recovery_refresh_token": None,
 }
 
 
@@ -446,6 +451,86 @@ for state_key, default_value in SESSION_DEFAULTS.items():
             st.session_state[state_key] = default_value.copy()
         else:
             st.session_state[state_key] = default_value
+
+# ====================== Password Recovery Link ======================
+
+recovery_type = st.query_params.get("type")
+recovery_token_hash = st.query_params.get("token_hash")
+
+if (
+    recovery_type == "recovery"
+    and recovery_token_hash
+    and not st.session_state["password_recovery_mode"]
+):
+    try:
+        recovery_res = supabase.auth.verify_otp(
+            {
+                "token_hash": str(recovery_token_hash),
+                "type": "recovery",
+            }
+        )
+
+        if recovery_res and recovery_res.session:
+            st.session_state["password_recovery_mode"] = True
+            st.session_state["recovery_access_token"] = (
+                recovery_res.session.access_token
+            )
+            st.session_state["recovery_refresh_token"] = (
+                recovery_res.session.refresh_token
+            )
+
+            # 验证成功后清除敏感 token，保持地址栏干净
+            params = st.query_params.to_dict()
+            params.pop("token_hash", None)
+            params.pop("type", None)
+            st.query_params.from_dict(params)
+
+    except Exception as recovery_error:
+        st.error(
+            f"Password recovery link is invalid or expired: "
+            f"{recovery_error}"
+        )
+        st.stop()
+
+# ====================== Password Recovery Link ======================
+
+recovery_type = st.query_params.get("type")
+recovery_token_hash = st.query_params.get("token_hash")
+
+if (
+    recovery_type == "recovery"
+    and recovery_token_hash
+    and not st.session_state["password_recovery_mode"]
+):
+    try:
+        recovery_res = supabase.auth.verify_otp(
+            {
+                "token_hash": str(recovery_token_hash),
+                "type": "recovery",
+            }
+        )
+
+        if recovery_res and recovery_res.session:
+            st.session_state["password_recovery_mode"] = True
+            st.session_state["recovery_access_token"] = (
+                recovery_res.session.access_token
+            )
+            st.session_state["recovery_refresh_token"] = (
+                recovery_res.session.refresh_token
+            )
+
+            # 验证成功后清除敏感 token，保持地址栏干净
+            params = st.query_params.to_dict()
+            params.pop("token_hash", None)
+            params.pop("type", None)
+            st.query_params.from_dict(params)
+
+    except Exception as recovery_error:
+        st.error(
+            f"Password recovery link is invalid or expired: "
+            f"{recovery_error}"
+        )
+        st.stop()
 
 
 if "model_selector" not in st.session_state:
@@ -618,7 +703,7 @@ if not st.session_state.user:
     <div style="text-align:center;">
 
     <div style="
-    font-size:33px;
+    font-size:29px;
     font-weight:600;
     margin-bottom:21px;
     ">
@@ -730,6 +815,42 @@ if not st.session_state.user:
                         # 直接进入主页面，不再强制刷新整个浏览器页面。
                         st.success(t("sign_in_success"))
                         st.rerun()
+
+        st.markdown("---")
+
+        if st.button(
+            t("forgot_password"),
+            key="forgot_password_btn",
+        ):
+            st.session_state["show_password_reset"] = True
+
+        if st.session_state.get("show_password_reset", False):
+            reset_email = st.text_input(
+                t("reset_email"),
+                key="reset_email",
+            )
+
+            if st.button(
+                t("send_reset_email"),
+                key="send_reset_email_btn",
+            ):
+                if not reset_email:
+                    st.error(t("enter_reset_email"))
+                else:
+                    try:
+                        supabase.auth.reset_password_for_email(
+                            reset_email.strip(),
+                            {
+                                "redirect_to": "https://megor.ai"
+                            },
+                        )
+
+                        st.success(t("reset_email_sent"))
+
+                    except Exception as reset_error:
+                        st.error(
+                            f"Unable to send reset email: {reset_error}"
+                        )
 
             
 

@@ -139,4 +139,10 @@ TEXT = {
     "brand_description_cn": "A user-led platform where multiple AI models collaborate in discussion.",
     "login_title": "Sign in to your account",
     "welcome_plain": "Welcome",
+
+    "forgot_password": "Forgot password?",
+    "reset_email": "Email address",
+    "send_reset_email": "Send reset email",
+    "reset_email_sent": "Password reset email sent. Please check your inbox.",
+    "enter_reset_email": "Please enter your email address.",
 }
