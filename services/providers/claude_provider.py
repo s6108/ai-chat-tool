@@ -20,6 +20,8 @@ class ClaudeProvider(BaseProvider):
             max_retries=1,
         )
 
+        self.last_usage = None
+
     def stream_chat(
         self,
         *,
@@ -27,6 +29,9 @@ class ClaudeProvider(BaseProvider):
         max_tokens: int = 1200,
         temperature: float = 0.7,
     ) -> Iterator[str]:
+        
+        self.last_usage = None
+
         # Claude Sonnet 5 不接受非默认 temperature。
         del temperature
 
@@ -111,5 +116,70 @@ class ClaudeProvider(BaseProvider):
                     yielded_text = True
                     yield text
 
+            # 流结束后取得 Claude 最终 Message，
+            # 其中包含真实 input/output token usage。
+            final_message = stream.get_final_message()
+
+            usage = getattr(
+                final_message,
+                "usage",
+                None,
+            )
+
+            if usage is not None:
+                input_tokens = int(
+                    getattr(
+                        usage,
+                        "input_tokens",
+                        0,
+                    )
+                    or 0
+                )
+
+                output_tokens = int(
+                    getattr(
+                        usage,
+                        "output_tokens",
+                        0,
+                    )
+                    or 0
+                )
+
+                # Anthropic 可能额外返回 prompt caching token。
+                cache_read_tokens = int(
+                    getattr(
+                        usage,
+                        "cache_read_input_tokens",
+                        0,
+                    )
+                    or 0
+                )
+
+                cache_creation_tokens = int(
+                    getattr(
+                        usage,
+                        "cache_creation_input_tokens",
+                        0,
+                    )
+                    or 0
+                )
+
+                self.last_usage = {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": (
+                        input_tokens
+                        + output_tokens
+                    ),
+                    "cache_read_input_tokens": (
+                        cache_read_tokens
+                    ),
+                    "cache_creation_input_tokens": (
+                        cache_creation_tokens
+                    ),
+                }
+
         if not yielded_text:
-            raise RuntimeError("Claude returned an empty response.")
+            raise RuntimeError(
+                "Claude returned an empty response."
+            )

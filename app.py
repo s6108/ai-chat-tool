@@ -2,6 +2,7 @@ import base64
 import json
 import traceback
 import uuid
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -41,6 +42,8 @@ from services.usage_service import (
     get_today_usage,
     increase_chat_usage,
     increase_image_usage,
+    record_usage_event,
+    can_start_request,
     FREE_CHAT_LIMIT,
     FREE_IMAGE_LIMIT,
     PREMIUM_DAILY_CHAT_LIMIT,
@@ -82,6 +85,8 @@ from services.provider_service import (
 from services.freshness_service import judge_freshness
 
 from services.native_search.native_search_factory import NativeSearchFactory
+
+from uuid import uuid4
 
 
 from ui.chat_messages import render_chat_messages, render_user_content
@@ -1089,7 +1094,7 @@ with st.sidebar:
                 )
 
                 st.markdown(
-                    f"💬 **今日聊天："
+                    f"💬 **{t('today_chat')}: "
                     f"{chat_count} / {FREE_CHAT_LIMIT}**"
                 )
                 st.progress(
@@ -1099,11 +1104,13 @@ with st.sidebar:
                     )
                 )
                 st.caption(
-                    f"剩余 {chat_remaining} 次"
+                    t("remaining_times").format(
+                        count=chat_remaining
+                    )
                 )
 
                 st.markdown(
-                    f"🖼️ **今日识图："
+                    f"🖼️ **{t('today_images')}: "
                     f"{image_count} / {FREE_IMAGE_LIMIT}**"
                 )
                 st.progress(
@@ -1113,7 +1120,9 @@ with st.sidebar:
                     )
                 )
                 st.caption(
-                    f"剩余 {image_remaining} 次"
+                    t("remaining_times").format(
+                        count=image_remaining
+                    )
                 )
 
             except Exception as usage_error:
@@ -1631,6 +1640,27 @@ if st.session_state.processing:
         full_response = ""
         selected_model_name = st.session_state.selected_model
 
+        current_user = st.session_state.get("user")
+        
+        current_user_id = (
+            getattr(current_user, "id", None)
+            or getattr(current_user, "user_id", None)
+        )
+
+        if not current_user_id and isinstance(current_user, dict):
+            current_user_id = (
+                current_user.get("id")
+                or current_user.get("user_id")
+            )
+
+        current_plan = (
+            "premium"
+            if account.get("is_premium")
+            else "free"
+        )
+
+        usage_request_id = str(uuid4())
+
         search_provider = get_search_provider(
             selected_model_name,
             task_info.task_type,
@@ -1739,6 +1769,37 @@ if st.session_state.processing:
                     )
 
                     try:
+                        if current_user_id:
+                            native_preflight = can_start_request(
+                                supabase_admin,
+                                user_id=str(current_user_id),
+                                plan=str(current_plan),
+                                model_key=selected_model_name,
+                                request_type="native_search",
+                            )
+
+                            if not native_preflight["allowed"]:
+                                print(
+                                    "⛔ Native search blocked:",
+                                    f"model={selected_model_name},",
+                                    f"reason={native_preflight.get('reason')}",
+                                )
+
+                                if str(current_plan).lower() in {
+                                    "pro",
+                                    "premium",
+                                    "paid",
+                                }:
+                                    st.warning(
+                                        "Advanced real-time search is temporarily "
+                                        "limited under fair-use controls."
+                                    )
+                                else:
+                                    st.warning(
+                                        t("advanced_search_requires_premium")
+                                    )
+
+                                st.stop()
                         native_search = NativeSearchFactory.create(
                             selected_model_name
                         )
@@ -1756,6 +1817,113 @@ if st.session_state.processing:
                                 print(
                                     f"✅ {selected_model_name} 原生搜索成功"
                                 )
+
+                                # ==================================================
+                                # 记录原生搜索本身的真实成本
+                                # ==================================================
+                                native_usage = getattr(
+                                    native_search_response,
+                                    "usage",
+                                    None,
+                                )
+
+                                if native_usage:
+                                    try:
+                                        current_user = st.session_state.get(
+                                            "user"
+                                        )
+
+                                        current_user_id = (
+                                            getattr(
+                                                current_user,
+                                                "id",
+                                                None,
+                                            )
+                                            or getattr(
+                                                current_user,
+                                                "user_id",
+                                                None,
+                                            )
+                                        )
+
+                                        if (
+                                            not current_user_id
+                                            and isinstance(
+                                                current_user,
+                                                dict,
+                                            )
+                                        ):
+                                            current_user_id = (
+                                                current_user.get("id")
+                                                or current_user.get(
+                                                    "user_id"
+                                                )
+                                            )
+
+                                        if current_user_id:
+                                            record_usage_event(
+                                                supabase_admin,
+                                                user_id=str(
+                                                    current_user_id
+                                                ),
+                                                model_key=(
+                                                    selected_model_name
+                                                ),
+                                                input_tokens=int(
+                                                    native_usage.get(
+                                                        "input_tokens",
+                                                        0,
+                                                    )
+                                                    or 0
+                                                ),
+                                                output_tokens=int(
+                                                    native_usage.get(
+                                                        "output_tokens",
+                                                        0,
+                                                    )
+                                                    or 0
+                                                ),
+                                                request_type=(
+                                                    "native_search"
+                                                ),
+                                                provider_actual_cost_usd=(
+                                                    native_usage.get(
+                                                        "provider_cost_usd"
+                                                    )
+                                                ),
+                                                metadata={
+                                                    "source": (
+                                                        "native_search"
+                                                    ),
+                                                    "server_side_tools": (
+                                                        native_usage.get(
+                                                            "server_side_tools",
+                                                            0,
+                                                        )
+                                                    ),
+                                                    "cost_in_usd_ticks": (
+                                                        native_usage.get(
+                                                            "cost_in_usd_ticks",
+                                                            0,
+                                                        )
+                                                    ),
+                                                },
+                                            )
+
+                                            print(
+                                                "💳 Native search usage recorded:",
+                                                f"model={selected_model_name},",
+                                                "cost_usd="
+                                                f"{native_usage.get('provider_cost_usd')}",
+                                            )
+
+                                    except Exception as usage_error:
+                                        # 记账失败不能破坏搜索结果
+                                        print(
+                                            "⚠️ Native search usage "
+                                            "recording failed:",
+                                            repr(usage_error),
+                                        )
 
                             else:
                                 print(
@@ -2194,12 +2362,93 @@ if st.session_state.processing:
                 print("📚 不需要联网")
 
             
+
+            # ==================================================
+            # Usage preflight
+            # ==================================================
+
+            preflight = None
+
+            if current_user_id:
+                preflight = can_start_request(
+                    supabase_admin,
+                    user_id=str(current_user_id),
+                    plan=str(current_plan),
+                    model_key=selected_model_name,
+                    request_type="text",
+                )
+
+                if not preflight["allowed"]:
+                    reason = preflight.get("reason")
+
+                    if str(current_plan).lower() in {
+                        "pro",
+                        "premium",
+                        "paid",
+                    }:
+                        st.warning(
+                            t("pro_fair_use_limit")
+                        )
+
+                    elif reason in {
+                        "daily_credit_exhausted",
+                        "monthly_credit_exhausted",
+                    }:
+                        st.warning(
+                            t("free_quota_exhausted")
+                        )
+
+                    else:
+                        st.warning(
+                            t(
+                                "model_quota_insufficient"
+                            ).format(
+                                model=selected_model_name
+                            )
+                        )
+
+                    st.stop()
+
+                usage_max_output = (
+                    preflight
+                    .get("usage_status", {})
+                    .get("max_output_tokens")
+                )
+
+                if usage_max_output is not None:
+                    selected_max_tokens = min(
+                        int(selected_max_tokens),
+                        int(usage_max_output),
+                    )
+
+                cooldown_seconds = int(
+                    preflight
+                    .get("usage_status", {})
+                    .get("cooldown_seconds")
+                    or 0
+                )
+
+                if cooldown_seconds > 0:
+                    with st.spinner(
+                        t("fair_use_processing")
+                    ):
+                        time.sleep(cooldown_seconds)
+
             stream = stream_model_response(
                 model_name=selected_model_name,
                 messages=api_messages,
                 max_tokens=selected_max_tokens,
                 temperature=selected_temperature,
+                supabase_admin=supabase_admin,
+                user_id=(
+                    str(current_user_id)
+                    if current_user_id
+                    else None
+                ),
+                request_type="text",
             )
+                        
+            
 
             # 当前模型回答的位置锚点
             st.html(

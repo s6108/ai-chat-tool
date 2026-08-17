@@ -113,6 +113,28 @@ TEXT = {
         "Check Render Environment Variables."
     ),
 
+    "free_quota_exhausted": (
+        "Today's free allowance has been used up. "
+        "It will reset tomorrow."
+    ),
+    "model_quota_insufficient": (
+        "Your remaining allowance isn't enough to use {model}. "
+        "You can still try another model."
+    ),
+    "pro_fair_use_limit": (
+        "You've reached the current fair-use limit "
+        "for advanced AI usage."
+    ),
+
+    "fair_use_processing": (
+        "Processing your request..."
+    ),
+
+    "advanced_search_requires_premium": (
+        "Advanced real-time search requires more allowance. "
+        "Please upgrade to Premium to continue."
+    ),
+
     # Debug
     "debug": "Debug",
 
@@ -145,4 +167,7 @@ TEXT = {
     "send_reset_email": "Send reset email",
     "reset_email_sent": "Password reset email sent. Please check your inbox.",
     "enter_reset_email": "Please enter your email address.",
+    "today_chat": "Today's chats",
+    "today_images": "Today's images",
+    "remaining_times": "{count} remaining",
 }

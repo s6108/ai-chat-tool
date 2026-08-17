@@ -5,6 +5,7 @@ from typing import Any
 
 from services.model_config import get_model_config
 from services.providers.provider_factory import ProviderFactory
+from services.usage_service import record_usage_event
 
 
 class MissingModelApiKeyError(RuntimeError):
@@ -208,6 +209,10 @@ def stream_model_response(
     messages: list[dict[str, Any]],
     max_tokens: int = 1200,
     temperature: float = 0.7,
+    supabase_admin=None,
+    user_id: str | None = None,
+    request_type: str = "text",
+    request_id: str | None = None,
 ) -> Iterator[str]:
     """Stream text through the provider adapter selected for the model."""
     config = get_model_config(model_name)
@@ -227,3 +232,65 @@ def stream_model_response(
         raw_stream,
         model_name,
     )
+
+    # ============================================================
+    # Record actual provider token usage
+    # ============================================================
+
+    usage = getattr(
+        provider,
+        "last_usage",
+        None,
+    )
+
+    if (
+        usage
+        and supabase_admin is not None
+        and user_id
+    ):
+        try:
+            input_tokens = int(
+                usage.get(
+                    "input_tokens",
+                    0,
+                )
+                or 0
+            )
+
+            output_tokens = int(
+                usage.get(
+                    "output_tokens",
+                    0,
+                )
+                or 0
+            )
+
+            # 目前先只记录真正拿到 usage 的 provider。
+            # ChatGPT 已经支持，其他模型后续逐个接入。
+            if input_tokens > 0 or output_tokens > 0:
+                record_usage_event(
+                    supabase_admin,
+                    user_id=user_id,
+                    model_key=model_name,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    request_type=request_type,
+                    request_id=request_id,
+                    metadata={
+                        "source": "provider_usage",
+                    },
+                )
+
+                print(
+                    "💳 Usage recorded:",
+                    f"model={model_name},",
+                    f"input={input_tokens},",
+                    f"output={output_tokens}",
+                )
+
+        except Exception as usage_error:
+            # 额度记录失败不能破坏已经完成的聊天回答。
+            print(
+                "⚠️ Usage recording failed:",
+                repr(usage_error),
+            )

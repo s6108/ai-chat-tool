@@ -529,7 +529,7 @@ if st.session_state.processing:
 
     if st.session_state.auto_mode:
         if uploaded_file:
-            st.session_state.selected_model = "GLM-4V"
+            st.session_state.selected_model = "GLM"
         elif len(prompt or "") > 800:
             st.session_state.selected_model = "Kimi"
         elif len(prompt or "") > 300:
@@ -551,7 +551,7 @@ if st.session_state.processing:
 
             client = OpenAI(base_url=cfg["base_url"], api_key=cfg["key"])
 
-            if st.session_state.selected_model == "GLM-4V":
+            if st.session_state.selected_model == "GLM":
                 api_messages = st.session_state.messages
             else:
                 api_messages = [m for m in st.session_state.messages if isinstance(m.get("content"), str)]

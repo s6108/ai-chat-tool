@@ -41,6 +41,9 @@ class GrokNativeSearch(BaseNativeSearch):
             timeout=60.0,
         )
 
+        # 保存最近一次 Grok 原生搜索的真实 usage / cost
+        self.last_usage = None
+
     def search(
         self,
         *,
@@ -48,6 +51,8 @@ class GrokNativeSearch(BaseNativeSearch):
         messages: list[dict[str, Any]] | None = None,
         max_results: int = 8,
     ) -> NativeSearchResponse:
+
+        self.last_usage = None
 
         query = (query or "").strip()
 
@@ -142,6 +147,83 @@ class GrokNativeSearch(BaseNativeSearch):
                 ],
                 store=False,
             )
+
+            
+
+            # ==================================================
+            # xAI real usage / billed cost
+            # ==================================================
+
+            usage = getattr(
+                response,
+                "usage",
+                None,
+            )
+
+            if usage is not None:
+                input_tokens = int(
+                    getattr(
+                        usage,
+                        "input_tokens",
+                        0,
+                    )
+                    or 0
+                )
+
+                output_tokens = int(
+                    getattr(
+                        usage,
+                        "output_tokens",
+                        0,
+                    )
+                    or 0
+                )
+
+                total_tokens = int(
+                    getattr(
+                        usage,
+                        "total_tokens",
+                        0,
+                    )
+                    or 0
+                )
+
+                cost_ticks = int(
+                    getattr(
+                        usage,
+                        "cost_in_usd_ticks",
+                        0,
+                    )
+                    or 0
+                )
+
+                provider_cost_usd = (
+                    cost_ticks
+                    / 10_000_000_000
+                )
+
+                server_side_tools = int(
+                    getattr(
+                        usage,
+                        "num_server_side_tools_used",
+                        0,
+                    )
+                    or 0
+                )
+
+                self.last_usage = {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": total_tokens,
+                    "cost_in_usd_ticks": cost_ticks,
+                    "provider_cost_usd": provider_cost_usd,
+                    "server_side_tools": server_side_tools,
+                }
+
+                print(
+                    "💳 Grok native usage:",
+                    self.last_usage,
+                )
 
             # ==================================================
             # 最终回答文本
@@ -392,6 +474,7 @@ class GrokNativeSearch(BaseNativeSearch):
                 results=native_results,
                 answer=answer,
                 should_fallback=False,
+                usage=self.last_usage,
             )
 
         except Exception as error:

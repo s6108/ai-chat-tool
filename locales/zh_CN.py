@@ -84,6 +84,25 @@ TEXT = {
     # Supabase
     "supabase_missing": "Supabase 环境变量未配置完整，请检查 Render Environment Variables。",
 
+    "free_quota_exhausted": (
+        "今日免费额度已用完，明天会自动恢复。"
+    ),
+    "model_quota_insufficient": (
+        "当前剩余额度不足以使用 {model}，"
+        "你仍可尝试使用其他模型。"
+    ),
+    "pro_fair_use_limit": (
+        "当前已达到高级 AI 使用的公平使用限制。"
+    ),
+
+    "fair_use_processing": (
+        "正在处理你的请求..."
+    ),
+
+    "advanced_search_requires_premium": (
+        "实时高级搜索需要更多额度，请升级 Premium 后使用。"
+    ),
+
     # 调试
     "debug": "调试",
 
@@ -114,4 +133,7 @@ TEXT = {
     "send_reset_email": "发送重置邮件",
     "reset_email_sent": "密码重置邮件已发送，请检查你的邮箱。",
     "enter_reset_email": "请输入你的邮箱地址。",
+    "today_chat": "今日聊天",
+    "today_images": "今日识图",
+    "remaining_times": "剩余 {count} 次",
 }

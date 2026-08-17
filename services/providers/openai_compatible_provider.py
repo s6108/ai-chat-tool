@@ -141,6 +141,23 @@ class OpenAICompatibleProvider(BaseProvider):
             "messages": messages,
             "stream": True,
         }
+        # OpenAI 流式响应最后返回真实 token usage。
+        # 暂时只对 OpenAI 开启，避免影响其他兼容供应商。
+        usage_supported_providers = {
+            "openai",
+            "deepseek",
+            "moonshot",
+            "dashscope",
+            "xai",
+            "volcengine",
+            "gemini",
+            "zhipu",
+        }
+
+        if self.config.provider in usage_supported_providers:
+            request_params["stream_options"] = {
+                "include_usage": True
+            }
 
         if self.config.uses_max_completion_tokens:
             request_params[
@@ -186,6 +203,10 @@ class OpenAICompatibleProvider(BaseProvider):
 
         last_error: Exception | None = None
 
+        # 每次新的模型请求先清空上一次 usage。
+        # 流结束后 provider_service 可以从这里读取。
+        self.last_usage = None
+
         for attempt in range(1, 4):
             emitted_text = False
 
@@ -199,6 +220,45 @@ class OpenAICompatibleProvider(BaseProvider):
                 completed_normally = False
 
                 for chunk in stream:
+
+                    # OpenAI 开启 include_usage 后，
+                    # 最后的流式 chunk 会携带 token usage。
+                    usage = getattr(
+                        chunk,
+                        "usage",
+                        None,
+                    )
+
+                    if usage is not None:
+                        self.last_usage = {
+                            "input_tokens": int(
+                                getattr(
+                                    usage,
+                                    "prompt_tokens",
+                                    0,
+                                )
+                                or 0
+                            ),
+                            "output_tokens": int(
+                                getattr(
+                                    usage,
+                                    "completion_tokens",
+                                    0,
+                                )
+                                or 0
+                            ),
+                            "total_tokens": int(
+                                getattr(
+                                    usage,
+                                    "total_tokens",
+                                    0,
+                                )
+                                or 0
+                            ),
+                        }
+
+                    # usage-only chunk 可能没有 choices，
+                    # 所以必须在读取 usage 之后才能 continue。
                     if not chunk.choices:
                         continue
 

@@ -44,6 +44,9 @@ class NativeSearchResponse:
     # True 表示：
     # 原生搜索失败后应该进入 Tavily 安全网
     should_fallback: bool = False
+    # 原生搜索自身产生的 token / provider 实际成本。
+    # 没有 usage 数据的 provider 保持 None。
+    usage: dict[str, Any] | None = None
 
 
 class BaseNativeSearch(ABC):

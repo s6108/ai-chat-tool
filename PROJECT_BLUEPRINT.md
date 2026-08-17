@@ -33,8 +33,7 @@ Primary goal:
 - Payments: LemonSqueezy
 - AI Providers:
   - DeepSeek
-  - GLM-4V
-  - GLM-4
+  - GLM
   - Kimi
   - Doubao
   - Qwen
