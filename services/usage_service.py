@@ -1048,11 +1048,7 @@ def get_usage_status(
             max_output_tokens
         ),
 
-        "allow_basic_fallback": bool(
-            limits.get(
-                "allow_basic_fallback"
-            )
-        ),
+        
     }
 
 # ============================================================
@@ -1136,6 +1132,10 @@ def can_start_request(
     )
 
     plan_key = status["plan_key"]
+
+
+
+      
 
     # --------------------------------------------------------
     # 已经达到硬额度
@@ -1223,31 +1223,7 @@ def can_start_request(
             Decimal("10000"),
         )
 
-    # --------------------------------------------------------
-    # Pro 高级额度耗尽后允许低成本模型保底
-    # --------------------------------------------------------
-
-    basic_fallback_models = {
-        "DeepSeek",
-        "Qwen",
-    }
-
-    if (
-        plan_key == "pro"
-        and status["monthly_exhausted"]
-        and status["allow_basic_fallback"]
-        and model_key in basic_fallback_models
-        and normalized_request_type == "text"
-    ):
-        return {
-            "allowed": True,
-            "reason": "basic_fallback",
-            "usage_status": status,
-            "required_remaining_credits": float(
-                required
-            ),
-            "available_remaining_credits": 0.0,
-        }
+    
 
     # --------------------------------------------------------
     # Free：Daily 和 Monthly 两道门都检查

@@ -2377,6 +2377,30 @@ if st.session_state.processing:
                     model_key=selected_model_name,
                     request_type="text",
                 )
+                print(
+                    "🔎 APP PREFLIGHT RESULT:",
+                    {
+                        "current_plan": current_plan,
+                        "model": selected_model_name,
+                        "allowed": preflight.get("allowed"),
+                        "reason": preflight.get("reason"),
+                        "monthly_used": (
+                            preflight
+                            .get("usage_status", {})
+                            .get("monthly_used_credits")
+                        ),
+                        "monthly_limit": (
+                            preflight
+                            .get("usage_status", {})
+                            .get("monthly_credit_limit")
+                        ),
+                        "monthly_exhausted": (
+                            preflight
+                            .get("usage_status", {})
+                            .get("monthly_exhausted")
+                        ),
+                    },
+                )
 
                 if not preflight["allowed"]:
                     reason = preflight.get("reason")
