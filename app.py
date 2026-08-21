@@ -1487,8 +1487,12 @@ if submission:
 # ====================== Process User Input ======================
 if submission and (prompt or uploaded_file):
     user_id = st.session_state.user.id
-    user_plan = get_user_plan(user_id) or "free"
-    user_plan = str(user_plan).lower()
+
+    user_plan = (
+        "premium"
+        if account.get("is_premium")
+        else "free"
+    )
     
     # 先检查文字聊天额度
     if not can_use_chat(supabase_admin, user_id, user_plan):
