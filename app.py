@@ -316,7 +316,7 @@ def handle_model_selector_change():
 
 
 LEMONSQUEEZY_CHECKOUT_URL = (
-    "https://jjyo-ai-chat.lemonsqueezy.com/checkout/buy/6e539c0a-949d-4609-9678-a7f9b3d1bb3a"
+    "https://megor-ai.lemonsqueezy.com/checkout/buy/6e539c0a-949d-4609-9678-a7f9b3d1bb3a"
 )
 
 
