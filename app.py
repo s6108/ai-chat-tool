@@ -1402,11 +1402,28 @@ st.markdown(
         }
 
         /* 下拉框本体 */
-        .st-key-top_model_selector div[data-testid="stSelectbox"] {
-            width: 170px !important;
-        }
-    }
-    </style>
+                .st-key-top_model_selector div[data-testid="stSelectbox"] {
+                    width: 170px !important;
+                }
+            }
+
+            /* 手机端扩大左上角侧边栏展开按钮触控区域 */
+            @media (max-width: 768px) {
+                [data-testid="stSidebarCollapsedControl"] {
+                    width: 48px !important;
+                    height: 48px !important;
+                    min-width: 48px !important;
+                    min-height: 48px !important;
+                }
+
+                [data-testid="stSidebarCollapsedControl"] button {
+                    width: 48px !important;
+                    height: 48px !important;
+                    min-width: 48px !important;
+                    min-height: 48px !important;
+                }
+            }
+            </style>
     """,
     unsafe_allow_html=True,
 )
