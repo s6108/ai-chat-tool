@@ -187,7 +187,7 @@ class OpenAICompatibleProvider(BaseProvider):
         self,
         *,
         messages: list[dict[str, Any]],
-        max_tokens: int = 1200,
+        max_tokens: int = 3500,
         temperature: float = 0.7,
     ) -> Iterator[str]:
         """
@@ -209,6 +209,8 @@ class OpenAICompatibleProvider(BaseProvider):
 
         for attempt in range(1, 4):
             emitted_text = False
+
+            
 
             try:
                 stream = self._create_stream(
@@ -272,6 +274,12 @@ class OpenAICompatibleProvider(BaseProvider):
 
                     text = choice.delta.content
 
+                    
+
+                    if not text:
+                        text = getattr(choice.delta, "reasoning_content", None)
+
+
                     if not text:
                         continue
 
@@ -279,6 +287,7 @@ class OpenAICompatibleProvider(BaseProvider):
 
                     yield text
 
+                
                 if emitted_text:
                     if completed_normally:
                         return
