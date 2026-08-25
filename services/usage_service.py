@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import uuid4
+from time import monotonic
 
 
 # ============================================================
@@ -57,6 +58,260 @@ class UsageCostResult:
 
 
 # ============================================================
+# Lightweight in-process caches
+# ============================================================
+#
+# Goals:
+# 1. Do not hit Supabase on every request for stable configuration.
+# 2. Do not re-read daily request counters on every request.
+# 3. For Credit/Fair-Use preflight, reuse the local snapshot while
+#    remaining credit is safely above 10%.
+# 4. Every successful record_usage_event updates the local credit
+#    snapshot immediately, so the cache approaches the 10% threshold
+#    without requiring a read before every model request.
+#
+# A short TTL is still kept as a multi-device / multi-worker safety net.
+# A process restart simply causes one strict refresh.
+
+CONFIG_CACHE_TTL_SECONDS = 300.0
+DAILY_REQUEST_CACHE_TTL_SECONDS = 300.0
+USAGE_STATUS_CACHE_TTL_SECONDS = 300.0
+STRICT_CREDIT_RECHECK_PERCENT = 10.0
+
+_MODEL_COST_CACHE: dict[str, tuple[float, dict]] = {}
+_PLAN_LIMITS_CACHE: dict[str, tuple[float, dict]] = {}
+_DAILY_REQUEST_CACHE: dict[str, tuple[float, dict]] = {}
+_USAGE_STATUS_CACHE: dict[tuple[str, str], tuple[float, dict]] = {}
+
+
+def _cache_get(
+    cache: dict,
+    key: Any,
+    ttl_seconds: float,
+):
+    item = cache.get(key)
+
+    if not item:
+        return None
+
+    cached_at, value = item
+
+    if (
+        monotonic() - cached_at
+        > ttl_seconds
+    ):
+        cache.pop(key, None)
+        return None
+
+    if isinstance(value, dict):
+        return dict(value)
+
+    return value
+
+
+def _cache_set(
+    cache: dict,
+    key: Any,
+    value: Any,
+) -> None:
+    if isinstance(value, dict):
+        value = dict(value)
+
+    cache[key] = (
+        monotonic(),
+        value,
+    )
+
+
+def _minimum_remaining_percent(
+    status: dict,
+) -> float | None:
+    values = []
+
+    for key in (
+        "daily_remaining_percent",
+        "monthly_remaining_percent",
+    ):
+        value = status.get(key)
+
+        if value is None:
+            continue
+
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            continue
+
+    if not values:
+        return None
+
+    return min(values)
+
+
+def _cache_usage_status(
+    user_id: str,
+    plan: str,
+    status: dict,
+) -> None:
+    plan_key = _normalize_plan_key(plan)
+
+    _cache_set(
+        _USAGE_STATUS_CACHE,
+        (str(user_id), plan_key),
+        status,
+    )
+
+
+def _get_cached_usage_status(
+    user_id: str,
+    plan: str,
+) -> dict | None:
+    plan_key = _normalize_plan_key(plan)
+
+    return _cache_get(
+        _USAGE_STATUS_CACHE,
+        (str(user_id), plan_key),
+        USAGE_STATUS_CACHE_TTL_SECONDS,
+    )
+
+
+def _apply_recorded_credits_to_cache(
+    user_id: str,
+    credits: Decimal,
+) -> None:
+    """Update cached daily/monthly credit usage after a successful write."""
+
+    credit_value = max(
+        float(credits),
+        0.0,
+    )
+
+    if credit_value <= 0:
+        return
+
+    user_id = str(user_id)
+
+    for cache_key, cache_item in list(
+        _USAGE_STATUS_CACHE.items()
+    ):
+        cached_user_id, _plan_key = cache_key
+
+        if cached_user_id != user_id:
+            continue
+
+        cached_at, status = cache_item
+        status = dict(status)
+
+        daily_used = float(
+            status.get(
+                "daily_used_credits",
+                0.0,
+            )
+            or 0.0
+        ) + credit_value
+
+        monthly_used = float(
+            status.get(
+                "monthly_used_credits",
+                0.0,
+            )
+            or 0.0
+        ) + credit_value
+
+        status[
+            "daily_used_credits"
+        ] = daily_used
+
+        status[
+            "monthly_used_credits"
+        ] = monthly_used
+
+        daily_limit = status.get(
+            "daily_credit_limit"
+        )
+
+        monthly_limit = status.get(
+            "monthly_credit_limit"
+        )
+
+        if daily_limit is not None:
+            daily_limit = float(
+                daily_limit
+            )
+
+            if daily_limit > 0:
+                status[
+                    "daily_remaining_percent"
+                ] = max(
+                    0.0,
+                    min(
+                        100.0,
+                        100.0
+                        * (
+                            1.0
+                            - daily_used
+                            / daily_limit
+                        ),
+                    ),
+                )
+
+            status[
+                "daily_exhausted"
+            ] = (
+                daily_used
+                >= daily_limit
+            )
+
+        if monthly_limit is not None:
+            monthly_limit = float(
+                monthly_limit
+            )
+
+            if monthly_limit > 0:
+                status[
+                    "monthly_remaining_percent"
+                ] = max(
+                    0.0,
+                    min(
+                        100.0,
+                        100.0
+                        * (
+                            1.0
+                            - monthly_used
+                            / monthly_limit
+                        ),
+                    ),
+                )
+
+            status[
+                "monthly_exhausted"
+            ] = (
+                monthly_used
+                >= monthly_limit
+            )
+
+        status["allowed"] = not (
+            status.get(
+                "daily_exhausted",
+                False,
+            )
+            or status.get(
+                "monthly_exhausted",
+                False,
+            )
+        )
+
+        # Keep original timestamp: TTL still forces an occasional
+        # server reconciliation for multi-device / multi-worker use.
+        _USAGE_STATUS_CACHE[
+            cache_key
+        ] = (
+            cached_at,
+            status,
+        )
+
+
+# ============================================================
 # Small helpers
 # ============================================================
 
@@ -94,8 +349,26 @@ def _money_to_usd(
 def get_today_usage(
     supabase_admin,
     user_id: str,
+    *,
+    force_refresh: bool = False,
 ) -> dict:
     today = date.today().isoformat()
+    cache_key = str(user_id)
+
+    if not force_refresh:
+        cached = _cache_get(
+            _DAILY_REQUEST_CACHE,
+            cache_key,
+            DAILY_REQUEST_CACHE_TTL_SECONDS,
+        )
+
+        if (
+            cached
+            and cached.get(
+                "usage_date"
+            ) == today
+        ):
+            return cached
 
     result = (
         supabase_admin
@@ -108,7 +381,15 @@ def get_today_usage(
     )
 
     if result.data:
-        return result.data[0]
+        usage = result.data[0]
+
+        _cache_set(
+            _DAILY_REQUEST_CACHE,
+            cache_key,
+            usage,
+        )
+
+        return usage
 
     new_usage = {
         "user_id": user_id,
@@ -124,8 +405,13 @@ def get_today_usage(
         .execute()
     )
 
-    return new_usage
+    _cache_set(
+        _DAILY_REQUEST_CACHE,
+        cache_key,
+        new_usage,
+    )
 
+    return new_usage
 
 def increase_chat_usage(
     supabase_admin,
@@ -155,6 +441,17 @@ def increase_chat_usage(
             usage["usage_date"],
         )
         .execute()
+    )
+
+    cached_usage = dict(usage)
+    cached_usage[
+        "chat_count"
+    ] = new_count
+
+    _cache_set(
+        _DAILY_REQUEST_CACHE,
+        str(user_id),
+        cached_usage,
     )
 
     return new_count
@@ -190,6 +487,17 @@ def increase_image_usage(
         .execute()
     )
 
+    cached_usage = dict(usage)
+    cached_usage[
+        "image_count"
+    ] = new_count
+
+    _cache_set(
+        _DAILY_REQUEST_CACHE,
+        str(user_id),
+        cached_usage,
+    )
+
     return new_count
 
 
@@ -198,23 +506,23 @@ def can_use_chat(
     user_id: str,
     plan: str = "free",
 ) -> bool:
-    usage = get_today_usage(
-        supabase_admin,
-        user_id,
-    )
-
     normalized_plan = str(
         plan or "free"
     ).lower()
 
-    # Pro / premium 不再使用每日请求硬上限。
-    # 后面统一由 Credit + Fair Use 控制。
+    # Pro / premium does not use the legacy daily request hard cap.
+    # Crucially, return before touching Supabase.
     if normalized_plan in {
         "pro",
         "premium",
         "paid",
     }:
         return True
+
+    usage = get_today_usage(
+        supabase_admin,
+        user_id,
+    )
 
     return (
         int(
@@ -226,29 +534,26 @@ def can_use_chat(
         < FREE_DAILY_CHAT_LIMIT
     )
 
-
 def can_use_image(
     supabase_admin,
     user_id: str,
     plan: str = "free",
 ) -> bool:
-    usage = get_today_usage(
-        supabase_admin,
-        user_id,
-    )
-
     normalized_plan = str(
         plan or "free"
     ).lower()
 
-    # Pro / premium 图片数量同样不再使用
-    # 旧的每日固定次数限制。
     if normalized_plan in {
         "pro",
         "premium",
         "paid",
     }:
         return True
+
+    usage = get_today_usage(
+        supabase_admin,
+        user_id,
+    )
 
     return (
         int(
@@ -269,6 +574,17 @@ def get_model_cost_config(
     supabase_admin,
     model_key: str,
 ) -> Optional[dict]:
+    cache_key = str(model_key)
+
+    cached = _cache_get(
+        _MODEL_COST_CACHE,
+        cache_key,
+        CONFIG_CACHE_TTL_SECONDS,
+    )
+
+    if cached is not None:
+        return cached
+
     result = (
         supabase_admin
         .table("model_costs")
@@ -288,7 +604,15 @@ def get_model_cost_config(
     if not result.data:
         return None
 
-    return result.data[0]
+    config = result.data[0]
+
+    _cache_set(
+        _MODEL_COST_CACHE,
+        cache_key,
+        config,
+    )
+
+    return config
 
 
 # ============================================================
@@ -605,6 +929,11 @@ def record_usage_event(
     if last_insert_error is not None:
         raise last_insert_error
 
+    _apply_recorded_credits_to_cache(
+        user_id,
+        cost_result.credits,
+    )
+
     return cost_result
 # ============================================================
 # Plan / Credit limits
@@ -633,6 +962,15 @@ def get_plan_limits(
 ) -> dict:
     plan_key = _normalize_plan_key(plan)
 
+    cached = _cache_get(
+        _PLAN_LIMITS_CACHE,
+        plan_key,
+        CONFIG_CACHE_TTL_SECONDS,
+    )
+
+    if cached is not None:
+        return cached
+
     result = (
         supabase_admin
         .table("usage_limits")
@@ -649,7 +987,15 @@ def get_plan_limits(
             f"for plan: {plan_key}"
         )
 
-    return result.data[0]
+    limits = result.data[0]
+
+    _cache_set(
+        _PLAN_LIMITS_CACHE,
+        plan_key,
+        limits,
+    )
+
+    return limits
 
 
 # ============================================================
@@ -991,7 +1337,7 @@ def get_usage_status(
                 or 0
             )
 
-    return {
+    status = {
         "plan_key": plan_key,
 
         "allowed": allowed,
@@ -1050,6 +1396,14 @@ def get_usage_status(
 
         
     }
+
+    _cache_usage_status(
+        user_id,
+        plan_key,
+        status,
+    )
+
+    return status
 
 # ============================================================
 # Preflight request protection
@@ -1125,11 +1479,72 @@ def can_start_request(
     }
     """
 
-    status = get_usage_status(
-        supabase_admin,
-        user_id=user_id,
-        plan=plan,
+    cached_status = (
+        _get_cached_usage_status(
+            user_id,
+            plan,
+        )
     )
+
+    cached_remaining = (
+        _minimum_remaining_percent(
+            cached_status
+        )
+        if cached_status
+        else None
+    )
+
+    # --------------------------------------------------------
+    # Fast path:
+    # Reuse the local snapshot while safely above 10%.
+    #
+    # The snapshot is updated after every record_usage_event,
+    # and a short TTL still reconciles multi-device activity.
+    # --------------------------------------------------------
+
+    if (
+        cached_status is not None
+        and cached_status.get(
+            "allowed",
+            True,
+        )
+        and (
+            cached_remaining is None
+            or cached_remaining
+            > STRICT_CREDIT_RECHECK_PERCENT
+        )
+    ):
+        status = cached_status
+
+        print(
+            "⚡ Usage preflight cache hit:",
+            {
+                "remaining_percent": (
+                    cached_remaining
+                ),
+                "strict_below": (
+                    STRICT_CREDIT_RECHECK_PERCENT
+                ),
+            },
+        )
+
+    else:
+        status = get_usage_status(
+            supabase_admin,
+            user_id=user_id,
+            plan=plan,
+        )
+
+        print(
+            "🔄 Usage preflight strict refresh:",
+            {
+                "remaining_percent": (
+                    _minimum_remaining_percent(
+                        status
+                    )
+                ),
+            },
+        )
 
     plan_key = status["plan_key"]
 

@@ -140,6 +140,93 @@ class DoubaoNativeSearch(BaseNativeSearch):
                 ],
             )
 
+            # ==================================================
+            # TEMP DIAGNOSTIC: inspect the REAL Doubao Responses payload
+            # Read-only: does not change search / fallback behaviour.
+            # ==================================================
+            try:
+                print("\n🧪 [DOUBAO RAW] response_type =", type(response).__name__)
+
+                if hasattr(response, "model_dump"):
+                    raw_response = response.model_dump()
+                    print("🧪 [DOUBAO RAW] top_keys =", list(raw_response.keys()))
+
+                    raw_output = raw_response.get("output") or []
+                    print("🧪 [DOUBAO RAW] output_count =", len(raw_output))
+
+                    for idx, raw_item in enumerate(raw_output):
+                        if not isinstance(raw_item, dict):
+                            print(
+                                f"🧪 [DOUBAO RAW] output[{idx}] python_type =",
+                                type(raw_item).__name__,
+                            )
+                            continue
+
+                        print(
+                            f"🧪 [DOUBAO RAW] output[{idx}].type =",
+                            raw_item.get("type"),
+                        )
+                        print(
+                            f"🧪 [DOUBAO RAW] output[{idx}].keys =",
+                            list(raw_item.keys()),
+                        )
+
+                        action = raw_item.get("action")
+                        if isinstance(action, dict):
+                            print(
+                                f"🧪 [DOUBAO RAW] output[{idx}].action.keys =",
+                                list(action.keys()),
+                            )
+                            action_sources = action.get("sources") or []
+                            print(
+                                f"🧪 [DOUBAO RAW] output[{idx}].action.sources_count =",
+                                len(action_sources),
+                            )
+                            if action_sources and isinstance(action_sources[0], dict):
+                                print(
+                                    f"🧪 [DOUBAO RAW] output[{idx}].action.sources[0].keys =",
+                                    list(action_sources[0].keys()),
+                                )
+
+                        contents = raw_item.get("content") or []
+                        if isinstance(contents, list):
+                            print(
+                                f"🧪 [DOUBAO RAW] output[{idx}].content_count =",
+                                len(contents),
+                            )
+                            for cidx, raw_content in enumerate(contents):
+                                if not isinstance(raw_content, dict):
+                                    continue
+                                print(
+                                    f"🧪 [DOUBAO RAW] output[{idx}].content[{cidx}].type =",
+                                    raw_content.get("type"),
+                                )
+                                annotations = raw_content.get("annotations") or []
+                                print(
+                                    f"🧪 [DOUBAO RAW] output[{idx}].content[{cidx}].annotations_count =",
+                                    len(annotations),
+                                )
+                                if annotations and isinstance(annotations[0], dict):
+                                    print(
+                                        f"🧪 [DOUBAO RAW] annotation[0].keys =",
+                                        list(annotations[0].keys()),
+                                    )
+
+                    usage = raw_response.get("usage")
+                    if isinstance(usage, dict):
+                        print("🧪 [DOUBAO RAW] usage.keys =", list(usage.keys()))
+                else:
+                    print(
+                        "🧪 [DOUBAO RAW] attrs =",
+                        [name for name in dir(response) if not name.startswith("_")][:80],
+                    )
+
+            except Exception as diagnostic_error:
+                print(
+                    "⚠️ [DOUBAO RAW] diagnostic failed:",
+                    repr(diagnostic_error),
+                )
+
             answer = (
                 getattr(
                     response,

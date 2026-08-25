@@ -47,6 +47,7 @@ def search_web(
     *,
     search_type: str = "general_web",
     include_domains: list[str] | None = None,
+    search_depth: str = "advanced",
 ):
     if not query.strip():
         return []
@@ -54,7 +55,7 @@ def search_web(
     payload = {
         "api_key": TAVILY_API_KEY,
         "query": query,
-        "search_depth": "advanced",
+        "search_depth": search_depth,
         "max_results": max_results,
         "include_answer": False,
         "include_raw_content": False,
@@ -90,10 +91,20 @@ def search_web(
 
     return results
 
-def format_search_results(results: list) -> str:
+def format_search_results(
+    results: list,
+    *,
+    max_items: int = 5,
+    max_chars_per_item: int = 450,
+) -> str:
     parts = []
-    for index, result in enumerate(results[:6], start=1):
-        content = (result.get("content") or "")[:700]
+    for index, result in enumerate(
+        results[:max_items],
+        start=1,
+    ):
+        content = (
+            result.get("content") or ""
+        )[:max_chars_per_item]
         parts.append(
             f"{index}. 标题：{result.get('title', '无标题')}\n"
             f"内容：{content}\n"

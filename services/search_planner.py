@@ -289,24 +289,60 @@ Rules:
 """
 
 
+def _needs_context_resolution(
+    prompt: str,
+) -> bool:
+    """
+    语言无关的上下文补全判断。
+
+    原则：
+    1. 完整问题默认直接搜索，不调用 AI resolver；
+    2. 只有非常短、信息稀疏的问题，才认为可能依赖上一轮上下文；
+    3. 不依赖中文、英文或任何特定语言关键词。
+    """
+
+    text = (prompt or "").strip()
+
+    if not text:
+        return False
+
+    # 较长的问题通常已经足够完整，
+    # 不需要额外做上下文补全。
+    if len(text) >= 45:
+        return False
+
+    # 按空白和常见标点切分。
+    # 这不是语言识别，只是粗略衡量信息密度。
+    parts = [
+        part
+        for part in re.split(
+            r"\s+|[，。！？、,.!?;:；：…]",
+            text,
+        )
+        if part.strip()
+    ]
+
+    very_short = len(text) <= 18
+    sparse_content = len(parts) <= 3
+
+    # 只有“很短 + 信息稀疏”才进入 resolver。
+    return (
+        very_short
+        and sparse_content
+    )
+
+
 def resolve_search_query(
     prompt: str,
     messages: list[dict],
 ) -> str:
     """
-    将依赖上下文的追问补全成可独立搜索的问题。
+    将依赖上下文的短追问补全成独立搜索问题。
 
-    例如：
+    大多数完整问题直接返回原 prompt，
+    避免每次联网搜索前额外调用一次模型。
 
-    历史：
-    User: 加拿大总理是谁？
-    Assistant: 加拿大现任总理是 Mark Carney。
-
-    当前：
-    User: 你再搜索一下
-
-    输出类似：
-    重新搜索并核实加拿大现任总理是谁？
+    该逻辑不依赖任何特定语言关键词。
     """
 
     prompt = (prompt or "").strip()
@@ -314,19 +350,48 @@ def resolve_search_query(
     if not prompt:
         return ""
 
-    # 只取最近几轮，避免上下文过长
-    recent_messages = messages[-8:] if messages else []
+    # ==================================================
+    # 大多数完整问题直接搜索
+    # ==================================================
+
+    if not _needs_context_resolution(
+        prompt
+    ):
+        print(
+            "⚡ SEARCH QUERY RESOLVER SKIPPED:",
+            repr(prompt),
+        )
+
+        return prompt
+
+    # ==================================================
+    # 疑似短追问：
+    # 提取少量最近上下文
+    # ==================================================
+
+    recent_messages = (
+        messages[-6:]
+        if messages
+        else []
+    )
 
     context_lines: list[str] = []
 
     for message in recent_messages:
+
         role = message.get("role")
         content = message.get("content")
 
-        if role not in {"user", "assistant"}:
+        if role not in {
+            "user",
+            "assistant",
+        }:
             continue
 
-        if not isinstance(content, str):
+        if not isinstance(
+            content,
+            str,
+        ):
             continue
 
         content = content.strip()
@@ -334,18 +399,38 @@ def resolve_search_query(
         if not content:
             continue
 
-        # 避免把完整长回答全部交给 resolver
-        if len(content) > 800:
-            content = content[:800]
+        # Resolver 只需要知道上下文指向，
+        # 不需要完整长回答。
+        if len(content) > 500:
+            content = content[:500]
 
         context_lines.append(
             f"{role.upper()}: {content}"
         )
 
-    context_text = "\n".join(context_lines)
+    # 没有可用历史时，
+    # 没必要再调用 AI。
+    if not context_lines:
+        print(
+            "⚡ SEARCH QUERY RESOLVER SKIPPED "
+            "(no usable context):",
+            repr(prompt),
+        )
+
+        return prompt
+
+    context_text = "\n".join(
+        context_lines
+    )
+
+    # ==================================================
+    # AI 只负责补全真正疑似依赖上下文的短追问
+    # ==================================================
 
     try:
-        config = get_model_config("DeepSeek")
+        config = get_model_config(
+            "DeepSeek"
+        )
 
         if not config.api_key:
             return prompt
@@ -353,7 +438,7 @@ def resolve_search_query(
         client = OpenAI(
             api_key=config.api_key,
             base_url=config.base_url,
-            timeout=8.0,
+            timeout=6.0,
         )
 
         request_params = {
@@ -370,7 +455,11 @@ def resolve_search_query(
                         f"{context_text}\n\n"
                         "Latest user message:\n"
                         f"{prompt}\n\n"
-                        "Standalone search question:"
+                        "Rewrite the latest user message "
+                        "as one complete standalone "
+                        "search query.\n"
+                        "Preserve the user's language.\n"
+                        "Return only the rewritten query."
                     ),
                 },
             ],
@@ -382,19 +471,27 @@ def resolve_search_query(
             "uses_max_completion_tokens",
             False,
         ):
-            request_params["max_completion_tokens"] = 160
-        else:
-            request_params["max_tokens"] = 160
+            request_params[
+                "max_completion_tokens"
+            ] = 100
 
-        response = client.chat.completions.create(
-            **request_params
+        else:
+            request_params[
+                "max_tokens"
+            ] = 100
+
+        response = (
+            client.chat.completions.create(
+                **request_params
+            )
         )
 
         if not response.choices:
             return prompt
 
         resolved = (
-            response.choices[0]
+            response
+            .choices[0]
             .message
             .content
             or ""
@@ -413,6 +510,7 @@ def resolve_search_query(
         return resolved
 
     except Exception as error:
+
         print(
             "Search query resolver failed:",
             repr(error),
@@ -535,3 +633,47 @@ def plan_search(prompt: str) -> SearchPlan:
         ],
         preferred_domains=[],
     )
+
+def plan_search_fast(
+    prompt: str,
+    *,
+    search_type: str = "general_web",
+) -> SearchPlan:
+    """
+    Lightweight search plan for providers without unified native search.
+
+    Important:
+    - does NOT call judge_freshness again;
+    - does NOT call the AI preferred-domain planner;
+    - does NOT depend on language-specific keywords;
+    - keeps simple/current searches to one query.
+    """
+    prompt = (prompt or "").strip()
+
+    if not prompt:
+        return SearchPlan(
+            queries=[],
+            preferred_domains=[],
+        )
+
+    today = date.today().isoformat()
+
+    if search_type == "current_fact":
+        query = (
+            f"{prompt} current verified information "
+            f"as of {today}"
+        )
+    elif search_type == "recent_event":
+        query = f"{get_search_query(prompt)} latest"
+    elif search_type == "realtime_data":
+        query = (
+            f"{prompt} current data as of {today}"
+        )
+    else:
+        query = get_search_query(prompt)
+
+    return SearchPlan(
+        queries=[query],
+        preferred_domains=[],
+    )
+

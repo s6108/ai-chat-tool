@@ -282,6 +282,176 @@ class KimiNativeSearch(BaseNativeSearch):
                 finish_reason = choice.finish_reason
 
                 # ==================================================
+                # TEMP DIAGNOSTIC: inspect the REAL Kimi response
+                # Read-only: does not change search / fallback behavior.
+                # ==================================================
+                try:
+                    print(
+                        f"\n🧪 [KIMI RAW] round={round_index} "
+                        f"completion_type={type(completion).__name__}"
+                    )
+                    print(
+                        "🧪 [KIMI RAW] finish_reason =",
+                        finish_reason,
+                    )
+
+                    if hasattr(completion, "model_dump"):
+                        raw_completion = completion.model_dump()
+                        print(
+                            "🧪 [KIMI RAW] top_keys =",
+                            list(raw_completion.keys()),
+                        )
+                    else:
+                        raw_completion = None
+
+                    print(
+                        "🧪 [KIMI RAW] message_type =",
+                        type(message).__name__,
+                    )
+                    print(
+                        "🧪 [KIMI RAW] message.content_type =",
+                        type(message.content).__name__,
+                    )
+                    print(
+                        "🧪 [KIMI RAW] message.content_preview =",
+                        repr(
+                            (message.content or "")[:500]
+                            if isinstance(message.content, str)
+                            else message.content
+                        ),
+                    )
+
+                    raw_tool_calls = message.tool_calls or []
+                    print(
+                        "🧪 [KIMI RAW] tool_calls_count =",
+                        len(raw_tool_calls),
+                    )
+
+                    for idx, tool_call in enumerate(raw_tool_calls):
+                        function = getattr(tool_call, "function", None)
+                        tool_type = getattr(tool_call, "type", None)
+                        tool_id = getattr(tool_call, "id", None)
+                        function_name = (
+                            getattr(function, "name", None)
+                            if function is not None
+                            else None
+                        )
+                        function_arguments = (
+                            getattr(function, "arguments", None)
+                            if function is not None
+                            else None
+                        )
+
+                        print(
+                            f"🧪 [KIMI RAW] tool_call[{idx}].id =",
+                            tool_id,
+                        )
+                        print(
+                            f"🧪 [KIMI RAW] tool_call[{idx}].type =",
+                            tool_type,
+                        )
+                        print(
+                            f"🧪 [KIMI RAW] tool_call[{idx}].function.name =",
+                            function_name,
+                        )
+                        print(
+                            f"🧪 [KIMI RAW] tool_call[{idx}].arguments_type =",
+                            type(function_arguments).__name__,
+                        )
+
+                        if isinstance(function_arguments, str):
+                            print(
+                                f"🧪 [KIMI RAW] tool_call[{idx}].arguments_len =",
+                                len(function_arguments),
+                            )
+                            print(
+                                f"🧪 [KIMI RAW] tool_call[{idx}].arguments_preview =",
+                                repr(function_arguments[:2000]),
+                            )
+
+                            try:
+                                parsed_arguments = json.loads(
+                                    function_arguments
+                                )
+                                print(
+                                    f"🧪 [KIMI RAW] tool_call[{idx}].arguments_json_type =",
+                                    type(parsed_arguments).__name__,
+                                )
+
+                                if isinstance(parsed_arguments, dict):
+                                    print(
+                                        f"🧪 [KIMI RAW] tool_call[{idx}].arguments_top_keys =",
+                                        list(parsed_arguments.keys()),
+                                    )
+
+                                    for key in (
+                                        "results",
+                                        "sources",
+                                        "data",
+                                        "items",
+                                        "documents",
+                                        "web_results",
+                                        "search_results",
+                                        "references",
+                                        "usage",
+                                    ):
+                                        if key not in parsed_arguments:
+                                            continue
+                                        value = parsed_arguments.get(key)
+                                        if isinstance(value, list):
+                                            print(
+                                                f"🧪 [KIMI RAW] tool_call[{idx}].{key}_count =",
+                                                len(value),
+                                            )
+                                            if value:
+                                                first = value[0]
+                                                if isinstance(first, dict):
+                                                    print(
+                                                        f"🧪 [KIMI RAW] tool_call[{idx}].{key}[0].keys =",
+                                                        list(first.keys()),
+                                                    )
+                                                else:
+                                                    print(
+                                                        f"🧪 [KIMI RAW] tool_call[{idx}].{key}[0]_type =",
+                                                        type(first).__name__,
+                                                    )
+                                        elif isinstance(value, dict):
+                                            print(
+                                                f"🧪 [KIMI RAW] tool_call[{idx}].{key}.keys =",
+                                                list(value.keys()),
+                                            )
+                                        else:
+                                            print(
+                                                f"🧪 [KIMI RAW] tool_call[{idx}].{key} =",
+                                                value,
+                                            )
+
+                            except Exception as parse_error:
+                                print(
+                                    f"⚠️ [KIMI RAW] tool_call[{idx}] arguments JSON parse failed:",
+                                    repr(parse_error),
+                                )
+
+                    if raw_completion is not None:
+                        usage = raw_completion.get("usage")
+                        if isinstance(usage, dict):
+                            print(
+                                "🧪 [KIMI RAW] usage.keys =",
+                                list(usage.keys()),
+                            )
+                        elif usage is not None:
+                            print(
+                                "🧪 [KIMI RAW] usage =",
+                                usage,
+                            )
+
+                except Exception as diagnostic_error:
+                    print(
+                        "⚠️ [KIMI RAW] diagnostic failed:",
+                        repr(diagnostic_error),
+                    )
+
+                # ==================================================
                 # Kimi 请求调用 $web_search
                 # ==================================================
                 if finish_reason == "tool_calls":

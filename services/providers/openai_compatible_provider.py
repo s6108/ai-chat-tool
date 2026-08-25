@@ -296,6 +296,12 @@ class OpenAICompatibleProvider(BaseProvider):
                     )
                 )
 
+                # DeepSeek occasionally closes a stream normally but emits
+                # no text for an oversized / unsuitable prompt. Repeating
+                # the exact same request three times only adds latency.
+                if self.config.provider == "deepseek":
+                    break
+
             except Exception as error:
                 # Never retry after text has already
                 # reached the user because restarting

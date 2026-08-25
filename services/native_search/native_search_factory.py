@@ -18,6 +18,11 @@ class NativeSearchFactory:
     职责：
     根据当前实际回答模型，返回对应的原生搜索 Adapter。
 
+    性能：
+    - Adapter 按模型名做进程级缓存。
+    - 同一 Python 进程中，每个模型只创建一次 Adapter。
+    - 后续请求直接复用实例，避免重复初始化 API Client。
+
     注意：
     - 不执行搜索
     - 不调用 Tavily
@@ -25,8 +30,25 @@ class NativeSearchFactory:
     - 不负责 fallback
     """
 
-    @staticmethod
+    _instances: dict[
+        str,
+        BaseNativeSearch,
+    ] = {}
+
+    _adapter_classes = {
+        "grok": GrokNativeSearch,
+        "gemini": GeminiNativeSearch,
+        "claude": ClaudeNativeSearch,
+        "chatgpt": OpenAINativeSearch,
+        "qwen": QwenNativeSearch,
+        "kimi": KimiNativeSearch,
+        "doubao-pro": DoubaoNativeSearch,
+        "glm": GLMNativeSearch,
+    }
+
+    @classmethod
     def create(
+        cls,
         model_name: str,
     ) -> BaseNativeSearch | None:
 
@@ -36,31 +58,54 @@ class NativeSearchFactory:
             .casefold()
         )
 
-        if normalized_name == "grok":
-            return GrokNativeSearch()
+        adapter_class = (
+            cls._adapter_classes.get(
+                normalized_name
+            )
+        )
 
-        if normalized_name == "gemini":
-            return GeminiNativeSearch()
+        if adapter_class is None:
+            return None
 
-        if normalized_name == "claude":
-            return ClaudeNativeSearch()
+        cached_instance = (
+            cls._instances.get(
+                normalized_name
+            )
+        )
 
-        if normalized_name == "chatgpt":
-            return OpenAINativeSearch()
+        if cached_instance is not None:
+            print(
+                "⚡ NativeSearchFactory cache hit:",
+                normalized_name,
+            )
+            return cached_instance
 
-        if normalized_name == "qwen":
-            return QwenNativeSearch()
-        if normalized_name == "kimi":
-            return KimiNativeSearch()
-        if normalized_name == "doubao-pro":
-            return DoubaoNativeSearch()
-        if normalized_name == "glm":
-            return GLMNativeSearch()
+        instance = adapter_class()
 
-        return None
+        cls._instances[
+            normalized_name
+        ] = instance
 
-    @staticmethod
+        print(
+            "🔧 NativeSearchFactory created:",
+            normalized_name,
+        )
+
+        return instance
+
+    @classmethod
+    def clear_cache(
+        cls,
+    ) -> None:
+        """
+        仅供调试 / 测试使用。
+        正常请求流程不需要调用。
+        """
+        cls._instances.clear()
+
+    @classmethod
     def supports(
+        cls,
         model_name: str,
     ) -> bool:
         """
@@ -73,13 +118,8 @@ class NativeSearchFactory:
             .casefold()
         )
 
-        return normalized_name in {
-            "grok",
-            "gemini",
-            "claude",
-            "chatgpt",
-            "qwen",
-            "kimi",
-            "doubao-pro",
-            "glm",
-        }
+        return (
+            normalized_name
+            in cls._adapter_classes
+        )
+

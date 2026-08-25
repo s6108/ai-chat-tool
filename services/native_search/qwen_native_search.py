@@ -61,50 +61,47 @@ class QwenNativeSearch(BaseNativeSearch):
             )
 
         try:
-            input_messages: list[dict[str, Any]] = []
-
-            # ==================================================
-            # Qwen Native Search system instruction
-            # 必须是第一条，而且只能有一个 system message
-            # ==================================================
-            input_messages.append(
+            input_messages: list[dict[str, Any]] = [
                 {
                     "role": "system",
                     "content": (
-                        "Perform live web research for the current "
-                        "user request. Use web search before answering. "
-                        "Prefer current, reliable, primary and "
-                        "authoritative sources when available. "
-                        "For current facts, do not rely on stale "
-                        "internal knowledge. "
-                        "If sources conflict, explain the uncertainty "
-                        "instead of guessing. "
-                        "The conversation history below may contain "
-                        "statements from different AI models. "
-                        "Treat those statements as conversation context, "
-                        "not as verified facts. Verify disputed or "
-                        "time-sensitive claims with web search."
+                        "Perform a live web search before answering the current user request. "
+                        "The upstream routing layer has already determined that current or "
+                        "externally verifiable information is required. "
+                        "You must use the available web_search tool before producing the answer. "
+                        "Do not answer only from internal model knowledge. "
+                        "Prefer reliable and primary sources."
                     ),
                 }
-            )
+            ]
 
-            # ==================================================
-            # 最近圆桌 / 对话上下文
-            #
-            # 注意：
-            # 不复制历史 system message。
-            # Qwen Responses API 最多允许一个 system，
-            # 并且它必须位于 messages 第一条。
-            # ==================================================
+            # Keep only a small amount of conversational context.
+            # Do not duplicate the current user query.
+            history = []
+
             if messages:
-                for message in messages[-8:]:
+                history = messages[-4:]
+
+                # app.py commonly passes the current user turn as the
+                # final history item. Remove it here because `query`
+                # is appended exactly once below.
+                if history:
+                    last = history[-1]
+                    last_role = last.get("role")
+                    last_content = last.get("content")
+
+                    if (
+                        last_role == "user"
+                        and isinstance(last_content, str)
+                        and last_content.strip() == query
+                    ):
+                        history = history[:-1]
+
+                for message in history:
                     role = message.get("role")
                     content = message.get("content")
 
-                    if role not in {
-                        "user",
-                        "assistant",
-                    }:
+                    if role not in {"user", "assistant"}:
                         continue
 
                     if not isinstance(content, str):
@@ -115,8 +112,8 @@ class QwenNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    if len(content) > 1500:
-                        content = content[:1500]
+                    if len(content) > 1000:
+                        content = content[:1000]
 
                     input_messages.append(
                         {
@@ -124,34 +121,6 @@ class QwenNativeSearch(BaseNativeSearch):
                             "content": content,
                         }
                     )
-
-            # ==================================================
-            # 当前需要搜索的问题
-            # ==================================================
-            input_messages.append(
-                {
-                    "role": "user",
-                    "content": query,
-                }
-            )
-
-            # ==================================================
-            # 原生搜索指令
-            # ==================================================
-            input_messages.append(
-                {
-                    "role": "system",
-                    "content": (
-                        "Perform live web research for the current "
-                        "user request. Use web search before answering. "
-                        "Prefer current, reliable, primary and "
-                        "authoritative sources when available. "
-                        "For current facts, do not rely on stale "
-                        "internal knowledge. If sources conflict, "
-                        "explain the uncertainty instead of guessing."
-                    ),
-                }
-            )
 
             input_messages.append(
                 {
@@ -175,6 +144,75 @@ class QwenNativeSearch(BaseNativeSearch):
                     "enable_thinking": False,
                 },
             )
+
+            # TEMP DIAGNOSTIC: inspect the real Qwen Responses payload.
+            # Read-only: does not change search or fallback behaviour.
+            try:
+                print("\n🧪 [QWEN RAW] response_type =", type(response).__name__)
+                if hasattr(response, "model_dump"):
+                    raw_response = response.model_dump()
+                    print("🧪 [QWEN RAW] top_keys =", list(raw_response.keys()))
+                    raw_output = raw_response.get("output") or []
+                    print("🧪 [QWEN RAW] output_count =", len(raw_output))
+
+                    for idx, raw_item in enumerate(raw_output):
+                        if not isinstance(raw_item, dict):
+                            continue
+                        print(f"🧪 [QWEN RAW] output[{idx}].type =", raw_item.get("type"))
+                        print(f"🧪 [QWEN RAW] output[{idx}].keys =", list(raw_item.keys()))
+
+                        action = raw_item.get("action")
+                        if isinstance(action, dict):
+                            print(f"🧪 [QWEN RAW] output[{idx}].action.keys =", list(action.keys()))
+                            print(
+                                f"🧪 [QWEN RAW] output[{idx}].action.sources_count =",
+                                len(action.get("sources") or []),
+                            )
+
+                        contents = raw_item.get("content") or []
+                        if isinstance(contents, list):
+                            for cidx, raw_content in enumerate(contents):
+                                if not isinstance(raw_content, dict):
+                                    continue
+                                print(
+                                    f"🧪 [QWEN RAW] output[{idx}].content[{cidx}].type =",
+                                    raw_content.get("type"),
+                                )
+                                print(
+                                    f"🧪 [QWEN RAW] output[{idx}].content[{cidx}].keys =",
+                                    list(raw_content.keys()),
+                                )
+                                annotations = raw_content.get("annotations") or []
+                                print(
+                                    f"🧪 [QWEN RAW] output[{idx}].content[{cidx}].annotations_count =",
+                                    len(annotations),
+                                )
+                                for aidx, annotation in enumerate(annotations[:8]):
+                                    if isinstance(annotation, dict):
+                                        print(
+                                            f"🧪 [QWEN RAW] annotation[{aidx}].type =",
+                                            annotation.get("type"),
+                                            "keys =",
+                                            list(annotation.keys()),
+                                        )
+
+                    for key in ("citations", "sources", "search_results", "web_search", "tool_calls", "usage"):
+                        if key not in raw_response:
+                            continue
+                        value = raw_response.get(key)
+                        if isinstance(value, list):
+                            print(f"🧪 [QWEN RAW] {key}_count =", len(value))
+                        elif isinstance(value, dict):
+                            print(f"🧪 [QWEN RAW] {key}.keys =", list(value.keys()))
+                        else:
+                            print(f"🧪 [QWEN RAW] {key} =", value)
+                else:
+                    print(
+                        "🧪 [QWEN RAW] attrs =",
+                        [name for name in dir(response) if not name.startswith("_")][:80],
+                    )
+            except Exception as diagnostic_error:
+                print("⚠️ [QWEN RAW] diagnostic failed:", repr(diagnostic_error))
 
             answer = (
                 getattr(
@@ -383,21 +421,6 @@ class QwenNativeSearch(BaseNativeSearch):
             # ==================================================
             # 安全判断
             # ==================================================
-            if not used_web_search:
-                return NativeSearchResponse(
-                    success=False,
-                    model_name=self.model_name,
-                    provider=self.provider,
-                    query=query,
-                    answer=answer,
-                    results=native_results,
-                    error=(
-                        "Qwen returned without using "
-                        "the native web search tool."
-                    ),
-                    should_fallback=True,
-                )
-
             if not answer:
                 return NativeSearchResponse(
                     success=False,
@@ -413,8 +436,11 @@ class QwenNativeSearch(BaseNativeSearch):
                 )
 
             print(
-                f"✅ Qwen native search succeeded: "
-                f"{len(native_results)} visible sources"
+                "✅ Qwen autonomous response succeeded:",
+                {
+                    "web_search": used_web_search,
+                    "sources": len(native_results),
+                },
             )
 
             return NativeSearchResponse(

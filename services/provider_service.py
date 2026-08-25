@@ -294,3 +294,118 @@ def stream_model_response(
                 "⚠️ Usage recording failed:",
                 repr(usage_error),
             )
+
+def probe_deepseek_search_need(
+    *,
+    messages: list[dict[str, Any]],
+) -> dict[str, str | bool]:
+    """
+    Ask DeepSeek itself whether the current request requires fresh external data.
+
+    This is a tiny semantic probe:
+    - no language-specific keyword table;
+    - no Tavily call;
+    - no user-visible streaming;
+    - very small output budget.
+
+    Returns:
+        {
+            "need_search": bool,
+            "search_type": "current_fact" | "recent_event" |
+                           "realtime_data" | "general_web" | "none"
+        }
+    """
+    config = get_model_config("DeepSeek")
+
+    if not config.api_key:
+        raise MissingModelApiKeyError("DeepSeek")
+
+    provider = ProviderFactory.create(config)
+
+    recent_messages = messages[-4:]
+
+    probe_messages: list[dict[str, Any]] = [
+        {
+            "role": "system",
+            "content": (
+                "Decide whether answering the user's CURRENT request accurately "
+                "requires fresh external information that may have changed after "
+                "model training. This is a semantic decision and must work in any "
+                "language. Do not answer the user's question. "
+                "Return exactly one line in one of these forms:\\n"
+                "DIRECT\\n"
+                "SEARCH current_fact\\n"
+                "SEARCH recent_event\\n"
+                "SEARCH realtime_data\\n"
+                "SEARCH general_web\\n"
+                "Use DIRECT for stable knowledge, explanation, writing, math, "
+                "coding, casual conversation, or reasoning that does not require "
+                "fresh facts. Use SEARCH when correctness depends on current "
+                "office-holders, current prices/data/weather, recent events/news, "
+                "current policies/versions/status, or other changing facts."
+            ),
+        },
+        *recent_messages,
+    ]
+
+    chunks: list[str] = []
+
+    raw_stream = provider.stream_chat(
+        messages=probe_messages,
+        max_tokens=128,
+        temperature=0.0,
+    )
+
+    for chunk in raw_stream:
+        if chunk:
+            chunks.append(chunk)
+
+        # Hard cap the locally collected control text.
+        if sum(len(item) for item in chunks) >= 80:
+            break
+
+    raw = "".join(chunks).strip()
+    normalized = re.sub(
+        r"\\s+",
+        " ",
+        raw,
+    ).strip().lower()
+
+    print(
+        "🧠 DeepSeek search probe:",
+        repr(raw),
+    )
+
+    if normalized.startswith("search"):
+        parts = normalized.split()
+        search_type = (
+            parts[1]
+            if len(parts) > 1
+            else "general_web"
+        )
+
+        if search_type not in {
+            "current_fact",
+            "recent_event",
+            "realtime_data",
+            "general_web",
+        }:
+            search_type = "general_web"
+
+        return {
+            "need_search": True,
+            "search_type": search_type,
+        }
+
+    if normalized.startswith("direct"):
+        return {
+            "need_search": False,
+            "search_type": "none",
+        }
+
+    # Safety fallback: ambiguous probe output should prefer fresh verification.
+    return {
+        "need_search": True,
+        "search_type": "general_web",
+    }
+

@@ -68,7 +68,7 @@ from services.date_service import (
     build_date_prompt,
 )
 from services.search_planner import (
-    plan_search,
+    plan_search_fast,
     resolve_search_query,
 )
 from services.search_evaluator import evaluate_search_results
@@ -1486,6 +1486,13 @@ if submission:
 
 # ====================== Process User Input ======================
 if submission and (prompt or uploaded_file):
+    perf_request_start = time.perf_counter()
+    perf_last = perf_request_start
+
+    print("\n" + "=" * 70)
+    print("🚀 [PERF] NEW REQUEST")
+    print(f"📝 [PERF] prompt={prompt[:80]!r}")
+
     user_id = st.session_state.user.id
 
     user_plan = (
@@ -1518,6 +1525,12 @@ if submission and (prompt or uploaded_file):
         )
         st.stop()
 
+    print(
+        f"⏱️ [PERF] initial_quota_check = "
+        f"{time.perf_counter() - perf_last:.3f}s"
+    )
+    perf_last = time.perf_counter()
+
     st.session_state.processing = True
 
 if st.session_state.processing:
@@ -1525,15 +1538,13 @@ if st.session_state.processing:
         st.session_state.processing = False
         st.stop()
 
-    if st.session_state.current_session_id is None:
-        new_session_id = create_new_chat(
-            st.session_state.user.id
-        )
-
-        st.session_state.current_session_id = new_session_id
-        st.session_state.new_chat_mode = False
-        st.session_state.messages = []
-        
+    # ==================================================
+    # Response-first persistence
+    #
+    # 模型回答前不创建数据库会话、不写入消息。
+    # 当前轮先只维护本地 session_state，模型完整回答成功后
+    # 再统一创建会话、保存 user/assistant、更新标题与 URL。
+    # ==================================================
     user_content = prompt
 
     if uploaded_file:
@@ -1552,25 +1563,50 @@ if st.session_state.processing:
         else user_content
     )
 
-    save_message(
-        st.session_state.current_session_id,
-        "user",
-        content_to_save,
-    )
-    update_chat_title_if_needed(st.session_state.current_session_id, prompt)
-    
-
+    # 用户消息先只进入本地 session_state；
+    # 数据库持久化延后到模型完整回答之后。
     with st.chat_message("user", avatar=USER_AVATAR):
         render_user_content(user_content)
 
-    # 联网判断和模型调度都使用本地规则，不额外增加模型请求。
+    print(
+        f"⏱️ [PERF] session+render = "
+        f"{time.perf_counter() - perf_last:.3f}s"
+    )
+    perf_last = time.perf_counter()    
+
+    # ==================================================
+    # ChatGPT unified Responses mode
+    #
+    # 手动选择 ChatGPT 时，不再先调用独立 Freshness AI。
+    # 是否真正调用 web_search，由同一次 OpenAI Responses 请求自行决定。
+    # Auto 模式暂时保持原有分类 / 路由逻辑，避免影响其他模型。
+    # ==================================================
+    chatgpt_unified_mode = (
+        not st.session_state.auto_mode
+        and st.session_state.selected_model == "ChatGPT"
+        and not bool(uploaded_file)
+    )
+
     task_info = classify_task(
         prompt,
         has_image=bool(uploaded_file),
+        skip_ai_freshness=chatgpt_unified_mode,
     )
+
+    print(
+        f"⏱️ [PERF] classify_task = "
+        f"{time.perf_counter() - perf_last:.3f}s"
+    )
+    perf_last = time.perf_counter()
 
     # ===== 最终联网判定 =====
     needs_web_search = task_info.need_search
+
+    # ChatGPT unified mode 必须进入统一 Responses 流。
+    # 这里的 True 表示“进入可使用 web_search 的统一流”，
+    # 不代表本轮一定实际联网。是否调用工具由 OpenAI 自主决定。
+    if chatgpt_unified_mode:
+        needs_web_search = True
 
     # 图片本身不是联网理由。
     # 普通的看图、描述、识别、分析任务直接交给视觉模型。
@@ -1687,7 +1723,7 @@ if st.session_state.processing:
             task_info.task_type,
         )
 
-        if needs_web_search:
+        if needs_web_search and not chatgpt_unified_mode:
             status_placeholder.info(
                 t("searching")
             )
@@ -1762,15 +1798,43 @@ if st.session_state.processing:
                         # ===== 自动判断并执行联网搜索 =====
             print(f"🧠 判断是否联网：{prompt}")
 
+            # 原生搜索如果已经生成完整答案，
+            # 直接使用，不再进行第二次模型调用。
+            native_direct_answer = None
+
             if needs_web_search:
-                print("🌐 需要联网搜索")
+                if chatgpt_unified_mode:
+                    print("🧠 ChatGPT unified Responses mode")
+                else:
+                    print("🌐 需要联网搜索")
 
                 # ==================================================
                 # 先解析当前完整搜索问题
                 # ==================================================
-                resolved_search_prompt = resolve_search_query(
-                    prompt,
-                    api_messages,
+                native_perf_start = time.perf_counter()
+
+                # ==================================================
+                # 搜索 Query
+                #
+                # 不再预先调用额外 AI 改写搜索问题。
+                # 当前用户原始问题直接交给 Native Search。
+                #
+                # 上下文型追问后续直接由 Native Search
+                # 结合最近对话理解，避免再多一次模型请求。
+                # ==================================================
+
+                resolve_start = time.perf_counter()
+
+                resolved_search_prompt = prompt.strip()
+
+                print(
+                    "⚡ SEARCH QUERY RESOLVER BYPASSED:",
+                    repr(resolved_search_prompt),
+                )
+
+                print(
+                    f"⏱️ [NATIVE PERF] resolve_search_query = "
+                    f"{time.perf_counter() - resolve_start:.3f}s"
                 )
 
                 print(
@@ -1791,12 +1855,19 @@ if st.session_state.processing:
 
                     try:
                         if current_user_id:
+                            native_preflight_start = time.perf_counter()
+
                             native_preflight = can_start_request(
                                 supabase_admin,
                                 user_id=str(current_user_id),
                                 plan=str(current_plan),
                                 model_key=selected_model_name,
                                 request_type="native_search",
+                            )
+
+                            print(
+                                f"⏱️ [NATIVE PERF] usage_preflight = "
+                                f"{time.perf_counter() - native_preflight_start:.3f}s"
                             )
 
                             if not native_preflight["allowed"]:
@@ -1821,142 +1892,336 @@ if st.session_state.processing:
                                     )
 
                                 st.stop()
+                        factory_start = time.perf_counter()
+
                         native_search = NativeSearchFactory.create(
                             selected_model_name
                         )
 
+                        print(
+                            f"⏱️ [NATIVE PERF] factory_create = "
+                            f"{time.perf_counter() - factory_start:.3f}s"
+                        )
+
                         if native_search is not None:
+                            native_api_start = time.perf_counter()
+
+                        # ChatGPT 真正 Native Search 首个文本 delta 时间
+                        native_first_delta_time = None
+
+
+                        # ==================================================
+                        # ChatGPT：
+                        # 使用 OpenAI Responses API 真正流式 Native Search
+                        # ==================================================
+
+                        if selected_model_name == "ChatGPT":
+
+                            openai_search_mode = (
+                                "fast"
+                                if task_info.task_type == "fast"
+                                else "research"
+                            )
+
+                            print(
+                                "⚡ OpenAI Native Search mode:",
+                                openai_search_mode,
+                            )
+
+                            native_search_response = None
+                            native_stream_answer = ""
+
+                            # ==================================================
+                            # Native Search 上下文
+                            #
+                            # 只提供“紧邻当前问题的上一轮完整问答”，
+                            # 不再把 api_messages 最近 4 条直接交给搜索。
+                            #
+                            # 当前 prompt 已经加入 st.session_state.messages，
+                            # 所以通常：
+                            #   -3 = 上一轮 user
+                            #   -2 = 上一轮 assistant
+                            #   -1 = 当前 user
+                            # ==================================================
+
+                            native_context_messages = []
+
+                            session_messages = st.session_state.get(
+                                "messages",
+                                [],
+                            )
+
+                            if len(session_messages) >= 3:
+
+                                previous_user = session_messages[-3]
+                                previous_assistant = session_messages[-2]
+                                current_message = session_messages[-1]
+
+                                if (
+                                    previous_user.get("role") == "user"
+                                    and previous_assistant.get("role") == "assistant"
+                                    and current_message.get("role") == "user"
+                                ):
+                                    native_context_messages = [
+                                        previous_user,
+                                        previous_assistant,
+                                    ]
+
+                            print(
+                                "🧩 Native Search previous-turn context:",
+                                [
+                                    message.get("role")
+                                    for message in native_context_messages
+                                ],
+                            )
+
+                            for event_kind, payload in native_search.stream_search(
+                                query=resolved_search_prompt,
+                                messages=native_context_messages,
+                                max_results=8,
+                                search_mode=openai_search_mode,
+                            ):
+
+                                # ==============================================
+                                # OpenAI 真正返回的文本 delta
+                                # ==============================================
+
+                                if event_kind == "delta":
+
+                                    delta = (
+                                        payload
+                                        if isinstance(payload, str)
+                                        else str(payload or "")
+                                    )
+
+                                    if not delta:
+                                        continue
+
+                                    # ------------------------------------------
+                                    # 第一个真实 token / delta
+                                    # ------------------------------------------
+
+                                    if native_first_delta_time is None:
+
+                                        native_first_delta_time = (
+                                            time.perf_counter()
+                                        )
+
+                                        status_placeholder.empty()
+
+                                        print(
+                                            f"⚡ [NATIVE STREAM PERF] "
+                                            f"first_text_delta = "
+                                            f"{native_first_delta_time - native_api_start:.3f}s"
+                                        )
+
+                                        print(
+                                            f"🏁 [PERF] "
+                                            f"TOTAL_TO_FIRST_STREAM_TOKEN = "
+                                            f"{native_first_delta_time - perf_request_start:.3f}s"
+                                        )
+
+                                    native_stream_answer += delta
+
+                                    # 使用 OpenAI 真实 delta 实时更新 UI
+                                    full_response = native_stream_answer
+
+                                    placeholder.markdown(
+                                        full_response + "▌"
+                                    )
+
+                                    continue
+
+
+                                # ==============================================
+                                # 整个 Native Search 完成
+                                # ==============================================
+
+                                if event_kind == "complete":
+                                    native_search_response = payload
+
+
+                            # 理论上 stream_search 一定应该发送 complete
+                            if native_search_response is None:
+                                raise RuntimeError(
+                                    "OpenAI native stream ended "
+                                    "without a final NativeSearchResponse."
+                                )
+
+
+                            # 如果 streaming 搜索最终失败：
+                            # 清掉可能已经显示出来的部分答案，
+                            # 后面继续进入现有 Tavily Safety Net。
+                            if not native_search_response.success:
+
+                                placeholder.empty()
+                                full_response = ""
+
+                                print(
+                                    "⚠️ OpenAI native streaming failed; "
+                                    "partial streamed text cleared."
+                                )
+
+
+                        # ==================================================
+                        # 其他模型：
+                        # 暂时保持原来的 Native Search
+                        # ==================================================
+
+                        else:
+
                             native_search_response = native_search.search(
                                 query=resolved_search_prompt,
                                 messages=api_messages,
                                 max_results=8,
                             )
 
-                            if native_search_response.success:
-                                native_search_used = True
 
-                                print(
-                                    f"✅ {selected_model_name} 原生搜索成功"
-                                )
+                        # ==================================================
+                        # Native Search 完整结束耗时
+                        # ==================================================
 
-                                # ==================================================
-                                # 记录原生搜索本身的真实成本
-                                # ==================================================
-                                native_usage = getattr(
-                                    native_search_response,
-                                    "usage",
-                                    None,
-                                )
+                        native_api_elapsed = (
+                            time.perf_counter() - native_api_start
+                        )
 
-                                if native_usage:
-                                    try:
-                                        current_user = st.session_state.get(
-                                            "user"
+                        print(
+                            f"🌐 [NATIVE PERF] total_complete = "
+                            f"{native_api_elapsed:.3f}s"
+                        )
+
+                        if native_search_response.success:
+                            native_search_used = True
+
+                            print(
+                                f"✅ {selected_model_name} 原生搜索成功"
+                            )
+
+                            # ==================================================
+                            # 记录原生搜索本身的真实成本
+                            # ==================================================
+                            native_usage = getattr(
+                                native_search_response,
+                                "usage",
+                                None,
+                            )
+
+                            if native_usage:
+                                native_usage_start = time.perf_counter()
+
+                                try:
+                                    current_user = st.session_state.get(
+                                        "user"
+                                    )
+
+                                    current_user_id = (
+                                        getattr(
+                                            current_user,
+                                            "id",
+                                            None,
                                         )
+                                        or getattr(
+                                            current_user,
+                                            "user_id",
+                                            None,
+                                        )
+                                    )
 
+                                    if (
+                                        not current_user_id
+                                        and isinstance(
+                                            current_user,
+                                            dict,
+                                        )
+                                    ):
                                         current_user_id = (
-                                            getattr(
-                                                current_user,
-                                                "id",
-                                                None,
-                                            )
-                                            or getattr(
-                                                current_user,
-                                                "user_id",
-                                                None,
+                                            current_user.get("id")
+                                            or current_user.get(
+                                                "user_id"
                                             )
                                         )
 
-                                        if (
-                                            not current_user_id
-                                            and isinstance(
-                                                current_user,
-                                                dict,
-                                            )
-                                        ):
-                                            current_user_id = (
-                                                current_user.get("id")
-                                                or current_user.get(
-                                                    "user_id"
+                                    if current_user_id:
+                                        record_usage_event(
+                                            supabase_admin,
+                                            user_id=str(
+                                                current_user_id
+                                            ),
+                                            model_key=(
+                                                selected_model_name
+                                            ),
+                                            input_tokens=int(
+                                                native_usage.get(
+                                                    "input_tokens",
+                                                    0,
                                                 )
-                                            )
-
-                                        if current_user_id:
-                                            record_usage_event(
-                                                supabase_admin,
-                                                user_id=str(
-                                                    current_user_id
-                                                ),
-                                                model_key=(
-                                                    selected_model_name
-                                                ),
-                                                input_tokens=int(
-                                                    native_usage.get(
-                                                        "input_tokens",
-                                                        0,
-                                                    )
-                                                    or 0
-                                                ),
-                                                output_tokens=int(
-                                                    native_usage.get(
-                                                        "output_tokens",
-                                                        0,
-                                                    )
-                                                    or 0
-                                                ),
-                                                request_type=(
+                                                or 0
+                                            ),
+                                            output_tokens=int(
+                                                native_usage.get(
+                                                    "output_tokens",
+                                                    0,
+                                                )
+                                                or 0
+                                            ),
+                                            request_type=(
+                                                "native_search"
+                                            ),
+                                            provider_actual_cost_usd=(
+                                                native_usage.get(
+                                                    "provider_cost_usd"
+                                                )
+                                            ),
+                                            metadata={
+                                                "source": (
                                                     "native_search"
                                                 ),
-                                                provider_actual_cost_usd=(
+                                                "server_side_tools": (
                                                     native_usage.get(
-                                                        "provider_cost_usd"
+                                                        "server_side_tools",
+                                                        0,
                                                     )
                                                 ),
-                                                metadata={
-                                                    "source": (
-                                                        "native_search"
-                                                    ),
-                                                    "server_side_tools": (
-                                                        native_usage.get(
-                                                            "server_side_tools",
-                                                            0,
-                                                        )
-                                                    ),
-                                                    "cost_in_usd_ticks": (
-                                                        native_usage.get(
-                                                            "cost_in_usd_ticks",
-                                                            0,
-                                                        )
-                                                    ),
-                                                },
-                                            )
-
-                                            print(
-                                                "💳 Native search usage recorded:",
-                                                f"model={selected_model_name},",
-                                                "cost_usd="
-                                                f"{native_usage.get('provider_cost_usd')}",
-                                            )
-
-                                    except Exception as usage_error:
-                                        # 记账失败不能破坏搜索结果
-                                        print(
-                                            "⚠️ Native search usage "
-                                            "recording failed:",
-                                            repr(usage_error),
+                                                "cost_in_usd_ticks": (
+                                                    native_usage.get(
+                                                        "cost_in_usd_ticks",
+                                                        0,
+                                                    )
+                                                ),
+                                            },
                                         )
 
-                            else:
+                                        print(
+                                            "💳 Native search usage recorded:",
+                                            f"model={selected_model_name},",
+                                            "cost_usd="
+                                            f"{native_usage.get('provider_cost_usd')}",
+                                        )
+
+                                except Exception as usage_error:
+                                    # 记账失败不能破坏搜索结果
+                                    print(
+                                        "⚠️ Native search usage "
+                                        "recording failed:",
+                                        repr(usage_error),
+                                    )
+
                                 print(
-                                    f"⚠️ {selected_model_name} 原生搜索失败，"
-                                    "进入 Tavily Safety Net"
+                                    f"💳 [NATIVE PERF] usage_recording = "
+                                    f"{time.perf_counter() - native_usage_start:.3f}s"
                                 )
 
-                                if native_search_response.error:
-                                    print(
-                                        "   原因：",
-                                        native_search_response.error,
-                                    )
+                        else:
+                            print(
+                                f"⚠️ {selected_model_name} 原生搜索失败，"
+                                "进入 Tavily Safety Net"
+                            )
+
+                            if native_search_response.error:
+                                print(
+                                    "   原因：",
+                                    native_search_response.error,
+                                )
 
                     except Exception as error:
                         print(
@@ -1966,54 +2231,95 @@ if st.session_state.processing:
 
                 # ==================================================
                 # 原生搜索成功
+                #
+                # Native Search 本身已经完成：
+                # 1. 联网搜索
+                # 2. 阅读搜索结果
+                # 3. 生成最终回答
+                #
+                # 因此直接使用 native answer，
+                # 不再把它塞回模型进行第二次生成。
                 # ==================================================
                 if native_search_used and native_search_response is not None:
 
-                    date_prompt = build_date_prompt()
-
-                    native_sources_text = ""
-
-                    if native_search_response.results:
-                        source_lines = []
-
-                        for index, result in enumerate(
-                            native_search_response.results,
-                            start=1,
-                        ):
-                            source_lines.append(
-                                f"{index}. "
-                                f"{result.title or 'Untitled'}\n"
-                                f"{result.url}"
-                            )
-
-                        native_sources_text = (
-                            "\n\n【原生搜索来源】\n"
-                            + "\n".join(source_lines)
-                        )
-
-                    native_content = (
-                        f"{date_prompt}\n\n"
-                        "【当前模型原生搜索结果】\n\n"
-                        f"{native_search_response.answer}"
-                        f"{native_sources_text}"
+                    native_answer = (
+                        native_search_response.answer
+                        or ""
                     )
 
-                    web_instruction = {
-                        "role": "system",
-                        "content": (
-                            "下面内容来自当前模型自己的原生联网搜索。\n"
-                            "回答当前问题时，请优先依据这些最新搜索结果，"
-                            "不要使用过时的内部训练记忆推翻可靠搜索证据。\n"
-                            "如果搜索结果本身存在冲突或证据不足，"
-                            "请明确说明，不要猜测。\n\n"
-                            f"{native_content}"
-                        ),
-                    }
+                    if not isinstance(native_answer, str):
+                        native_answer = str(native_answer)
 
-                    api_messages = [
-                        web_instruction,
-                        *api_messages,
-                    ]
+                    native_answer = native_answer.strip()
+
+                    # ------------------------------
+                    # 用户可见来源
+                    #
+                    # Native Search 的答案正文已经包含原生引用。
+                    # 这里只补充“有真实标题”的来源，
+                    # 不再生成无意义的 Source / 来源占位链接。
+                    # ------------------------------
+                    source_lines = []
+                    seen_source_urls = set()
+
+                    if native_search_response.results:
+                        for result in native_search_response.results[:8]:
+
+                            title = (
+                                result.title
+                                or ""
+                            ).strip()
+
+                            url = (
+                                result.url
+                                or ""
+                            ).strip()
+
+                            # 没有真实标题或 URL：
+                            # 不额外显示，保留正文中的原生引用即可。
+                            if not title or not url:
+                                continue
+
+                            normalized_url = (
+                                url.rstrip("/").casefold()
+                            )
+
+                            if normalized_url in seen_source_urls:
+                                continue
+
+                            seen_source_urls.add(
+                                normalized_url
+                            )
+
+                            source_lines.append(
+                                f"- [{title}]({url})"
+                            )
+
+                    if source_lines:
+
+                        sources_heading = (
+                            "来源"
+                            if task_info.language == "zh"
+                            else "Sources"
+                        )
+
+                        native_answer = (
+                            native_answer
+                            + f"\n\n**{sources_heading}**\n"
+                            + "\n".join(source_lines)
+                        )
+                    # 只有真正拿到回答才走直接返回。
+                    # 如果原生搜索异常地没有 answer，
+                    # 不在这里强行结束，后面仍可以继续正常流程。
+                    if native_answer:
+                        native_direct_answer = native_answer
+                    
+
+                        print(
+                            f"⚡ {selected_model_name} "
+                            "原生搜索答案直接返回，"
+                            "跳过第二次模型生成"
+                        )
 
                 # ==================================================
                 # 原生搜索失败 / 当前模型尚未接原生搜索
@@ -2021,13 +2327,17 @@ if st.session_state.processing:
                 # ==================================================
                 else:
                     
-                    freshness_decision = judge_freshness(
-                        resolved_search_prompt
+                    # Reuse the Qwen freshness decision already made by
+                    # classify_task(). Do not call the judge a second time.
+                    search_type = (
+                        task_info.search_type
+                        if task_info.need_search
+                        else "none"
                     )
-                    search_type = freshness_decision.search_type
 
-                    search_plan = plan_search(
-                        resolved_search_prompt
+                    search_plan = plan_search_fast(
+                        resolved_search_prompt,
+                        search_type=search_type,
                     )
 
                     search_queries = search_plan.queries
@@ -2081,6 +2391,7 @@ if st.session_state.processing:
                                     max_results=5,
                                     search_type=search_type,
                                     include_domains=preferred_domains,
+                                    search_depth="basic",
                                 )
 
                             except Exception as error:
@@ -2223,6 +2534,14 @@ if st.session_state.processing:
                                     query,
                                     max_results=5,
                                     search_type=search_type,
+                                    search_depth=(
+                                        "basic"
+                                        if search_type in {
+                                            "current_fact",
+                                            "realtime_data",
+                                        }
+                                        else "advanced"
+                                    ),
                                 )
 
                             except Exception as error:
@@ -2295,6 +2614,77 @@ if st.session_state.processing:
                                     "🔁 当前资料不足，"
                                     "继续下一轮搜索"
                                 )
+
+                        # ==================================================
+                        # Fast Tavily safety retry
+                        # current_fact / realtime_data first use BASIC.
+                        # Only if the evaluator says evidence is insufficient
+                        # do we pay for one ADVANCED retry.
+                        # ==================================================
+                        if (
+                            search_type in {
+                                "current_fact",
+                                "realtime_data",
+                            }
+                            and not evaluation.get("enough", False)
+                            and search_queries
+                        ):
+                            retry_query = search_queries[0]
+
+                            print(
+                                "⚠️ BASIC 搜索资料不足，"
+                                "升级为 ADVANCED 再搜索 1 次"
+                            )
+
+                            try:
+                                advanced_results = search_web(
+                                    retry_query,
+                                    max_results=5,
+                                    search_type=search_type,
+                                    search_depth="advanced",
+                                )
+                            except Exception as error:
+                                print(
+                                    "⚠️ ADVANCED 补充搜索失败："
+                                    f"{error}"
+                                )
+                                advanced_results = []
+
+                            print(
+                                f"   ADVANCED 找到 "
+                                f"{len(advanced_results)} 条结果"
+                            )
+
+                            for result in advanced_results:
+                                url = (
+                                    result.get("url")
+                                    or ""
+                                ).strip()
+
+                                if url:
+                                    normalized_url = (
+                                        url
+                                        .rstrip("/")
+                                        .casefold()
+                                    )
+
+                                    if normalized_url in seen_urls:
+                                        continue
+
+                                    seen_urls.add(normalized_url)
+
+                                search_results.append(result)
+
+                            evaluation = evaluate_search_results(
+                                user_prompt=prompt,
+                                results=search_results,
+                                search_type=search_type,
+                            )
+
+                            print(
+                                "📊 ADVANCED 补充后评估：",
+                                evaluation,
+                            )
 
                     # ==================================================
                     # 最终搜索评估
@@ -2385,143 +2775,265 @@ if st.session_state.processing:
             
 
             # ==================================================
-            # Usage preflight
+            # 原生搜索已经生成最终答案
+            # → 直接显示
             # ==================================================
 
-            preflight = None
+            if native_direct_answer is not None:
 
-            if current_user_id:
-                preflight = can_start_request(
-                    supabase_admin,
-                    user_id=str(current_user_id),
-                    plan=str(current_plan),
-                    model_key=selected_model_name,
-                    request_type="text",
-                )
-    
+                status_placeholder.empty()
 
-                if not preflight["allowed"]:
-                    reason = preflight.get("reason")
+                # ==============================================
+                # Streaming 已经实时显示正文。
+                # 这里仅用最终完整答案刷新一次，
+                # 主要用于补齐最终 citations / sources。
+                # ==============================================
 
-                    if str(current_plan).lower() in {
-                        "pro",
-                        "premium",
-                        "paid",
-                    }:
-                        st.warning(
-                            t("pro_fair_use_limit")
-                        )
-
-                    elif reason in {
-                        "daily_credit_exhausted",
-                        "monthly_credit_exhausted",
-                    }:
-                        st.warning(
-                            t("free_quota_exhausted")
-                        )
-
-                    else:
-                        st.warning(
-                            t(
-                                "model_quota_insufficient"
-                            ).format(
-                                model=selected_model_name
-                            )
-                        )
-
-                    st.stop()
-
-                usage_max_output = (
-                    preflight
-                    .get("usage_status", {})
-                    .get("max_output_tokens")
-                )
-
-                if usage_max_output is not None:
-                    selected_max_tokens = min(
-                        int(selected_max_tokens),
-                        int(usage_max_output),
-                    )
-
-                cooldown_seconds = int(
-                    preflight
-                    .get("usage_status", {})
-                    .get("cooldown_seconds")
-                    or 0
-                )
-
-                if cooldown_seconds > 0:
-                    with st.spinner(
-                        t("fair_use_processing")
-                    ):
-                        time.sleep(cooldown_seconds)
-
-            stream = stream_model_response(
-                model_name=selected_model_name,
-                messages=api_messages,
-                max_tokens=selected_max_tokens,
-                temperature=selected_temperature,
-                supabase_admin=supabase_admin,
-                user_id=(
-                    str(current_user_id)
-                    if current_user_id
-                    else None
-                ),
-                request_type="text",
-            )
-                        
-            
-
-            # 当前模型回答的位置锚点
-            st.html(
-                '<div id="megor-current-answer-anchor" style="height:1px;"></div>'
-            )
-
-            first_token_received = False
-
-            for text_chunk in stream:
-                if not first_token_received:
-                    first_token_received = True
-                    status_placeholder.empty()
-
-                    # 第一个 token 出现时，
-                    # 把当前模型回答真正带入可视区域。
-                    st.html(
-                        """
-                        <script>
-                        (() => {
-                            const scrollToAnswer = () => {
-                                const anchor = document.getElementById(
-                                    "megor-current-answer-anchor"
-                                );
-
-                                if (!anchor) {
-                                    return;
-                                }
-
-                                anchor.scrollIntoView({
-                                    behavior: "auto",
-                                    block: "start"
-                                });
-                            };
-
-                            scrollToAnswer();
-                            setTimeout(scrollToAnswer, 80);
-                            setTimeout(scrollToAnswer, 200);
-                        })();
-                        </script>
-                        """,
-                        unsafe_allow_javascript=True,
-                    )
-
-                full_response += text_chunk
+                full_response = native_direct_answer
 
                 placeholder.markdown(
-                    full_response + "▌"
+                    full_response
                 )
 
-            status_placeholder.empty()
-            placeholder.markdown(full_response)
+                native_complete_time = (
+                    time.perf_counter()
+                )
+
+                print(
+                    "⚡ [PERF] SECOND_PROVIDER_CALL = SKIPPED"
+                )
+
+                # ChatGPT 真正流式模式：
+                # 首字时间已经在第一个 delta 时打印，
+                # 这里不再错误地把“全文完成时间”叫 First Token。
+                if (
+                    selected_model_name == "ChatGPT"
+                    and native_first_delta_time is not None
+                ):
+
+                    print(
+                        f"🏁 [NATIVE STREAM PERF] "
+                        f"total_complete = "
+                        f"{native_complete_time - native_api_start:.3f}s"
+                    )
+
+                    print(
+                        f"🏁 [PERF] "
+                        f"TOTAL_NATIVE_COMPLETE = "
+                        f"{native_complete_time - perf_request_start:.3f}s"
+                    )
+
+                else:
+
+                    # 其他目前尚未支持 Native Streaming 的模型
+                    print(
+                        f"🏁 [PERF] TOTAL_TO_FIRST_TOKEN = "
+                        f"{native_complete_time - perf_request_start:.3f}s"
+                    )
+
+                print("=" * 70)
+
+
+            # ==================================================
+            # 非原生搜索直出
+            # 包括：
+            # 1. 普通非联网回答
+            # 2. Tavily Safety Net
+            #
+            # 这些仍然需要模型生成最终答案。
+            # ==================================================
+
+            else:
+
+                # ==================================================
+                # Usage preflight
+                # ==================================================
+
+                preflight = None
+
+                print(
+                    f"⏱️ [PERF] routing+search_before_preflight = "
+                    f"{time.perf_counter() - perf_last:.3f}s"
+                )
+                perf_last = time.perf_counter()
+
+                if current_user_id:
+                    preflight = can_start_request(
+                        supabase_admin,
+                        user_id=str(current_user_id),
+                        plan=str(current_plan),
+                        model_key=selected_model_name,
+                        request_type="text",
+                    )
+
+                    if not preflight["allowed"]:
+                        reason = preflight.get("reason")
+
+                        if str(current_plan).lower() in {
+                            "pro",
+                            "premium",
+                            "paid",
+                        }:
+                            st.warning(
+                                t("pro_fair_use_limit")
+                            )
+
+                        elif reason in {
+                            "daily_credit_exhausted",
+                            "monthly_credit_exhausted",
+                        }:
+                            st.warning(
+                                t("free_quota_exhausted")
+                            )
+
+                        else:
+                            st.warning(
+                                t(
+                                    "model_quota_insufficient"
+                                ).format(
+                                    model=selected_model_name
+                                )
+                            )
+
+                        st.stop()
+
+                    usage_max_output = (
+                        preflight
+                        .get("usage_status", {})
+                        .get("max_output_tokens")
+                    )
+
+                    if usage_max_output is not None:
+                        selected_max_tokens = min(
+                            int(selected_max_tokens),
+                            int(usage_max_output),
+                        )
+
+                    cooldown_seconds = int(
+                        preflight
+                        .get("usage_status", {})
+                        .get("cooldown_seconds")
+                        or 0
+                    )
+
+                    if cooldown_seconds > 0:
+                        with st.spinner(
+                            t("fair_use_processing")
+                        ):
+                            time.sleep(
+                                cooldown_seconds
+                            )
+
+                print(
+                    f"⏱️ [PERF] final_usage_preflight = "
+                    f"{time.perf_counter() - perf_last:.3f}s"
+                )
+
+                perf_before_provider = (
+                    time.perf_counter()
+                )
+
+                print(
+                    f"⏱️ [PERF] BEFORE PROVIDER TOTAL = "
+                    f"{perf_before_provider - perf_request_start:.3f}s"
+                )
+
+                # ==================================================
+                # 真正的模型生成
+                # ==================================================
+
+                stream = stream_model_response(
+                    model_name=selected_model_name,
+                    messages=api_messages,
+                    max_tokens=selected_max_tokens,
+                    temperature=selected_temperature,
+                    supabase_admin=supabase_admin,
+                    user_id=(
+                        str(current_user_id)
+                        if current_user_id
+                        else None
+                    ),
+                    request_type="text",
+                )
+
+                # 当前模型回答的位置锚点
+                st.html(
+                    '<div id="megor-current-answer-anchor" '
+                    'style="height:1px;"></div>'
+                )
+
+                first_token_received = False
+
+                for text_chunk in stream:
+
+                    if not first_token_received:
+                        first_token_received = True
+
+                        first_token_time = (
+                            time.perf_counter()
+                        )
+
+                        print(
+                            f"🤖 [PERF] provider_to_first_token = "
+                            f"{first_token_time - perf_before_provider:.3f}s"
+                        )
+
+                        print(
+                            f"🏁 [PERF] TOTAL_TO_FIRST_TOKEN = "
+                            f"{first_token_time - perf_request_start:.3f}s"
+                        )
+
+                        print("=" * 70)
+
+                        status_placeholder.empty()
+
+                        # 第一个 token 出现时，
+                        # 把当前模型回答带入可视区域。
+                        st.html(
+                            """
+                            <script>
+                            (() => {
+                                const scrollToAnswer = () => {
+                                    const anchor =
+                                        document.getElementById(
+                                            "megor-current-answer-anchor"
+                                        );
+
+                                    if (!anchor) {
+                                        return;
+                                    }
+
+                                    anchor.scrollIntoView({
+                                        behavior: "auto",
+                                        block: "start"
+                                    });
+                                };
+
+                                scrollToAnswer();
+                                setTimeout(
+                                    scrollToAnswer,
+                                    80
+                                );
+                                setTimeout(
+                                    scrollToAnswer,
+                                    200
+                                );
+                            })();
+                            </script>
+                            """,
+                            unsafe_allow_javascript=True,
+                        )
+
+                    full_response += text_chunk
+
+                    placeholder.markdown(
+                        full_response + "▌"
+                    )
+
+                status_placeholder.empty()
+                placeholder.markdown(
+                    full_response
+                )
 
 
             st.session_state.messages.append(
@@ -2532,20 +3044,50 @@ if st.session_state.processing:
                     "model_icon": used_model_icon,
                 }
             )
-            save_message(
-                st.session_state.current_session_id,
-                "assistant",
-                full_response,
-                model_name=used_model,
-                model_icon=used_model_icon,
-            )
-            # 每轮完整问答只保存一次最后活动时间
-            save_last_activity(cookies)
 
-            # 回答与数据库保存都完成后，再更新 URL
-            st.query_params["chat"] = str(
-                st.session_state.current_session_id
-            )
+            # ==================================================
+            # 模型完整回答成功后，再统一执行持久化。
+            # ==================================================
+            try:
+                if st.session_state.current_session_id is None:
+                    new_session_id = create_new_chat(
+                        st.session_state.user.id
+                    )
+                    st.session_state.current_session_id = new_session_id
+                    st.session_state.new_chat_mode = False
+
+                save_message(
+                    st.session_state.current_session_id,
+                    "user",
+                    content_to_save,
+                )
+
+                update_chat_title_if_needed(
+                    st.session_state.current_session_id,
+                    prompt,
+                )
+
+                save_message(
+                    st.session_state.current_session_id,
+                    "assistant",
+                    full_response,
+                    model_name=used_model,
+                    model_icon=used_model_icon,
+                )
+
+                # 每轮完整问答只保存一次最后活动时间
+                save_last_activity(cookies)
+
+                # 回答与数据库保存都完成后，再更新 URL
+                st.query_params["chat"] = str(
+                    st.session_state.current_session_id
+                )
+
+            except Exception as persistence_error:
+                print(
+                    "Post-response persistence failed:",
+                    repr(persistence_error),
+                )
 
             # 只有模型成功返回后才扣除额度
             try:

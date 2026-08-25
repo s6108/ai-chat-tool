@@ -142,6 +142,79 @@ class GLMNativeSearch(BaseNativeSearch):
                 stream=False,
             )
 
+            # ==================================================
+            # TEMP DIAGNOSTIC: inspect the REAL GLM ChatCompletion
+            # Read-only: does not change search / fallback behaviour.
+            # ==================================================
+            try:
+                print("\n🧪 [GLM RAW] response_type =", type(response).__name__)
+
+                if hasattr(response, "model_dump"):
+                    diagnostic_raw = response.model_dump()
+                    print("🧪 [GLM RAW] top_keys =", list(diagnostic_raw.keys()))
+
+                    raw_web_search = diagnostic_raw.get("web_search")
+                    print(
+                        "🧪 [GLM RAW] top_level_web_search_type =",
+                        type(raw_web_search).__name__,
+                    )
+                    if isinstance(raw_web_search, list):
+                        print(
+                            "🧪 [GLM RAW] top_level_web_search_count =",
+                            len(raw_web_search),
+                        )
+                        if raw_web_search and isinstance(raw_web_search[0], dict):
+                            print(
+                                "🧪 [GLM RAW] web_search[0].keys =",
+                                list(raw_web_search[0].keys()),
+                            )
+
+                    raw_choices = diagnostic_raw.get("choices") or []
+                    print("🧪 [GLM RAW] choices_count =", len(raw_choices))
+                    for idx, raw_choice in enumerate(raw_choices):
+                        if not isinstance(raw_choice, dict):
+                            continue
+                        print(
+                            f"🧪 [GLM RAW] choice[{idx}].finish_reason =",
+                            raw_choice.get("finish_reason"),
+                        )
+                        raw_message = raw_choice.get("message")
+                        if isinstance(raw_message, dict):
+                            print(
+                                f"🧪 [GLM RAW] choice[{idx}].message.keys =",
+                                list(raw_message.keys()),
+                            )
+                            raw_content = raw_message.get("content")
+                            print(
+                                f"🧪 [GLM RAW] choice[{idx}].content_type =",
+                                type(raw_content).__name__,
+                            )
+                            if isinstance(raw_content, str):
+                                print(
+                                    f"🧪 [GLM RAW] choice[{idx}].content_preview =",
+                                    repr(raw_content[:500]),
+                                )
+                            raw_tool_calls = raw_message.get("tool_calls") or []
+                            print(
+                                f"🧪 [GLM RAW] choice[{idx}].tool_calls_count =",
+                                len(raw_tool_calls),
+                            )
+
+                    usage = diagnostic_raw.get("usage")
+                    if isinstance(usage, dict):
+                        print("🧪 [GLM RAW] usage.keys =", list(usage.keys()))
+                else:
+                    print(
+                        "🧪 [GLM RAW] attrs =",
+                        [name for name in dir(response) if not name.startswith("_")][:80],
+                    )
+
+            except Exception as diagnostic_error:
+                print(
+                    "⚠️ [GLM RAW] diagnostic failed:",
+                    repr(diagnostic_error),
+                )
+
             if not response.choices:
                 raise RuntimeError(
                     "GLM returned no choices."
