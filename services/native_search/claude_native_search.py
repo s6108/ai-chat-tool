@@ -35,7 +35,6 @@ class ClaudeNativeSearch(BaseNativeSearch):
 
         self.client = anthropic.Anthropic(
             api_key=self.config.api_key,
-            timeout=60.0,
         )
 
     def stream_search(

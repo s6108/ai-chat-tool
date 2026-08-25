@@ -1575,22 +1575,39 @@ if st.session_state.processing:
     perf_last = time.perf_counter()    
 
     # ==================================================
-    # ChatGPT unified Responses mode
+    # Self-deciding native search models
     #
-    # 手动选择 ChatGPT 时，不再先调用独立 Freshness AI。
-    # 是否真正调用 web_search，由同一次 OpenAI Responses 请求自行决定。
-    # Auto 模式暂时保持原有分类 / 路由逻辑，避免影响其他模型。
+    # ChatGPT / Grok / Gemini / Claude 在手动选择时，
+    # 不再先调用 Qwen / Freshness AI 判断是否需要联网。
+    # 是否真正执行原生搜索，由各自模型的 native search 流程自行决定。
+    # Auto 模式暂时保持原有分类 / 路由逻辑，避免影响自动路由。
     # ==================================================
-    chatgpt_unified_mode = (
+    SELF_DECIDING_SEARCH_MODELS = {
+        "ChatGPT",
+        "Grok",
+        "Gemini",
+        "Claude",
+    }
+
+    selected_model_before_routing = st.session_state.selected_model
+
+    self_deciding_search_mode = (
         not st.session_state.auto_mode
-        and st.session_state.selected_model == "ChatGPT"
+        and selected_model_before_routing in SELF_DECIDING_SEARCH_MODELS
         and not bool(uploaded_file)
+    )
+
+    # 保留 ChatGPT 专用 unified Responses 标记，
+    # 供后续 ChatGPT-specific 分支继续使用。
+    chatgpt_unified_mode = (
+        self_deciding_search_mode
+        and selected_model_before_routing == "ChatGPT"
     )
 
     task_info = classify_task(
         prompt,
         has_image=bool(uploaded_file),
-        skip_ai_freshness=chatgpt_unified_mode,
+        skip_ai_freshness=self_deciding_search_mode,
     )
 
     print(
@@ -1602,10 +1619,10 @@ if st.session_state.processing:
     # ===== 最终联网判定 =====
     needs_web_search = task_info.need_search
 
-    # ChatGPT unified mode 必须进入统一 Responses 流。
-    # 这里的 True 表示“进入可使用 web_search 的统一流”，
-    # 不代表本轮一定实际联网。是否调用工具由 OpenAI 自主决定。
-    if chatgpt_unified_mode:
+    # 四个支持自主联网判断的模型，在手动选择时必须进入各自的
+    # native search / unified 流程。这里的 True 仅表示“进入可联网流程”，
+    # 不代表本轮一定实际联网；是否真正搜索由模型自身决定。
+    if self_deciding_search_mode:
         needs_web_search = True
 
     # 图片本身不是联网理由。
@@ -1911,11 +1928,11 @@ if st.session_state.processing:
 
 
                         # ==================================================
-                        # ChatGPT：
-                        # 使用 OpenAI Responses API 真正流式 Native Search
+                        # ChatGPT / Gemini / Grok / Claude
+                        # 统一使用真正的 Native Search 流式输出
                         # ==================================================
 
-                        if selected_model_name == "ChatGPT":
+                        if selected_model_name in SELF_DECIDING_SEARCH_MODELS:
 
                             openai_search_mode = (
                                 "fast"
@@ -1924,8 +1941,7 @@ if st.session_state.processing:
                             )
 
                             print(
-                                "⚡ OpenAI Native Search mode:",
-                                openai_search_mode,
+                                f"⚡ {selected_model_name} Native Search streaming"
                             )
 
                             native_search_response = None
@@ -1975,11 +1991,23 @@ if st.session_state.processing:
                                 ],
                             )
 
+                            stream_kwargs = {
+                                "query": resolved_search_prompt,
+                                "messages": native_context_messages,
+                                "max_results": 8,
+                            }
+
+                            # ChatGPT 有自己的搜索模式参数
+                            if selected_model_name == "ChatGPT":
+                                stream_kwargs["search_mode"] = openai_search_mode
+
+                            # Gemini / Grok / Claude 自己判断本轮是否真的需要联网。
+                            # 即使模型判断无需搜索，也允许正常直接回答。
+                            else:
+                                stream_kwargs["allow_no_search"] = True
+
                             for event_kind, payload in native_search.stream_search(
-                                query=resolved_search_prompt,
-                                messages=native_context_messages,
-                                max_results=8,
-                                search_mode=openai_search_mode,
+                                **stream_kwargs
                             ):
 
                                 # ==============================================
@@ -2063,19 +2091,7 @@ if st.session_state.processing:
                                 )
 
 
-                        # ==================================================
-                        # 其他模型：
-                        # 暂时保持原来的 Native Search
-                        # ==================================================
-
-                        else:
-
-                            native_search_response = native_search.search(
-                                query=resolved_search_prompt,
-                                messages=api_messages,
-                                max_results=8,
-                            )
-
+                        
 
                         # ==================================================
                         # Native Search 完整结束耗时
@@ -2212,15 +2228,23 @@ if st.session_state.processing:
                                 )
 
                         else:
-                            print(
-                                f"⚠️ {selected_model_name} 原生搜索失败，"
-                                "进入 Tavily Safety Net"
+                            error_detail = (
+                                native_search_response.error
+                                or "Native search failed."
                             )
 
-                            if native_search_response.error:
-                                print(
-                                    "   原因：",
-                                    native_search_response.error,
+                            print(
+                                f"⚠️ {selected_model_name} 原生搜索失败：",
+                                error_detail,
+                            )
+
+                            if self_deciding_search_mode:
+                                # 四个海外模型不再进入 Tavily，
+                                # 也不进行第二次普通模型生成。
+                                native_direct_answer = (
+                                    "原生搜索暂时失败，请稍后重试。"
+                                    if task_info.language == "zh"
+                                    else "Native search temporarily failed. Please try again."
                                 )
 
                     except Exception as error:
@@ -2228,6 +2252,13 @@ if st.session_state.processing:
                             f"⚠️ {selected_model_name} 原生搜索异常：",
                             error,
                         )
+
+                        if self_deciding_search_mode:
+                            native_direct_answer = (
+                                "原生搜索暂时失败，请稍后重试。"
+                                if task_info.language == "zh"
+                                else "Native search temporarily failed. Please try again."
+                            )
 
                 # ==================================================
                 # 原生搜索成功
@@ -2325,7 +2356,7 @@ if st.session_state.processing:
                 # 原生搜索失败 / 当前模型尚未接原生搜索
                 # → Tavily Safety Net
                 # ==================================================
-                else:
+                elif not self_deciding_search_mode:
                     
                     # Reuse the Qwen freshness decision already made by
                     # classify_task(). Do not call the judge a second time.
@@ -2803,14 +2834,13 @@ if st.session_state.processing:
                     "⚡ [PERF] SECOND_PROVIDER_CALL = SKIPPED"
                 )
 
-                # ChatGPT 真正流式模式：
+                # 四个海外模型真正 Native Streaming：
                 # 首字时间已经在第一个 delta 时打印，
                 # 这里不再错误地把“全文完成时间”叫 First Token。
                 if (
-                    selected_model_name == "ChatGPT"
+                    selected_model_name in SELF_DECIDING_SEARCH_MODELS
                     and native_first_delta_time is not None
                 ):
-
                     print(
                         f"🏁 [NATIVE STREAM PERF] "
                         f"total_complete = "

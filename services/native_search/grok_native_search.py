@@ -21,7 +21,7 @@ class GrokNativeSearch(BaseNativeSearch):
     - X Search
 
     本文件绝不调用 Tavily。
-    原生搜索失败后，由 Megor 上层决定是否进入 Tavily Safety Net。
+    原生搜索失败后直接返回失败结果，由 Megor 上层展示。
     """
 
     model_name = "Grok"
@@ -38,7 +38,6 @@ class GrokNativeSearch(BaseNativeSearch):
         self.client = OpenAI(
             api_key=self.config.api_key,
             base_url="https://api.x.ai/v1",
-            timeout=35.0,
             max_retries=0,
         )
 
