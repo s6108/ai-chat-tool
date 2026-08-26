@@ -272,20 +272,19 @@ class OpenAICompatibleProvider(BaseProvider):
                     ):
                         completed_normally = True
 
+                    reasoning_text = getattr(choice.delta, "reasoning_content", None)
+                    if reasoning_text:
+                        continue  # 思考过程先不吐给前端，跳过即可
+
                     text = choice.delta.content
-
-                    
-
-                    if not text:
-                        text = getattr(choice.delta, "reasoning_content", None)
-
-
                     if not text:
                         continue
 
                     emitted_text = True
-
                     yield text
+
+
+
 
                 
                 if emitted_text:

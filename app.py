@@ -1865,7 +1865,10 @@ if st.session_state.processing:
                 native_search_used = False
                 native_search_response = None
 
-                if NativeSearchFactory.supports(selected_model_name):
+                if (
+                    selected_model_name != "DeepSeek"
+                    and NativeSearchFactory.supports(selected_model_name)
+                ):
                     print(
                         f"🧠 尝试 {selected_model_name} 原生搜索"
                     )
@@ -2078,20 +2081,35 @@ if st.session_state.processing:
 
 
                             # 如果 streaming 搜索最终失败：
-                            # 清掉可能已经显示出来的部分答案，
-                            # 后面继续进入现有 Tavily Safety Net。
+                            # 清掉可能已经显示出来的部分答案。
+                            # 不再进入任何兜底搜索。
                             if not native_search_response.success:
 
                                 placeholder.empty()
                                 full_response = ""
 
                                 print(
-                                    "⚠️ OpenAI native streaming failed; "
+                                    f"⚠️ {selected_model_name} native streaming failed; "
                                     "partial streamed text cleared."
                                 )
 
+                        else:
+                            # ==================================================
+                            # 四个中国模型：Qwen / Kimi / Doubao / GLM
+                            # 是否联网已经由 Qwen 在 classify_task() 中判断完成。
+                            # 这里直接使用各自原生搜索，不再二次判断。
+                            # ==================================================
+                            native_search_response = native_search.search(
+                                query=resolved_search_prompt,
+                                messages=api_messages,
+                                max_results=8,
+                            )
 
-                        
+                            if native_search_response is None:
+                                raise RuntimeError(
+                                    f"{selected_model_name} native search "
+                                    "returned no response."
+                                )
 
                         # ==================================================
                         # Native Search 完整结束耗时
@@ -2238,14 +2256,13 @@ if st.session_state.processing:
                                 error_detail,
                             )
 
-                            if self_deciding_search_mode:
-                                # 四个海外模型不再进入 Tavily，
-                                # 也不进行第二次普通模型生成。
-                                native_direct_answer = (
-                                    "原生搜索暂时失败，请稍后重试。"
-                                    if task_info.language == "zh"
-                                    else "Native search temporarily failed. Please try again."
-                                )
+                            # 所有使用原生搜索的模型均不再进入兜底搜索，
+                            # 也不进行第二次普通模型生成。
+                            native_direct_answer = (
+                                "原生搜索暂时失败，请稍后重试。"
+                                if task_info.language == "zh"
+                                else "Native search temporarily failed. Please try again."
+                            )
 
                     except Exception as error:
                         print(
@@ -2253,12 +2270,12 @@ if st.session_state.processing:
                             error,
                         )
 
-                        if self_deciding_search_mode:
-                            native_direct_answer = (
-                                "原生搜索暂时失败，请稍后重试。"
-                                if task_info.language == "zh"
-                                else "Native search temporarily failed. Please try again."
-                            )
+                        # 原生搜索异常时直接结束本轮，不再进入兜底搜索。
+                        native_direct_answer = (
+                            "原生搜索暂时失败，请稍后重试。"
+                            if task_info.language == "zh"
+                            else "Native search temporarily failed. Please try again."
+                        )
 
                 # ==================================================
                 # 原生搜索成功
@@ -2353,10 +2370,12 @@ if st.session_state.processing:
                         )
 
                 # ==================================================
-                # 原生搜索失败 / 当前模型尚未接原生搜索
-                # → Tavily Safety Net
+                # DeepSeek：
+                # 五个中国模型都先由 Qwen 判断是否需要联网；
+                # 其中只有 DeepSeek 不使用原生搜索，直接走 Tavily。
+                # Tavily 是 DeepSeek 的主搜索路径，不是任何模型的兜底。
                 # ==================================================
-                elif not self_deciding_search_mode:
+                elif selected_model_name == "DeepSeek":
                     
                     # Reuse the Qwen freshness decision already made by
                     # classify_task(). Do not call the judge a second time.
@@ -2868,7 +2887,7 @@ if st.session_state.processing:
             # 非原生搜索直出
             # 包括：
             # 1. 普通非联网回答
-            # 2. Tavily Safety Net
+            # 2. DeepSeek 的 Tavily 主搜索路径
             #
             # 这些仍然需要模型生成最终答案。
             # ==================================================
