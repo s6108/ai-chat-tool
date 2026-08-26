@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, Iterator
 
 from openai import OpenAI
 
@@ -150,6 +150,351 @@ class KimiNativeSearch(BaseNativeSearch):
                     )
                 )
 
+    def stream_search(
+        self,
+        *,
+        query: str,
+        messages: list[dict[str, Any]] | None = None,
+        max_results: int = 8,
+        allow_no_search: bool = False,
+    ) -> Iterator[tuple[str, Any]]:
+        """
+        Kimi $web_search 混合流式。
+
+        搜索 / tool-call 阶段使用同步请求，完整拿到工具结果；
+        搜索完成后，再使用 stream=True 输出最终答案。
+
+        Yields:
+            ("delta", text)
+            ("complete", NativeSearchResponse)
+        """
+
+        query = (query or "").strip()
+
+        if not query:
+            yield (
+                "complete",
+                NativeSearchResponse(
+                    success=False,
+                    model_name=self.model_name,
+                    provider=self.provider,
+                    query="",
+                    error="Empty search query.",
+                    should_fallback=False,
+                ),
+            )
+            return
+
+        try:
+            kimi_messages: list[dict[str, Any]] = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Kimi performing live web research "
+                        "for the current user request. "
+                        "The upstream search-decision system has already "
+                        "determined that this request requires current "
+                        "web information. You MUST use the built-in "
+                        "$web_search tool before answering. "
+                        "Base the final answer on the retrieved search "
+                        "information. Prefer current, reliable, primary "
+                        "and authoritative sources when available. "
+                        "Conversation history is context, not verified facts."
+                    ),
+                }
+            ]
+
+            if messages:
+                history = messages[-8:]
+
+                if history:
+                    last = history[-1]
+                    last_role = last.get("role")
+                    last_content = last.get("content")
+
+                    if (
+                        last_role == "user"
+                        and isinstance(last_content, str)
+                        and last_content.strip() == query
+                    ):
+                        history = history[:-1]
+
+                for message in history:
+                    role = message.get("role")
+                    content = message.get("content")
+
+                    if role not in {"user", "assistant"}:
+                        continue
+
+                    if not isinstance(content, str):
+                        continue
+
+                    content = content.strip()
+
+                    if not content:
+                        continue
+
+                    if len(content) > 1500:
+                        content = content[:1500]
+
+                    kimi_messages.append(
+                        {
+                            "role": role,
+                            "content": content,
+                        }
+                    )
+
+            kimi_messages.append(
+                {
+                    "role": "user",
+                    "content": query,
+                }
+            )
+
+            tools = [
+                {
+                    "type": "builtin_function",
+                    "function": {
+                        "name": "$web_search",
+                    },
+                }
+            ]
+
+            print("⚡ Kimi Native Search streaming")
+            print(
+                "🧩 Kimi Native Search context turns:",
+                len(kimi_messages) - 2,
+            )
+
+            used_web_search = False
+            native_results: list[NativeSearchResult] = []
+            seen_urls: set[str] = set()
+
+            # 搜索阶段使用同步调用。Kimi 的 $web_search 是显式 tool-call
+            # 循环，用户看不到这一阶段的正文，因此没有必要流式拼接
+            # tool arguments。
+            max_rounds = 6
+            search_completed = False
+
+            for _round_index in range(1, max_rounds + 1):
+                completion = self.client.chat.completions.create(
+                    model=self.config.model_id,
+                    messages=kimi_messages,
+                    tools=tools,
+                    max_tokens=2400,
+                    temperature=1,
+                )
+
+                if not completion.choices:
+                    raise RuntimeError("Kimi returned no choices.")
+
+                choice = completion.choices[0]
+                message = choice.message
+                finish_reason = choice.finish_reason
+
+                if finish_reason != "tool_calls":
+                    raise RuntimeError(
+                        "Kimi returned without using the native $web_search tool."
+                    )
+
+                tool_calls = message.tool_calls or []
+                if not tool_calls:
+                    raise RuntimeError(
+                        "Kimi returned tool_calls finish_reason without any tool calls."
+                    )
+
+                assistant_tool_calls = []
+
+                for tool_call in tool_calls:
+                    assistant_tool_calls.append(
+                        {
+                            "id": tool_call.id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": (
+                                    tool_call.function.arguments
+                                    or "{}"
+                                ),
+                            },
+                        }
+                    )
+
+                assistant_message = {
+                    "role": "assistant",
+                    "content": message.content or "",
+                    "tool_calls": assistant_tool_calls,
+                }
+
+                kimi_messages.append(assistant_message)
+
+                round_used_search = False
+
+                for tool_call in tool_calls:
+                    tool_name = tool_call.function.name
+                    raw_arguments = (
+                        tool_call.function.arguments
+                        or "{}"
+                    )
+
+                    try:
+                        arguments = json.loads(raw_arguments)
+                    except json.JSONDecodeError:
+                        arguments = {"raw": raw_arguments}
+
+                    if tool_name == "$web_search":
+                        used_web_search = True
+                        round_used_search = True
+                        tool_result = arguments
+
+                        
+
+                        search_result = (
+                            arguments.get("search_result")
+                            if isinstance(arguments, dict)
+                            else None
+                        )
+
+                        
+
+                        
+
+                        self._extract_sources(
+                            arguments,
+                            results=native_results,
+                            seen_urls=seen_urls,
+                        )
+
+                        usage = (
+                            arguments.get("usage", {})
+                            if isinstance(arguments, dict)
+                            else {}
+                        )
+                        search_tokens = (
+                            usage.get("total_tokens")
+                            if isinstance(usage, dict)
+                            else None
+                        )
+
+                        if search_tokens is not None:
+                            print(
+                                "🌐 Kimi search content tokens:",
+                                search_tokens,
+                            )
+                    else:
+                        tool_result = {
+                            "error": f"Unsupported tool: {tool_name}"
+                        }
+
+                    kimi_messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": tool_name,
+                            "content": json.dumps(
+                                tool_result,
+                                ensure_ascii=False,
+                            ),
+                        }
+                    )
+
+                if round_used_search:
+                    search_completed = True
+                    break
+
+            if not search_completed or not used_web_search:
+                raise RuntimeError(
+                    "Kimi native $web_search did not complete."
+                )
+
+            # 搜索完成后，使用流式请求生成最终回答。为了避免 Kimi
+            # 再次发起工具调用，这一轮不再传 tools。
+            final_stream = self.client.chat.completions.create(
+                model=self.config.model_id,
+                messages=kimi_messages,
+                max_tokens=2400,
+                temperature=1,
+                stream=True,
+            )
+
+            final_answer_parts: list[str] = []
+
+            for chunk in final_stream:
+                if not chunk.choices:
+                    continue
+
+                choice = chunk.choices[0]
+                delta = choice.delta
+                content = getattr(delta, "content", None)
+
+                if isinstance(content, str) and content:
+                    final_answer_parts.append(content)
+                    yield ("delta", content)
+
+            final_answer = "".join(final_answer_parts).strip()
+            native_results = native_results[:max_results]
+
+            print(
+                "🔎 Kimi native stream:",
+                {
+                    "web_search": used_web_search,
+                    "sources": len(native_results),
+                },
+            )
+
+            if not final_answer:
+                yield (
+                    "complete",
+                    NativeSearchResponse(
+                        success=False,
+                        model_name=self.model_name,
+                        provider=self.provider,
+                        query=query,
+                        results=native_results,
+                        error=(
+                            "Kimi native web search produced no final answer."
+                        ),
+                        should_fallback=False,
+                    ),
+                )
+                return
+
+            print(
+                f"✅ Kimi native streaming search succeeded: "
+                f"{len(native_results)} visible sources"
+            )
+
+            yield (
+                "complete",
+                NativeSearchResponse(
+                    success=True,
+                    model_name=self.model_name,
+                    provider=self.provider,
+                    query=query,
+                    results=native_results,
+                    answer=final_answer,
+                    should_fallback=False,
+                ),
+            )
+
+        except Exception as error:
+            print(
+                "❌ Kimi native streaming failed:",
+                repr(error),
+            )
+
+            yield (
+                "complete",
+                NativeSearchResponse(
+                    success=False,
+                    model_name=self.model_name,
+                    provider=self.provider,
+                    query=query,
+                    error=str(error),
+                    should_fallback=False,
+                ),
+            )
+
     def search(
         self,
         *,
@@ -280,176 +625,6 @@ class KimiNativeSearch(BaseNativeSearch):
                 choice = completion.choices[0]
                 message = choice.message
                 finish_reason = choice.finish_reason
-
-                # ==================================================
-                # TEMP DIAGNOSTIC: inspect the REAL Kimi response
-                # Read-only: does not change search / fallback behavior.
-                # ==================================================
-                try:
-                    print(
-                        f"\n🧪 [KIMI RAW] round={round_index} "
-                        f"completion_type={type(completion).__name__}"
-                    )
-                    print(
-                        "🧪 [KIMI RAW] finish_reason =",
-                        finish_reason,
-                    )
-
-                    if hasattr(completion, "model_dump"):
-                        raw_completion = completion.model_dump()
-                        print(
-                            "🧪 [KIMI RAW] top_keys =",
-                            list(raw_completion.keys()),
-                        )
-                    else:
-                        raw_completion = None
-
-                    print(
-                        "🧪 [KIMI RAW] message_type =",
-                        type(message).__name__,
-                    )
-                    print(
-                        "🧪 [KIMI RAW] message.content_type =",
-                        type(message.content).__name__,
-                    )
-                    print(
-                        "🧪 [KIMI RAW] message.content_preview =",
-                        repr(
-                            (message.content or "")[:500]
-                            if isinstance(message.content, str)
-                            else message.content
-                        ),
-                    )
-
-                    raw_tool_calls = message.tool_calls or []
-                    print(
-                        "🧪 [KIMI RAW] tool_calls_count =",
-                        len(raw_tool_calls),
-                    )
-
-                    for idx, tool_call in enumerate(raw_tool_calls):
-                        function = getattr(tool_call, "function", None)
-                        tool_type = getattr(tool_call, "type", None)
-                        tool_id = getattr(tool_call, "id", None)
-                        function_name = (
-                            getattr(function, "name", None)
-                            if function is not None
-                            else None
-                        )
-                        function_arguments = (
-                            getattr(function, "arguments", None)
-                            if function is not None
-                            else None
-                        )
-
-                        print(
-                            f"🧪 [KIMI RAW] tool_call[{idx}].id =",
-                            tool_id,
-                        )
-                        print(
-                            f"🧪 [KIMI RAW] tool_call[{idx}].type =",
-                            tool_type,
-                        )
-                        print(
-                            f"🧪 [KIMI RAW] tool_call[{idx}].function.name =",
-                            function_name,
-                        )
-                        print(
-                            f"🧪 [KIMI RAW] tool_call[{idx}].arguments_type =",
-                            type(function_arguments).__name__,
-                        )
-
-                        if isinstance(function_arguments, str):
-                            print(
-                                f"🧪 [KIMI RAW] tool_call[{idx}].arguments_len =",
-                                len(function_arguments),
-                            )
-                            print(
-                                f"🧪 [KIMI RAW] tool_call[{idx}].arguments_preview =",
-                                repr(function_arguments[:2000]),
-                            )
-
-                            try:
-                                parsed_arguments = json.loads(
-                                    function_arguments
-                                )
-                                print(
-                                    f"🧪 [KIMI RAW] tool_call[{idx}].arguments_json_type =",
-                                    type(parsed_arguments).__name__,
-                                )
-
-                                if isinstance(parsed_arguments, dict):
-                                    print(
-                                        f"🧪 [KIMI RAW] tool_call[{idx}].arguments_top_keys =",
-                                        list(parsed_arguments.keys()),
-                                    )
-
-                                    for key in (
-                                        "results",
-                                        "sources",
-                                        "data",
-                                        "items",
-                                        "documents",
-                                        "web_results",
-                                        "search_results",
-                                        "references",
-                                        "usage",
-                                    ):
-                                        if key not in parsed_arguments:
-                                            continue
-                                        value = parsed_arguments.get(key)
-                                        if isinstance(value, list):
-                                            print(
-                                                f"🧪 [KIMI RAW] tool_call[{idx}].{key}_count =",
-                                                len(value),
-                                            )
-                                            if value:
-                                                first = value[0]
-                                                if isinstance(first, dict):
-                                                    print(
-                                                        f"🧪 [KIMI RAW] tool_call[{idx}].{key}[0].keys =",
-                                                        list(first.keys()),
-                                                    )
-                                                else:
-                                                    print(
-                                                        f"🧪 [KIMI RAW] tool_call[{idx}].{key}[0]_type =",
-                                                        type(first).__name__,
-                                                    )
-                                        elif isinstance(value, dict):
-                                            print(
-                                                f"🧪 [KIMI RAW] tool_call[{idx}].{key}.keys =",
-                                                list(value.keys()),
-                                            )
-                                        else:
-                                            print(
-                                                f"🧪 [KIMI RAW] tool_call[{idx}].{key} =",
-                                                value,
-                                            )
-
-                            except Exception as parse_error:
-                                print(
-                                    f"⚠️ [KIMI RAW] tool_call[{idx}] arguments JSON parse failed:",
-                                    repr(parse_error),
-                                )
-
-                    if raw_completion is not None:
-                        usage = raw_completion.get("usage")
-                        if isinstance(usage, dict):
-                            print(
-                                "🧪 [KIMI RAW] usage.keys =",
-                                list(usage.keys()),
-                            )
-                        elif usage is not None:
-                            print(
-                                "🧪 [KIMI RAW] usage =",
-                                usage,
-                            )
-
-                except Exception as diagnostic_error:
-                    print(
-                        "⚠️ [KIMI RAW] diagnostic failed:",
-                        repr(diagnostic_error),
-                    )
 
                 # ==================================================
                 # Kimi 请求调用 $web_search

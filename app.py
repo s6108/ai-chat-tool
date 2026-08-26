@@ -2099,11 +2099,76 @@ if st.session_state.processing:
                             # 是否联网已经由 Qwen 在 classify_task() 中判断完成。
                             # 这里直接使用各自原生搜索，不再二次判断。
                             # ==================================================
-                            native_search_response = native_search.search(
-                                query=resolved_search_prompt,
-                                messages=api_messages,
-                                max_results=8,
-                            )
+                            # ==================================================
+                            # Qwen：原生搜索真流式
+                            # Kimi / Doubao / GLM：暂时保持同步，逐个改造
+                            # ==================================================
+                            if selected_model_name in {
+                                "Qwen",
+                                "Kimi",
+                                "Doubao-Pro",
+                                "GLM",
+                            }:
+                                print(
+                                    f"⚡ {selected_model_name} Native Search streaming"
+                                )
+
+                                native_stream_answer = ""
+                                native_search_response = None
+                                native_api_start = time.perf_counter()
+                                native_first_delta_time = None
+
+                                for event_kind, payload in native_search.stream_search(
+                                    query=resolved_search_prompt,
+                                    messages=api_messages,
+                                    max_results=8,
+                                ):
+                                    if event_kind == "delta":
+                                        delta = (
+                                            payload
+                                            if isinstance(payload, str)
+                                            else str(payload or "")
+                                        )
+
+                                        if not delta:
+                                            continue
+
+                                        if native_first_delta_time is None:
+                                            native_first_delta_time = time.perf_counter()
+
+                                            status_placeholder.empty()
+
+                                            print(
+                                                f"⚡ [NATIVE STREAM PERF] first_text_delta = "
+                                                f"{native_first_delta_time - native_api_start:.3f}s"
+                                            )
+
+                                            print(
+                                                f"🏁 [PERF] TOTAL_TO_FIRST_STREAM_TOKEN = "
+                                                f"{native_first_delta_time - perf_request_start:.3f}s"
+                                            )
+
+                                        native_stream_answer += delta
+
+                                        placeholder.markdown(
+                                            native_stream_answer + "▌"
+                                        )
+
+                                        continue
+
+                                    if event_kind == "complete":
+                                        native_search_response = payload
+
+                                if native_stream_answer:
+                                    full_response = native_stream_answer
+                                    placeholder.markdown(full_response)
+
+                            else:
+                                native_search_response = native_search.search(
+                                    query=resolved_search_prompt,
+                                    messages=api_messages,
+                                    max_results=8,
+                                )
 
                             if native_search_response is None:
                                 raise RuntimeError(

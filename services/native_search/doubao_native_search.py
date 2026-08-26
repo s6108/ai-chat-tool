@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 from openai import OpenAI
 
@@ -18,7 +18,7 @@ class DoubaoNativeSearch(BaseNativeSearch):
 
     使用火山方舟 Responses API + web_search。
 
-    原生搜索失败时，由 Megor 上层进入 Tavily Safety Net。
+    原生搜索失败时直接返回失败，不进入 Tavily 兜底。
     """
 
     model_name = "Doubao-Pro"
@@ -38,6 +38,378 @@ class DoubaoNativeSearch(BaseNativeSearch):
             timeout=90.0,
             max_retries=1,
         )
+
+    def stream_search(
+        self,
+        *,
+        query: str,
+        messages: list[dict[str, Any]] | None = None,
+        max_results: int = 8,
+        allow_no_search: bool = False,
+    ) -> Iterator[tuple[str, Any]]:
+        """
+        Doubao Responses API + Web Search 真流式输出。
+
+        Yields:
+            ("delta", text)
+            ("complete", NativeSearchResponse)
+        """
+
+        query = (query or "").strip()
+
+        if not query:
+            yield (
+                "complete",
+                NativeSearchResponse(
+                    success=False,
+                    model_name=self.model_name,
+                    provider=self.provider,
+                    query="",
+                    error="Empty search query.",
+                    should_fallback=False,
+                ),
+            )
+            return
+
+        try:
+            input_messages: list[dict[str, Any]] = [
+                {
+                    "role": "system",
+                    "content": (
+                        "Perform live web research for the current user request. "
+                        "The upstream search-decision system has already "
+                        "determined that this request requires current web data. "
+                        "You MUST use the web_search tool before answering. "
+                        "Base the final answer on the retrieved web information. "
+                        "Prefer current, reliable, primary and authoritative "
+                        "sources when available. Conversation history is context, "
+                        "not verified facts."
+                    ),
+                }
+            ]
+
+            history: list[dict[str, Any]] = []
+
+            if messages:
+                history = messages[-8:]
+
+                # app.py 可能已经把当前 user turn 放进 messages，避免重复。
+                if history:
+                    last = history[-1]
+                    last_role = last.get("role")
+                    last_content = last.get("content")
+
+                    if (
+                        last_role == "user"
+                        and isinstance(last_content, str)
+                        and last_content.strip() == query
+                    ):
+                        history = history[:-1]
+
+                for message in history:
+                    role = message.get("role")
+                    content = message.get("content")
+
+                    if role not in {"user", "assistant"}:
+                        continue
+
+                    if not isinstance(content, str):
+                        continue
+
+                    content = content.strip()
+
+                    if not content:
+                        continue
+
+                    if len(content) > 1500:
+                        content = content[:1500]
+
+                    input_messages.append(
+                        {
+                            "role": role,
+                            "content": content,
+                        }
+                    )
+
+            input_messages.append(
+                {
+                    "role": "user",
+                    "content": query,
+                }
+            )
+
+            print("⚡ Doubao Native Search streaming")
+            print(
+                "🧩 Doubao Native Search context turns:",
+                len(input_messages) - 2,
+            )
+
+            stream = self.client.responses.create(
+                model=self.config.model_id,
+                input=input_messages,
+                tools=[
+                    {
+                        "type": "web_search",
+                    }
+                ],
+                stream=True,
+            )
+
+            answer_parts: list[str] = []
+            final_response = None
+
+            for event in stream:
+                event_type = (
+                    getattr(event, "type", "")
+                    or ""
+                )
+
+                if event_type == "response.output_text.delta":
+                    delta = (
+                        getattr(event, "delta", "")
+                        or ""
+                    )
+
+                    if delta:
+                        answer_parts.append(delta)
+                        yield ("delta", delta)
+
+                    continue
+
+                if event_type == "response.completed":
+                    final_response = getattr(
+                        event,
+                        "response",
+                        None,
+                    )
+
+            answer = "".join(answer_parts).strip()
+
+            used_web_search = False
+            native_results: list[NativeSearchResult] = []
+            seen_urls: set[str] = set()
+
+            output_items = (
+                getattr(
+                    final_response,
+                    "output",
+                    None,
+                )
+                or []
+            )
+
+            # 检测 Web Search tool call + 提取来源
+            for item in output_items:
+                item_type = (
+                    getattr(item, "type", "")
+                    or ""
+                )
+
+                if (
+                    not item_type
+                    and hasattr(item, "model_dump")
+                ):
+                    dumped = item.model_dump()
+                    item_type = (
+                        dumped.get("type", "")
+                        or ""
+                    )
+
+                if item_type not in {
+                    "web_search_call",
+                    "web_search",
+                }:
+                    continue
+
+                used_web_search = True
+
+                action = getattr(
+                    item,
+                    "action",
+                    None,
+                )
+
+                sources = (
+                    getattr(
+                        action,
+                        "sources",
+                        None,
+                    )
+                    or []
+                )
+
+                for source in sources:
+                    url = (
+                        getattr(source, "url", "")
+                        or ""
+                    ).strip()
+
+                    title = (
+                        getattr(source, "title", "")
+                        or ""
+                    ).strip()
+
+                    if not url:
+                        continue
+
+                    normalized_url = (
+                        url.rstrip("/").casefold()
+                    )
+
+                    if normalized_url in seen_urls:
+                        continue
+
+                    seen_urls.add(normalized_url)
+
+                    native_results.append(
+                        NativeSearchResult(
+                            title=title,
+                            url=url,
+                            source="Doubao Web Search",
+                        )
+                    )
+
+            # 从最终文本 annotations 再提取引用
+            for item in output_items:
+                if getattr(item, "type", "") != "message":
+                    continue
+
+                contents = (
+                    getattr(item, "content", None)
+                    or []
+                )
+
+                for content_item in contents:
+                    if (
+                        getattr(content_item, "type", "")
+                        != "output_text"
+                    ):
+                        continue
+
+                    annotations = (
+                        getattr(
+                            content_item,
+                            "annotations",
+                            None,
+                        )
+                        or []
+                    )
+
+                    for annotation in annotations:
+                        url = (
+                            getattr(annotation, "url", "")
+                            or ""
+                        ).strip()
+
+                        title = (
+                            getattr(annotation, "title", "")
+                            or ""
+                        ).strip()
+
+                        if not url:
+                            continue
+
+                        used_web_search = True
+
+                        normalized_url = (
+                            url.rstrip("/").casefold()
+                        )
+
+                        if normalized_url in seen_urls:
+                            continue
+
+                        seen_urls.add(normalized_url)
+
+                        native_results.append(
+                            NativeSearchResult(
+                                title=title,
+                                url=url,
+                                source="Doubao Web Search",
+                            )
+                        )
+
+            native_results = native_results[:max_results]
+
+            print(
+                "🔎 Doubao native stream:",
+                {
+                    "web_search": used_web_search,
+                    "sources": len(native_results),
+                },
+            )
+
+            if not answer:
+                yield (
+                    "complete",
+                    NativeSearchResponse(
+                        success=False,
+                        model_name=self.model_name,
+                        provider=self.provider,
+                        query=query,
+                        results=native_results,
+                        error=(
+                            "Doubao native web search "
+                            "produced no final answer."
+                        ),
+                        should_fallback=False,
+                    ),
+                )
+                return
+
+            if not used_web_search and not allow_no_search:
+                yield (
+                    "complete",
+                    NativeSearchResponse(
+                        success=False,
+                        model_name=self.model_name,
+                        provider=self.provider,
+                        query=query,
+                        answer=answer,
+                        results=native_results,
+                        error=(
+                            "Doubao returned without using "
+                            "the native web search tool."
+                        ),
+                        should_fallback=False,
+                    ),
+                )
+                return
+
+            print(
+                f"✅ Doubao native streaming search succeeded: "
+                f"{len(native_results)} visible sources"
+            )
+
+            yield (
+                "complete",
+                NativeSearchResponse(
+                    success=True,
+                    model_name=self.model_name,
+                    provider=self.provider,
+                    query=query,
+                    results=native_results,
+                    answer=answer,
+                    should_fallback=False,
+                ),
+            )
+
+        except Exception as error:
+            print(
+                "❌ Doubao native streaming failed:",
+                repr(error),
+            )
+
+            yield (
+                "complete",
+                NativeSearchResponse(
+                    success=False,
+                    model_name=self.model_name,
+                    provider=self.provider,
+                    query=query,
+                    error=str(error),
+                    should_fallback=False,
+                ),
+            )
 
     def search(
         self,
@@ -139,93 +511,6 @@ class DoubaoNativeSearch(BaseNativeSearch):
                     }
                 ],
             )
-
-            # ==================================================
-            # TEMP DIAGNOSTIC: inspect the REAL Doubao Responses payload
-            # Read-only: does not change search / fallback behaviour.
-            # ==================================================
-            try:
-                print("\n🧪 [DOUBAO RAW] response_type =", type(response).__name__)
-
-                if hasattr(response, "model_dump"):
-                    raw_response = response.model_dump()
-                    print("🧪 [DOUBAO RAW] top_keys =", list(raw_response.keys()))
-
-                    raw_output = raw_response.get("output") or []
-                    print("🧪 [DOUBAO RAW] output_count =", len(raw_output))
-
-                    for idx, raw_item in enumerate(raw_output):
-                        if not isinstance(raw_item, dict):
-                            print(
-                                f"🧪 [DOUBAO RAW] output[{idx}] python_type =",
-                                type(raw_item).__name__,
-                            )
-                            continue
-
-                        print(
-                            f"🧪 [DOUBAO RAW] output[{idx}].type =",
-                            raw_item.get("type"),
-                        )
-                        print(
-                            f"🧪 [DOUBAO RAW] output[{idx}].keys =",
-                            list(raw_item.keys()),
-                        )
-
-                        action = raw_item.get("action")
-                        if isinstance(action, dict):
-                            print(
-                                f"🧪 [DOUBAO RAW] output[{idx}].action.keys =",
-                                list(action.keys()),
-                            )
-                            action_sources = action.get("sources") or []
-                            print(
-                                f"🧪 [DOUBAO RAW] output[{idx}].action.sources_count =",
-                                len(action_sources),
-                            )
-                            if action_sources and isinstance(action_sources[0], dict):
-                                print(
-                                    f"🧪 [DOUBAO RAW] output[{idx}].action.sources[0].keys =",
-                                    list(action_sources[0].keys()),
-                                )
-
-                        contents = raw_item.get("content") or []
-                        if isinstance(contents, list):
-                            print(
-                                f"🧪 [DOUBAO RAW] output[{idx}].content_count =",
-                                len(contents),
-                            )
-                            for cidx, raw_content in enumerate(contents):
-                                if not isinstance(raw_content, dict):
-                                    continue
-                                print(
-                                    f"🧪 [DOUBAO RAW] output[{idx}].content[{cidx}].type =",
-                                    raw_content.get("type"),
-                                )
-                                annotations = raw_content.get("annotations") or []
-                                print(
-                                    f"🧪 [DOUBAO RAW] output[{idx}].content[{cidx}].annotations_count =",
-                                    len(annotations),
-                                )
-                                if annotations and isinstance(annotations[0], dict):
-                                    print(
-                                        f"🧪 [DOUBAO RAW] annotation[0].keys =",
-                                        list(annotations[0].keys()),
-                                    )
-
-                    usage = raw_response.get("usage")
-                    if isinstance(usage, dict):
-                        print("🧪 [DOUBAO RAW] usage.keys =", list(usage.keys()))
-                else:
-                    print(
-                        "🧪 [DOUBAO RAW] attrs =",
-                        [name for name in dir(response) if not name.startswith("_")][:80],
-                    )
-
-            except Exception as diagnostic_error:
-                print(
-                    "⚠️ [DOUBAO RAW] diagnostic failed:",
-                    repr(diagnostic_error),
-                )
 
             answer = (
                 getattr(
