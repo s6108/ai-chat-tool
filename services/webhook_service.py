@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from supabase import Client, create_client
@@ -119,7 +119,7 @@ def get_webhook_summary(
     event_name: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """从 LemonSqueezy Webhook 中提取订阅关键信息。"""
+    """从 LemonSqueezy Webhook 中提取订阅/订单关键信息。"""
     meta = payload.get("meta") or {}
     data = payload.get("data") or {}
     attributes = data.get("attributes") or {}
@@ -134,10 +134,29 @@ def get_webhook_summary(
         else attributes.get("subscription_id")
     )
 
+    first_order_item = (
+        attributes.get("first_order_item") or {}
+    )
+
+    product_id = (
+        attributes.get("product_id")
+        or first_order_item.get("product_id")
+    )
+
+    variant_id = (
+        attributes.get("variant_id")
+        or first_order_item.get("variant_id")
+    )
+
     return {
         "event_name": event_name,
         "resource_type": resource_type,
         "resource_id": resource_id,
+        "order_id": (
+            resource_id
+            if resource_type == "orders"
+            else attributes.get("order_id")
+        ),
         "status": attributes.get("status"),
         "customer_email": (
             attributes.get("user_email")
@@ -151,8 +170,16 @@ def get_webhook_summary(
         "cancelled_at": attributes.get("cancelled_at"),
         "trial_ends_at": attributes.get("trial_ends_at"),
         "cancelled": attributes.get("cancelled"),
-        "product_id": attributes.get("product_id"),
-        "variant_id": attributes.get("variant_id"),
+        "product_id": product_id,
+        "variant_id": variant_id,
+        "amount": (
+            attributes.get("total")
+            if resource_type == "orders"
+            else None
+        ),
+        "currency": attributes.get("currency"),
+        "refunded": attributes.get("refunded"),
+        "refunded_at": attributes.get("refunded_at"),
     }
 
 
@@ -529,6 +556,386 @@ def save_subscription_record(
             f"plan={plan}"
         )
 
+
+def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(
+            value.replace("Z", "+00:00")
+        )
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def is_30_day_pass_order(
+    summary: dict[str, Any],
+) -> bool:
+    """
+    判断一次性订单是否为 Megor 30-Day Pass。
+
+    如果 Render 中配置了 LEMONSQUEEZY_30_DAY_VARIANT_ID
+    或 LEMONSQUEEZY_30_DAY_PRODUCT_ID，则严格按配置匹配。
+
+    当前若未配置，则把“没有 subscription_id 的一次性订单”
+    视为 30-Day Pass。等拿到 Product/Variant ID 后建议配置环境变量，
+    这样以后新增其他一次性产品也不会误判。
+    """
+    if normalize_text(summary.get("subscription_id")):
+        return False
+
+    configured_variant_id = normalize_text(
+        os.getenv("LEMONSQUEEZY_30_DAY_VARIANT_ID")
+    )
+    configured_product_id = normalize_text(
+        os.getenv("LEMONSQUEEZY_30_DAY_PRODUCT_ID")
+    )
+
+    variant_id = normalize_text(summary.get("variant_id"))
+    product_id = normalize_text(summary.get("product_id"))
+
+    if configured_variant_id:
+        return variant_id == configured_variant_id
+
+    if configured_product_id:
+        return product_id == configured_product_id
+
+    return True
+
+
+def get_active_pass_expiry(
+    supabase_admin: Client,
+    user_id: str,
+) -> Optional[datetime]:
+    result = (
+        supabase_admin
+        .table("user_passes")
+        .select("expires_at")
+        .eq("user_id", user_id)
+        .eq("status", "active")
+        .order("expires_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        return None
+
+    return parse_iso_datetime(
+        result.data[0].get("expires_at")
+    )
+
+
+def has_active_pass(
+    supabase_admin: Client,
+    user_id: str,
+) -> bool:
+    expiry = get_active_pass_expiry(
+        supabase_admin=supabase_admin,
+        user_id=user_id,
+    )
+    return bool(
+        expiry
+        and expiry > datetime.now(timezone.utc)
+    )
+
+
+def has_active_subscription(
+    supabase_admin: Client,
+    user_id: str,
+) -> bool:
+    result = (
+        supabase_admin
+        .table("user_subscriptions")
+        .select("plan,status,current_period_end,ends_at")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        return False
+
+    record = result.data[0]
+    plan = (
+        normalize_text(record.get("plan"))
+        or ""
+    ).lower()
+    status = (
+        normalize_text(record.get("status"))
+        or ""
+    ).lower()
+
+    if plan != "premium":
+        return False
+
+    if status in {
+        "active",
+        "on_trial",
+        "paused",
+        "past_due",
+    }:
+        return True
+
+    if status == "cancelled":
+        period_end = (
+            normalize_text(record.get("ends_at"))
+            or normalize_text(
+                record.get("current_period_end")
+            )
+        )
+        return is_future_datetime(period_end)
+
+    return False
+
+
+def get_effective_plan(
+    supabase_admin: Client,
+    user_id: str,
+) -> str:
+    """
+    Subscription 或 30-Day Pass 任意一个有效，
+    Megor 都应保持 Premium。
+    """
+    if has_active_subscription(
+        supabase_admin=supabase_admin,
+        user_id=user_id,
+    ):
+        return "premium"
+
+    if has_active_pass(
+        supabase_admin=supabase_admin,
+        user_id=user_id,
+    ):
+        return "premium"
+
+    return "free"
+
+
+def save_30_day_pass(
+    supabase_admin: Client,
+    summary: dict[str, Any],
+    user_id: str,
+) -> dict[str, Any]:
+    """
+    为成功的一次性订单增加 30 天 Premium。
+
+    规则：
+    - webhook 重复发送不会重复增加天数；
+    - 当前 Pass 未到期：从现有 expires_at 继续 +30 天；
+    - 当前 Pass 已到期：从现在开始 +30 天。
+    """
+    order_id = normalize_text(summary.get("order_id"))
+    if not order_id:
+        raise WebhookProcessingError(
+            "30-Day Pass 订单缺少 order_id"
+        )
+
+    existing = (
+        supabase_admin
+        .table("user_passes")
+        .select("id,starts_at,expires_at,status")
+        .eq("lemonsqueezy_order_id", order_id)
+        .limit(1)
+        .execute()
+    )
+
+    if existing.data:
+        record = existing.data[0]
+        return {
+            "duplicate": True,
+            "pass_id": record.get("id"),
+            "starts_at": record.get("starts_at"),
+            "expires_at": record.get("expires_at"),
+            "status": record.get("status"),
+        }
+
+    now = datetime.now(timezone.utc)
+    current_expiry = get_active_pass_expiry(
+        supabase_admin=supabase_admin,
+        user_id=user_id,
+    )
+
+    starts_at = (
+        current_expiry
+        if current_expiry and current_expiry > now
+        else now
+    )
+    expires_at = starts_at + timedelta(days=30)
+
+    record = {
+        "user_id": user_id,
+        "email": normalize_email(
+            summary.get("customer_email")
+        ),
+        "pass_type": "30_day",
+        "status": "active",
+        "starts_at": starts_at.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "lemonsqueezy_order_id": order_id,
+        "lemonsqueezy_customer_id": normalize_text(
+            summary.get("customer_id")
+        ),
+        "lemonsqueezy_product_id": normalize_text(
+            summary.get("product_id")
+        ),
+        "lemonsqueezy_variant_id": normalize_text(
+            summary.get("variant_id")
+        ),
+        "amount": summary.get("amount"),
+        "currency": normalize_text(
+            summary.get("currency")
+        ),
+        "updated_at": utc_now_iso(),
+    }
+
+    inserted = (
+        supabase_admin
+        .table("user_passes")
+        .insert(record)
+        .execute()
+    )
+
+    pass_id = (
+        inserted.data[0].get("id")
+        if inserted.data
+        else None
+    )
+
+    print(
+        "30-Day Pass activated: "
+        f"user={user_id}, order={order_id}, "
+        f"expires_at={expires_at.isoformat()}"
+    )
+
+    return {
+        "duplicate": False,
+        "pass_id": pass_id,
+        "starts_at": starts_at.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "status": "active",
+    }
+
+
+def recompute_pass_schedule(
+    supabase_admin: Client,
+    user_id: str,
+) -> None:
+    """
+    退款后重新计算该用户仍有效的一次性购买时间链。
+
+    每一笔未退款 30-Day Pass 都保留 30 天；
+    后买的 Pass 会从“购买时间”和“上一张 Pass 到期时间”
+    中较晚的时间开始。
+    """
+    result = (
+        supabase_admin
+        .table("user_passes")
+        .select(
+            "id,created_at,starts_at,expires_at,status"
+        )
+        .eq("user_id", user_id)
+        .order("created_at")
+        .execute()
+    )
+
+    cursor: Optional[datetime] = None
+
+    for row in result.data or []:
+        if (
+            normalize_text(row.get("status"))
+            or ""
+        ).lower() != "active":
+            continue
+
+        purchased_at = (
+            parse_iso_datetime(row.get("created_at"))
+            or parse_iso_datetime(row.get("starts_at"))
+            or datetime.now(timezone.utc)
+        )
+
+        starts_at = (
+            max(purchased_at, cursor)
+            if cursor is not None
+            else purchased_at
+        )
+        expires_at = starts_at + timedelta(days=30)
+
+        (
+            supabase_admin
+            .table("user_passes")
+            .update({
+                "starts_at": starts_at.isoformat(),
+                "expires_at": expires_at.isoformat(),
+                "updated_at": utc_now_iso(),
+            })
+            .eq("id", row["id"])
+            .execute()
+        )
+
+        cursor = expires_at
+
+
+def refund_30_day_pass(
+    supabase_admin: Client,
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    order_id = normalize_text(summary.get("order_id"))
+    if not order_id:
+        raise WebhookProcessingError(
+            "退款事件缺少 order_id"
+        )
+
+    existing = (
+        supabase_admin
+        .table("user_passes")
+        .select("id,user_id,status")
+        .eq("lemonsqueezy_order_id", order_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not existing.data:
+        return {
+            "processed": False,
+            "reason": "pass_order_not_found",
+        }
+
+    row = existing.data[0]
+    user_id = str(row["user_id"])
+
+    if (
+        normalize_text(row.get("status"))
+        or ""
+    ).lower() != "refunded":
+        (
+            supabase_admin
+            .table("user_passes")
+            .update({
+                "status": "refunded",
+                "updated_at": utc_now_iso(),
+            })
+            .eq("id", row["id"])
+            .execute()
+        )
+
+        recompute_pass_schedule(
+            supabase_admin=supabase_admin,
+            user_id=user_id,
+        )
+
+    return {
+        "processed": True,
+        "user_id": user_id,
+        "pass_id": row.get("id"),
+        "status": "refunded",
+    }
+
+
 def update_device_session_plan(
     supabase_admin: Client,
     user_id: str,
@@ -552,10 +959,10 @@ def update_device_session_plan(
 
 def process_subscription_event(
     event_name: str,
-    payload: dict[str, Any],  
+    payload: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    处理 LemonSqueezy 订阅事件并同步 Supabase。
+    处理 LemonSqueezy Subscription + 30-Day Pass 事件并同步 Supabase。
     """
     supported_events = {
         "subscription_created",
@@ -580,19 +987,121 @@ def process_subscription_event(
             "summary": summary,
         }
 
-    # order_created 可能不包含完整订阅状态。
-    # 正式升级主要依赖 subscription_created / updated。
+    supabase_admin = get_supabase_admin()
+
+    # -----------------------------------------------------
+    # 30-Day Pass：一次性购买
+    # -----------------------------------------------------
     if (
         event_name == "order_created"
-        and not summary.get("subscription_id")
+        and not normalize_text(
+            summary.get("subscription_id")
+        )
     ):
+        if not is_30_day_pass_order(summary):
+            return {
+                "processed": False,
+                "reason": "not_30_day_pass",
+                "summary": summary,
+            }
+
+        user_id = resolve_user_id(
+            supabase_admin=supabase_admin,
+            summary=summary,
+        )
+
+        if not user_id:
+            email = summary.get("customer_email")
+            raise WebhookProcessingError(
+                "无法确定 30-Day Pass 对应的 Megor 用户。"
+                f" customer_email={email!r}；"
+                "请在 Checkout custom_data 中传入 user_id。"
+            )
+
+        summary["user_id"] = user_id
+
+        pass_result = save_30_day_pass(
+            supabase_admin=supabase_admin,
+            summary=summary,
+            user_id=user_id,
+        )
+
+        effective_plan = get_effective_plan(
+            supabase_admin=supabase_admin,
+            user_id=user_id,
+        )
+
+        update_device_session_plan(
+            supabase_admin=supabase_admin,
+            user_id=user_id,
+            plan=effective_plan,
+        )
+
         return {
-            "processed": False,
-            "reason": "order_has_no_subscription",
+            "processed": True,
+            "kind": "30_day_pass",
+            "user_id": user_id,
+            "plan": effective_plan,
+            "pass": pass_result,
             "summary": summary,
         }
 
-    supabase_admin = get_supabase_admin()
+    # -----------------------------------------------------
+    # 30-Day Pass：退款
+    # -----------------------------------------------------
+    if (
+        event_name == "order_refunded"
+        and not normalize_text(
+            summary.get("subscription_id")
+        )
+    ):
+        refund_result = refund_30_day_pass(
+            supabase_admin=supabase_admin,
+            summary=summary,
+        )
+
+        if not refund_result.get("processed"):
+            return {
+                **refund_result,
+                "summary": summary,
+            }
+
+        user_id = str(refund_result["user_id"])
+
+        effective_plan = get_effective_plan(
+            supabase_admin=supabase_admin,
+            user_id=user_id,
+        )
+
+        update_device_session_plan(
+            supabase_admin=supabase_admin,
+            user_id=user_id,
+            plan=effective_plan,
+        )
+
+        return {
+            "processed": True,
+            "kind": "30_day_pass_refund",
+            "user_id": user_id,
+            "plan": effective_plan,
+            "pass": refund_result,
+            "summary": summary,
+        }
+
+    # -----------------------------------------------------
+    # Subscription
+    # -----------------------------------------------------
+    # Subscription 的 order_created / order_refunded 不作为主升级事件；
+    # 正式状态仍依赖 subscription_created / updated / cancelled / ...
+    if event_name in {
+        "order_created",
+        "order_refunded",
+    }:
+        return {
+            "processed": False,
+            "reason": "subscription_order_event_ignored",
+            "summary": summary,
+        }
 
     user_id = resolve_user_id(
         supabase_admin=supabase_admin,
@@ -614,7 +1123,7 @@ def process_subscription_event(
         summary
     )
 
-    plan = determine_plan(
+    subscription_plan = determine_plan(
         event_name=event_name,
         status=normalize_text(
             summary.get("status")
@@ -626,22 +1135,32 @@ def process_subscription_event(
         supabase_admin=supabase_admin,
         summary=summary,
         user_id=user_id,
-        plan=plan,
+        plan=subscription_plan,
+    )
+
+    # 重要：订阅到期/取消后不能直接把设备降为 Free，
+    # 因为用户可能同时还有有效 30-Day Pass。
+    effective_plan = get_effective_plan(
+        supabase_admin=supabase_admin,
+        user_id=user_id,
     )
 
     update_device_session_plan(
         supabase_admin=supabase_admin,
         user_id=user_id,
-        plan=plan,
+        plan=effective_plan,
     )
 
     return {
         "processed": True,
+        "kind": "subscription",
         "user_id": user_id,
-        "plan": plan,
+        "plan": effective_plan,
+        "subscription_plan": subscription_plan,
         "status": summary.get("status"),
         "subscription_id": summary.get(
             "subscription_id"
         ),
         "summary": summary,
     }
+

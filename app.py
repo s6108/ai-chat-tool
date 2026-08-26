@@ -319,20 +319,44 @@ LEMONSQUEEZY_CHECKOUT_URL = (
     "https://megor-ai.lemonsqueezy.com/checkout/buy/6e539c0a-949d-4609-9678-a7f9b3d1bb3a"
 )
 
+LEMONSQUEEZY_30_DAY_PASS_URL = (
+    "https://megor-ai.lemonsqueezy.com/checkout/buy/"
+    "7101d8d1-3976-4647-8d94-de962fd8325b"
+)
 
-def get_premium_checkout_url(user) -> str:
-    """生成绑定当前 Megor AI 用户的 LemonSqueezy 付款链接。"""
+
+def _build_lemonsqueezy_checkout_url(
+    base_url: str,
+    user,
+) -> str:
+    """生成绑定当前 Megor 用户的 Lemon Squeezy Checkout URL。"""
     params = {
         "lang": "en",
         "checkout[email]": user.email or "",
         "checkout[custom][user_id]": str(user.id),
     }
 
-    separator = "&" if "?" in LEMONSQUEEZY_CHECKOUT_URL else "?"
+    separator = "&" if "?" in base_url else "?"
 
     return (
-        f"{LEMONSQUEEZY_CHECKOUT_URL}"
+        f"{base_url}"
         f"{separator}{urlencode(params)}"
+    )
+
+
+def get_premium_checkout_url(user) -> str:
+    """$14.99/月自动续费 Premium。"""
+    return _build_lemonsqueezy_checkout_url(
+        LEMONSQUEEZY_CHECKOUT_URL,
+        user,
+    )
+
+
+def get_30_day_pass_checkout_url(user) -> str:
+    """$19.99 / 30 天一次性 Premium，不自动续费。"""
+    return _build_lemonsqueezy_checkout_url(
+        LEMONSQUEEZY_30_DAY_PASS_URL,
+        user,
     )
 
 
@@ -973,6 +997,9 @@ components.html(
 premium_checkout_url = get_premium_checkout_url(
     st.session_state.user
 )
+pass_30_day_checkout_url = get_30_day_pass_checkout_url(
+    st.session_state.user
+)
 render_sidebar_placeholder()
 with st.sidebar:
     render_sidebar_logo(width=68)
@@ -1142,7 +1169,9 @@ with st.sidebar:
             account["is_premium"]
             and account["period_end_display"] != "—"
         ):
-            if account["status"] == "cancelled":
+            if account.get("access_type") == "pass":
+                st.caption("Premium until")
+            elif account["status"] == "cancelled":
                 st.caption(t("premium_until"))
             else:
                 st.caption(t("renewal_date"))
@@ -1150,14 +1179,14 @@ with st.sidebar:
             st.write(account["period_end_display"])
 
         if (
-            account["is_premium"]
+            account.get("access_type") == "subscription"
             and account["status"] == "cancelled"
         ):
             st.warning(
                 "已取消自动续费，Premium 将保留到当前付费周期结束。"
             )
 
-        if account["is_premium"]:
+        if account.get("access_type") == "subscription":
             subscription_id = account.get("subscription_id")
 
             if not subscription_id:
@@ -1199,6 +1228,21 @@ with st.sidebar:
                         t("portal_unavailable")
                     )
 
+        elif account.get("access_type") == "pass":
+            # 一次性 Pass 没有自动续费，也没有订阅管理入口。
+            st.session_state.pop(
+                "customer_portal_url",
+                None,
+            )
+            st.session_state.pop(
+                "portal_subscription_id",
+                None,
+            )
+
+            st.caption(
+                "$19.99 / 30 days · One-time payment · No auto-renewal"
+            )
+
         else:
             st.session_state.pop(
                 "customer_portal_url",
@@ -1209,11 +1253,21 @@ with st.sidebar:
                 None,
             )
 
+            st.caption("$14.99 / month · Auto-renew")
             st.link_button(
                 t("upgrade_premium"),
                 premium_checkout_url,
                 use_container_width=True,
-    )
+            )
+
+            st.caption(
+                "$19.99 / 30 days · One-time payment · No auto-renewal"
+            )
+            st.link_button(
+                "30-Day Pass — $19.99",
+                pass_30_day_checkout_url,
+                use_container_width=True,
+            )
     
 
 
