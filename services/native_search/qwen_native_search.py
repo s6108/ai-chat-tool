@@ -19,7 +19,7 @@ class QwenNativeSearch(BaseNativeSearch):
     qwen3.6-flash 使用 Alibaba Cloud Model Studio
     OpenAI-compatible Responses API + web_search。
 
-    原生搜索失败时，由 Megor 上层进入 Tavily Safety Net。
+    原生搜索失败时直接返回失败状态，不进入 Tavily 兜底。
     """
 
     model_name = "Qwen"
@@ -139,13 +139,6 @@ class QwenNativeSearch(BaseNativeSearch):
                 }
             )
 
-            print(
-                "⚡ Qwen Native Search streaming"
-            )
-            print(
-                "🧩 Qwen Native Search context turns:",
-                len(input_messages) - 2,
-            )
 
             # ==========================================
             # Responses API 真流式
@@ -365,13 +358,6 @@ class QwenNativeSearch(BaseNativeSearch):
 
             native_results = native_results[:max_results]
 
-            print(
-                "🔎 Qwen native stream:",
-                {
-                    "web_search": used_web_search,
-                    "sources": len(native_results),
-                },
-            )
 
             if not answer:
                 yield (
@@ -394,22 +380,6 @@ class QwenNativeSearch(BaseNativeSearch):
             # 中国模型在进入这里之前，
             # 已经由 Qwen 判断过是否需要联网。
             # 因此这里不再做 Tavily fallback。
-            if (
-                not used_web_search
-                and not allow_no_search
-            ):
-                print(
-                    "⚠️ Qwen 本轮未实际调用 web_search，"
-                    "但保留模型直接答案"
-                )
-
-            print(
-                "✅ Qwen native streaming response succeeded:",
-                {
-                    "web_search": used_web_search,
-                    "sources": len(native_results),
-                },
-            )
 
             yield (
                 "complete",
@@ -546,75 +516,6 @@ class QwenNativeSearch(BaseNativeSearch):
                     "enable_thinking": False,
                 },
             )
-
-            # TEMP DIAGNOSTIC: inspect the real Qwen Responses payload.
-            # Read-only: does not change search or fallback behaviour.
-            try:
-                print("\n🧪 [QWEN RAW] response_type =", type(response).__name__)
-                if hasattr(response, "model_dump"):
-                    raw_response = response.model_dump()
-                    print("🧪 [QWEN RAW] top_keys =", list(raw_response.keys()))
-                    raw_output = raw_response.get("output") or []
-                    print("🧪 [QWEN RAW] output_count =", len(raw_output))
-
-                    for idx, raw_item in enumerate(raw_output):
-                        if not isinstance(raw_item, dict):
-                            continue
-                        print(f"🧪 [QWEN RAW] output[{idx}].type =", raw_item.get("type"))
-                        print(f"🧪 [QWEN RAW] output[{idx}].keys =", list(raw_item.keys()))
-
-                        action = raw_item.get("action")
-                        if isinstance(action, dict):
-                            print(f"🧪 [QWEN RAW] output[{idx}].action.keys =", list(action.keys()))
-                            print(
-                                f"🧪 [QWEN RAW] output[{idx}].action.sources_count =",
-                                len(action.get("sources") or []),
-                            )
-
-                        contents = raw_item.get("content") or []
-                        if isinstance(contents, list):
-                            for cidx, raw_content in enumerate(contents):
-                                if not isinstance(raw_content, dict):
-                                    continue
-                                print(
-                                    f"🧪 [QWEN RAW] output[{idx}].content[{cidx}].type =",
-                                    raw_content.get("type"),
-                                )
-                                print(
-                                    f"🧪 [QWEN RAW] output[{idx}].content[{cidx}].keys =",
-                                    list(raw_content.keys()),
-                                )
-                                annotations = raw_content.get("annotations") or []
-                                print(
-                                    f"🧪 [QWEN RAW] output[{idx}].content[{cidx}].annotations_count =",
-                                    len(annotations),
-                                )
-                                for aidx, annotation in enumerate(annotations[:8]):
-                                    if isinstance(annotation, dict):
-                                        print(
-                                            f"🧪 [QWEN RAW] annotation[{aidx}].type =",
-                                            annotation.get("type"),
-                                            "keys =",
-                                            list(annotation.keys()),
-                                        )
-
-                    for key in ("citations", "sources", "search_results", "web_search", "tool_calls", "usage"):
-                        if key not in raw_response:
-                            continue
-                        value = raw_response.get(key)
-                        if isinstance(value, list):
-                            print(f"🧪 [QWEN RAW] {key}_count =", len(value))
-                        elif isinstance(value, dict):
-                            print(f"🧪 [QWEN RAW] {key}.keys =", list(value.keys()))
-                        else:
-                            print(f"🧪 [QWEN RAW] {key} =", value)
-                else:
-                    print(
-                        "🧪 [QWEN RAW] attrs =",
-                        [name for name in dir(response) if not name.startswith("_")][:80],
-                    )
-            except Exception as diagnostic_error:
-                print("⚠️ [QWEN RAW] diagnostic failed:", repr(diagnostic_error))
 
             answer = (
                 getattr(
@@ -812,13 +713,6 @@ class QwenNativeSearch(BaseNativeSearch):
                 :max_results
             ]
 
-            print(
-                "🔎 Qwen native search:",
-                {
-                    "web_search": used_web_search,
-                    "sources": len(native_results),
-                },
-            )
 
             # ==================================================
             # 安全判断
@@ -837,13 +731,6 @@ class QwenNativeSearch(BaseNativeSearch):
                     should_fallback=True,
                 )
 
-            print(
-                "✅ Qwen autonomous response succeeded:",
-                {
-                    "web_search": used_web_search,
-                    "sources": len(native_results),
-                },
-            )
 
             return NativeSearchResponse(
                 success=True,

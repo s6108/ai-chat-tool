@@ -319,44 +319,20 @@ LEMONSQUEEZY_CHECKOUT_URL = (
     "https://megor-ai.lemonsqueezy.com/checkout/buy/6e539c0a-949d-4609-9678-a7f9b3d1bb3a"
 )
 
-LEMONSQUEEZY_30_DAY_PASS_URL = (
-    "https://megor-ai.lemonsqueezy.com/checkout/buy/"
-    "7101d8d1-3976-4647-8d94-de962fd8325b"
-)
 
-
-def _build_lemonsqueezy_checkout_url(
-    base_url: str,
-    user,
-) -> str:
-    """生成绑定当前 Megor 用户的 Lemon Squeezy Checkout URL。"""
+def get_premium_checkout_url(user) -> str:
+    """生成绑定当前 Megor AI 用户的 LemonSqueezy 付款链接。"""
     params = {
         "lang": "en",
         "checkout[email]": user.email or "",
         "checkout[custom][user_id]": str(user.id),
     }
 
-    separator = "&" if "?" in base_url else "?"
+    separator = "&" if "?" in LEMONSQUEEZY_CHECKOUT_URL else "?"
 
     return (
-        f"{base_url}"
+        f"{LEMONSQUEEZY_CHECKOUT_URL}"
         f"{separator}{urlencode(params)}"
-    )
-
-
-def get_premium_checkout_url(user) -> str:
-    """$14.99/月自动续费 Premium。"""
-    return _build_lemonsqueezy_checkout_url(
-        LEMONSQUEEZY_CHECKOUT_URL,
-        user,
-    )
-
-
-def get_30_day_pass_checkout_url(user) -> str:
-    """$19.99 / 30 天一次性 Premium，不自动续费。"""
-    return _build_lemonsqueezy_checkout_url(
-        LEMONSQUEEZY_30_DAY_PASS_URL,
-        user,
     )
 
 
@@ -997,9 +973,6 @@ components.html(
 premium_checkout_url = get_premium_checkout_url(
     st.session_state.user
 )
-pass_30_day_checkout_url = get_30_day_pass_checkout_url(
-    st.session_state.user
-)
 render_sidebar_placeholder()
 with st.sidebar:
     render_sidebar_logo(width=68)
@@ -1169,9 +1142,7 @@ with st.sidebar:
             account["is_premium"]
             and account["period_end_display"] != "—"
         ):
-            if account.get("access_type") == "pass":
-                st.caption("Premium until")
-            elif account["status"] == "cancelled":
+            if account["status"] == "cancelled":
                 st.caption(t("premium_until"))
             else:
                 st.caption(t("renewal_date"))
@@ -1179,14 +1150,14 @@ with st.sidebar:
             st.write(account["period_end_display"])
 
         if (
-            account.get("access_type") == "subscription"
+            account["is_premium"]
             and account["status"] == "cancelled"
         ):
             st.warning(
                 "已取消自动续费，Premium 将保留到当前付费周期结束。"
             )
 
-        if account.get("access_type") == "subscription":
+        if account["is_premium"]:
             subscription_id = account.get("subscription_id")
 
             if not subscription_id:
@@ -1228,21 +1199,6 @@ with st.sidebar:
                         t("portal_unavailable")
                     )
 
-        elif account.get("access_type") == "pass":
-            # 一次性 Pass 没有自动续费，也没有订阅管理入口。
-            st.session_state.pop(
-                "customer_portal_url",
-                None,
-            )
-            st.session_state.pop(
-                "portal_subscription_id",
-                None,
-            )
-
-            st.caption(
-                "$19.99 / 30 days · One-time payment · No auto-renewal"
-            )
-
         else:
             st.session_state.pop(
                 "customer_portal_url",
@@ -1253,21 +1209,11 @@ with st.sidebar:
                 None,
             )
 
-            st.caption("$14.99 / month · Auto-renew")
             st.link_button(
                 t("upgrade_premium"),
                 premium_checkout_url,
                 use_container_width=True,
-            )
-
-            st.caption(
-                "$19.99 / 30 days · One-time payment · No auto-renewal"
-            )
-            st.link_button(
-                "30-Day Pass — $19.99",
-                pass_30_day_checkout_url,
-                use_container_width=True,
-            )
+    )
     
 
 
@@ -1919,10 +1865,7 @@ if st.session_state.processing:
                 native_search_used = False
                 native_search_response = None
 
-                if (
-                    selected_model_name != "DeepSeek"
-                    and NativeSearchFactory.supports(selected_model_name)
-                ):
+                if NativeSearchFactory.supports(selected_model_name):
                     print(
                         f"🧠 尝试 {selected_model_name} 原生搜索"
                     )
@@ -1985,11 +1928,11 @@ if st.session_state.processing:
 
 
                         # ==================================================
-                        # ChatGPT / Gemini / Grok / Claude
-                        # 统一使用真正的 Native Search 流式输出
+                        # ChatGPT：
+                        # 使用 OpenAI Responses API 真正流式 Native Search
                         # ==================================================
 
-                        if selected_model_name in SELF_DECIDING_SEARCH_MODELS:
+                        if selected_model_name == "ChatGPT":
 
                             openai_search_mode = (
                                 "fast"
@@ -1998,7 +1941,8 @@ if st.session_state.processing:
                             )
 
                             print(
-                                f"⚡ {selected_model_name} Native Search streaming"
+                                "⚡ OpenAI Native Search mode:",
+                                openai_search_mode,
                             )
 
                             native_search_response = None
@@ -2048,23 +1992,11 @@ if st.session_state.processing:
                                 ],
                             )
 
-                            stream_kwargs = {
-                                "query": resolved_search_prompt,
-                                "messages": native_context_messages,
-                                "max_results": 8,
-                            }
-
-                            # ChatGPT 有自己的搜索模式参数
-                            if selected_model_name == "ChatGPT":
-                                stream_kwargs["search_mode"] = openai_search_mode
-
-                            # Gemini / Grok / Claude 自己判断本轮是否真的需要联网。
-                            # 即使模型判断无需搜索，也允许正常直接回答。
-                            else:
-                                stream_kwargs["allow_no_search"] = True
-
                             for event_kind, payload in native_search.stream_search(
-                                **stream_kwargs
+                                query=resolved_search_prompt,
+                                messages=native_context_messages,
+                                max_results=8,
+                                search_mode=openai_search_mode,
                             ):
 
                                 # ==============================================
@@ -2135,100 +2067,32 @@ if st.session_state.processing:
 
 
                             # 如果 streaming 搜索最终失败：
-                            # 清掉可能已经显示出来的部分答案。
-                            # 不再进入任何兜底搜索。
+                            # 清掉可能已经显示出来的部分答案，
+                            # 后面继续进入现有 Tavily Safety Net。
                             if not native_search_response.success:
 
                                 placeholder.empty()
                                 full_response = ""
 
                                 print(
-                                    f"⚠️ {selected_model_name} native streaming failed; "
+                                    "⚠️ OpenAI native streaming failed; "
                                     "partial streamed text cleared."
                                 )
 
+
+                        # ==================================================
+                        # 其他模型：
+                        # 暂时保持原来的 Native Search
+                        # ==================================================
+
                         else:
-                            # ==================================================
-                            # 四个中国模型：Qwen / Kimi / Doubao / GLM
-                            # 是否联网已经由 Qwen 在 classify_task() 中判断完成。
-                            # 这里直接使用各自原生搜索，不再二次判断。
-                            # ==================================================
-                            # ==================================================
-                            # Qwen：原生搜索真流式
-                            # Kimi / Doubao / GLM：暂时保持同步，逐个改造
-                            # ==================================================
-                            if selected_model_name in {
-                                "Qwen",
-                                "Kimi",
-                                "Doubao-Pro",
-                                "GLM",
-                            }:
-                                print(
-                                    f"⚡ {selected_model_name} Native Search streaming"
-                                )
 
-                                native_stream_answer = ""
-                                native_search_response = None
-                                native_api_start = time.perf_counter()
-                                native_first_delta_time = None
+                            native_search_response = native_search.search(
+                                query=resolved_search_prompt,
+                                messages=api_messages,
+                                max_results=8,
+                            )
 
-                                for event_kind, payload in native_search.stream_search(
-                                    query=resolved_search_prompt,
-                                    messages=api_messages,
-                                    max_results=8,
-                                ):
-                                    if event_kind == "delta":
-                                        delta = (
-                                            payload
-                                            if isinstance(payload, str)
-                                            else str(payload or "")
-                                        )
-
-                                        if not delta:
-                                            continue
-
-                                        if native_first_delta_time is None:
-                                            native_first_delta_time = time.perf_counter()
-
-                                            status_placeholder.empty()
-
-                                            print(
-                                                f"⚡ [NATIVE STREAM PERF] first_text_delta = "
-                                                f"{native_first_delta_time - native_api_start:.3f}s"
-                                            )
-
-                                            print(
-                                                f"🏁 [PERF] TOTAL_TO_FIRST_STREAM_TOKEN = "
-                                                f"{native_first_delta_time - perf_request_start:.3f}s"
-                                            )
-
-                                        native_stream_answer += delta
-
-                                        placeholder.markdown(
-                                            native_stream_answer + "▌"
-                                        )
-
-                                        continue
-
-                                    if event_kind == "complete":
-                                        native_search_response = payload
-
-                                if native_stream_answer:
-                                    full_response = native_stream_answer
-                                    placeholder.markdown(full_response)
-
-                            else:
-                                native_search_response = native_search.search(
-                                    query=resolved_search_prompt,
-                                    messages=api_messages,
-                                    max_results=8,
-                                )
-
-                            if native_search_response is None:
-                                raise RuntimeError(
-                                    f"{selected_model_name} native search "
-                                    "returned no response."
-                                )
 
                         # ==================================================
                         # Native Search 完整结束耗时
@@ -2365,35 +2229,21 @@ if st.session_state.processing:
                                 )
 
                         else:
-                            error_detail = (
-                                native_search_response.error
-                                or "Native search failed."
-                            )
-
                             print(
-                                f"⚠️ {selected_model_name} 原生搜索失败：",
-                                error_detail,
+                                f"⚠️ {selected_model_name} 原生搜索失败，"
+                                "进入 Tavily Safety Net"
                             )
 
-                            # 所有使用原生搜索的模型均不再进入兜底搜索，
-                            # 也不进行第二次普通模型生成。
-                            native_direct_answer = (
-                                "原生搜索暂时失败，请稍后重试。"
-                                if task_info.language == "zh"
-                                else "Native search temporarily failed. Please try again."
-                            )
+                            if native_search_response.error:
+                                print(
+                                    "   原因：",
+                                    native_search_response.error,
+                                )
 
                     except Exception as error:
                         print(
                             f"⚠️ {selected_model_name} 原生搜索异常：",
                             error,
-                        )
-
-                        # 原生搜索异常时直接结束本轮，不再进入兜底搜索。
-                        native_direct_answer = (
-                            "原生搜索暂时失败，请稍后重试。"
-                            if task_info.language == "zh"
-                            else "Native search temporarily failed. Please try again."
                         )
 
                 # ==================================================
@@ -2489,12 +2339,10 @@ if st.session_state.processing:
                         )
 
                 # ==================================================
-                # DeepSeek：
-                # 五个中国模型都先由 Qwen 判断是否需要联网；
-                # 其中只有 DeepSeek 不使用原生搜索，直接走 Tavily。
-                # Tavily 是 DeepSeek 的主搜索路径，不是任何模型的兜底。
+                # 原生搜索失败 / 当前模型尚未接原生搜索
+                # → Tavily Safety Net
                 # ==================================================
-                elif selected_model_name == "DeepSeek":
+                else:
                     
                     # Reuse the Qwen freshness decision already made by
                     # classify_task(). Do not call the judge a second time.
@@ -2972,13 +2820,14 @@ if st.session_state.processing:
                     "⚡ [PERF] SECOND_PROVIDER_CALL = SKIPPED"
                 )
 
-                # 四个海外模型真正 Native Streaming：
+                # ChatGPT 真正流式模式：
                 # 首字时间已经在第一个 delta 时打印，
                 # 这里不再错误地把“全文完成时间”叫 First Token。
                 if (
-                    selected_model_name in SELF_DECIDING_SEARCH_MODELS
+                    selected_model_name == "ChatGPT"
                     and native_first_delta_time is not None
                 ):
+
                     print(
                         f"🏁 [NATIVE STREAM PERF] "
                         f"total_complete = "
@@ -3006,7 +2855,7 @@ if st.session_state.processing:
             # 非原生搜索直出
             # 包括：
             # 1. 普通非联网回答
-            # 2. DeepSeek 的 Tavily 主搜索路径
+            # 2. Tavily Safety Net
             #
             # 这些仍然需要模型生成最终答案。
             # ==================================================

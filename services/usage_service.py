@@ -148,6 +148,16 @@ def _minimum_remaining_percent(
     return min(values)
 
 
+
+def get_minimum_remaining_percent(
+    status: dict | None,
+) -> float | None:
+    """Public helper for app/session-level quota gating."""
+    if not status:
+        return None
+
+    return _minimum_remaining_percent(status)
+
 def _cache_usage_status(
     user_id: str,
     plan: str,

@@ -141,30 +141,17 @@ def judge_freshness(
         client = _get_qwen_judge_client(config)
 
         system_prompt = (
-            "You are Megor's Search Judge. "
-            "Judge only whether the user's CURRENT request requires "
-            "fresh external information for an accurate answer. "
+            "Decide whether the CURRENT user request needs fresh web data. "
             "Work semantically in any language. Do not answer the user. "
-            "Return ONLY one JSON object with exactly these keys: "
-            "need_search, confidence, search_type, reason. "
-            "Keep reason extremely short: at most 12 words. "
-            "need_search must be true or false. "
-            "confidence must be a number from 0 to 1. "
-            "search_type must be one of: none, current_fact, recent_event, "
-            "realtime_data, general_web. "
-            "Use current_fact for changing office-holders, current roles, "
-            "current company leadership, current product/version/status, "
-            "or other facts whose present value can change. "
-            "Use realtime_data for weather, prices, markets, scores, "
-            "exchange rates, schedules, or other live measurements. "
-            "Use recent_event for news or events where recency is central. "
-            "Use general_web when current external research is needed but "
-            "the request is broader than a single current fact. "
-            "Use none when stable knowledge, explanation, writing, math, "
-            "coding, summarization, translation, or casual conversation "
-            "can be answered accurately without fresh external information. "
-            "When genuinely uncertain whether stale knowledge could materially "
-            "mislead the user, prefer search."
+            "Return JSON only with exactly two keys: need_search and search_type. "
+            "need_search is true or false. search_type is one of: "
+            "none, current_fact, recent_event, realtime_data, general_web. "
+            "Search for changing current facts, news/recent events, weather, "
+            "prices, markets, scores, exchange rates, schedules, current roles, "
+            "current product/version/status, or broader current web research. "
+            "Use none for stable knowledge, explanation, writing, math, coding, "
+            "summarization, translation, or casual conversation. "
+            "If stale knowledge could materially mislead the answer, search."
         )
 
         response = client.chat.completions.create(
@@ -180,7 +167,7 @@ def judge_freshness(
                 },
             ],
             temperature=0,
-            max_tokens=64,
+            max_tokens=32,
             extra_body={
                 "enable_thinking": False,
             },
@@ -250,25 +237,10 @@ def judge_freshness(
         elif search_type == "none":
             search_type = "general_web"
 
-        try:
-            confidence = float(
-                data.get("confidence", 0.95)
-            )
-        except (TypeError, ValueError):
-            confidence = 0.95
-
-        confidence = max(
-            0.0,
-            min(confidence, 1.0),
-        )
-
-        reason = str(
-            data.get(
-                "reason",
-                "Qwen semantic freshness judgement.",
-            )
-            or "Qwen semantic freshness judgement."
-        ).strip()
+        # Keep the existing FreshnessDecision contract for callers,
+        # but do not spend model output tokens generating these debug fields.
+        confidence = 0.95
+        reason = "Qwen freshness judge"
 
         return FreshnessDecision(
             need_search=need_search,
