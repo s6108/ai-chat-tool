@@ -44,6 +44,8 @@ from services.usage_service import (
     increase_image_usage,
     record_usage_event,
     can_start_request,
+    get_usage_status,
+    STRICT_CREDIT_RECHECK_PERCENT,
     FREE_CHAT_LIMIT,
     FREE_IMAGE_LIMIT,
     PREMIUM_DAILY_CHAT_LIMIT,
@@ -319,6 +321,11 @@ LEMONSQUEEZY_CHECKOUT_URL = (
     "https://megor-ai.lemonsqueezy.com/checkout/buy/6e539c0a-949d-4609-9678-a7f9b3d1bb3a"
 )
 
+LEMONSQUEEZY_30_DAY_PASS_URL = (
+    "https://megor-ai.lemonsqueezy.com/checkout/buy/"
+    "7101d8d1-3976-4647-8d94-de962fd8325b"
+)
+
 
 def get_premium_checkout_url(user) -> str:
     """生成绑定当前 Megor AI 用户的 LemonSqueezy 付款链接。"""
@@ -332,6 +339,22 @@ def get_premium_checkout_url(user) -> str:
 
     return (
         f"{LEMONSQUEEZY_CHECKOUT_URL}"
+        f"{separator}{urlencode(params)}"
+    )
+
+
+def get_30_day_pass_checkout_url(user) -> str:
+    """生成绑定当前 Megor AI 用户的 30-Day Pass 付款链接。"""
+    params = {
+        "lang": "en",
+        "checkout[email]": user.email or "",
+        "checkout[custom][user_id]": str(user.id),
+    }
+
+    separator = "&" if "?" in LEMONSQUEEZY_30_DAY_PASS_URL else "?"
+
+    return (
+        f"{LEMONSQUEEZY_30_DAY_PASS_URL}"
         f"{separator}{urlencode(params)}"
     )
 
@@ -441,6 +464,11 @@ SESSION_DEFAULTS = {
     "uploader_key": 0,
     "processing": False,
     "page": "chat",
+
+    # 成本额度快照：
+    # 登录/恢复登录后初始化一次；之后每轮结束后刷新。
+    "usage_remaining_percent": None,
+    "usage_status_snapshot": None,
 
     # 密码找回
     "password_recovery_mode": False,
@@ -591,6 +619,106 @@ if "new_chat_mode" not in st.session_state:
     )
 
 
+
+# ====================== Usage Snapshot ======================
+
+def _minimum_remaining_percent_from_status(status: dict) -> float | None:
+    """取日/月额度中更低的剩余百分比。"""
+    values = []
+
+    for key in (
+        "daily_remaining_percent",
+        "monthly_remaining_percent",
+    ):
+        value = status.get(key)
+
+        if value is None:
+            continue
+
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            continue
+
+    if not values:
+        return None
+
+    return min(values)
+
+
+def refresh_usage_snapshot(user) -> None:
+    """
+    读取一次最新额度并缓存到 st.session_state。
+
+    只在：
+    1. 登录 / 恢复登录后的首次页面运行；
+    2. 每轮完整答案已经保存并完成 usage 记录之后；
+    调用。
+    """
+    if user is None:
+        st.session_state["usage_remaining_percent"] = None
+        st.session_state["usage_status_snapshot"] = None
+        return
+
+    try:
+        user_id = str(user.id)
+        user_plan = get_user_plan(user_id) or "free"
+
+        status = get_usage_status(
+            supabase_admin,
+            user_id=user_id,
+            plan=str(user_plan),
+        )
+
+        remaining_percent = (
+            _minimum_remaining_percent_from_status(status)
+        )
+
+        # 没有百分比限制时按 100% 处理；
+        # 读取失败则在 except 中设为 0，下一轮强制严格审查。
+        if remaining_percent is None:
+            remaining_percent = 100.0
+
+        st.session_state["usage_status_snapshot"] = status
+        st.session_state["usage_remaining_percent"] = float(
+            remaining_percent
+        )
+
+    except Exception as snapshot_error:
+        print(
+            "Usage snapshot refresh failed:",
+            repr(snapshot_error),
+        )
+
+        # Fail-safe：无法读取快照时，下一轮走严格 can_start_request。
+        st.session_state["usage_status_snapshot"] = None
+        st.session_state["usage_remaining_percent"] = 0.0
+
+
+def should_run_strict_credit_preflight() -> bool:
+    """
+    每轮开始只读本地 session cache。
+
+    > 10%：不调用 can_start_request。
+    <= 10%：才执行严格额度审查。
+    """
+    remaining = st.session_state.get(
+        "usage_remaining_percent"
+    )
+
+    # 理论上登录后已经初始化；
+    # 若缺失则 fail-safe，按严格审查处理。
+    if remaining is None:
+        return True
+
+    try:
+        return (
+            float(remaining)
+            <= float(STRICT_CREDIT_RECHECK_PERCENT)
+        )
+    except (TypeError, ValueError):
+        return True
+
 # ====================== Auto Login ======================
 
 # Cookie 组件准备完成后，
@@ -677,6 +805,15 @@ if (
             print(
                 "✅ 长期登录恢复成功"
             )
+# 登录 / 恢复登录后只初始化一次额度快照。
+if (
+    st.session_state.user is not None
+    and st.session_state.get("usage_remaining_percent") is None
+):
+    refresh_usage_snapshot(
+        st.session_state.user
+    )
+
 # ================= Load Current Chat =================
 
 if st.session_state.user:
@@ -973,6 +1110,9 @@ components.html(
 premium_checkout_url = get_premium_checkout_url(
     st.session_state.user
 )
+pass_30_day_checkout_url = get_30_day_pass_checkout_url(
+    st.session_state.user
+)
 render_sidebar_placeholder()
 with st.sidebar:
     render_sidebar_logo(width=68)
@@ -1024,6 +1164,8 @@ with st.sidebar:
         st.session_state["new_chat_mode"] = True
         st.session_state["processing"] = False
         st.session_state["uploader_key"] += 1
+        st.session_state["usage_remaining_percent"] = None
+        st.session_state["usage_status_snapshot"] = None
 
         # 主动退出后，本次 Streamlit 会话不再尝试自动恢复。
         st.session_state["auth_checked"] = True
@@ -1209,11 +1351,25 @@ with st.sidebar:
                 None,
             )
 
+            
+
             st.link_button(
                 t("upgrade_premium"),
                 premium_checkout_url,
                 use_container_width=True,
-    )
+            )
+            st.caption(
+                t("premium_price_description")
+            )
+
+            st.link_button(
+                t("buy_30_day_pass"),
+                pass_30_day_checkout_url,
+                use_container_width=True,
+            )
+            st.caption(
+                t("pass_30_day_description")
+            )
     
 
 
@@ -1488,6 +1644,10 @@ if submission:
 if submission and (prompt or uploaded_file):
     perf_request_start = time.perf_counter()
     perf_last = perf_request_start
+
+    # Native Search 的真实 usage 先暂存；
+    # 等完整答案输出并保存以后再统一写 usage_events。
+    pending_native_usage_event = None
 
     print("\n" + "=" * 70)
     print("🚀 [PERF] NEW REQUEST")
@@ -1871,20 +2031,18 @@ if st.session_state.processing:
                     )
 
                     try:
-                        if current_user_id:
-                            native_preflight_start = time.perf_counter()
-
+                        # 正常额度阶段只读上一轮缓存，不访问数据库。
+                        # 只有缓存显示剩余 <= 10% 时，才执行严格审查。
+                        if (
+                            current_user_id
+                            and should_run_strict_credit_preflight()
+                        ):
                             native_preflight = can_start_request(
                                 supabase_admin,
                                 user_id=str(current_user_id),
                                 plan=str(current_plan),
                                 model_key=selected_model_name,
                                 request_type="native_search",
-                            )
-
-                            print(
-                                f"⏱️ [NATIVE PERF] usage_preflight = "
-                                f"{time.perf_counter() - native_preflight_start:.3f}s"
                             )
 
                             if not native_preflight["allowed"]:
@@ -2115,7 +2273,8 @@ if st.session_state.processing:
                             )
 
                             # ==================================================
-                            # 记录原生搜索本身的真实成本
+                            # 暂存原生搜索真实成本。
+                            # 不在答案输出前写数据库；完整答案保存后再记录。
                             # ==================================================
                             native_usage = getattr(
                                 native_search_response,
@@ -2124,109 +2283,43 @@ if st.session_state.processing:
                             )
 
                             if native_usage:
-                                native_usage_start = time.perf_counter()
-
-                                try:
-                                    current_user = st.session_state.get(
-                                        "user"
-                                    )
-
-                                    current_user_id = (
-                                        getattr(
-                                            current_user,
-                                            "id",
-                                            None,
+                                pending_native_usage_event = {
+                                    "model_key": selected_model_name,
+                                    "input_tokens": int(
+                                        native_usage.get(
+                                            "input_tokens",
+                                            0,
                                         )
-                                        or getattr(
-                                            current_user,
-                                            "user_id",
-                                            None,
+                                        or 0
+                                    ),
+                                    "output_tokens": int(
+                                        native_usage.get(
+                                            "output_tokens",
+                                            0,
                                         )
-                                    )
-
-                                    if (
-                                        not current_user_id
-                                        and isinstance(
-                                            current_user,
-                                            dict,
+                                        or 0
+                                    ),
+                                    "provider_actual_cost_usd": (
+                                        native_usage.get(
+                                            "provider_cost_usd"
                                         )
-                                    ):
-                                        current_user_id = (
-                                            current_user.get("id")
-                                            or current_user.get(
-                                                "user_id"
+                                    ),
+                                    "metadata": {
+                                        "source": "native_search",
+                                        "server_side_tools": (
+                                            native_usage.get(
+                                                "server_side_tools",
+                                                0,
                                             )
-                                        )
-
-                                    if current_user_id:
-                                        record_usage_event(
-                                            supabase_admin,
-                                            user_id=str(
-                                                current_user_id
-                                            ),
-                                            model_key=(
-                                                selected_model_name
-                                            ),
-                                            input_tokens=int(
-                                                native_usage.get(
-                                                    "input_tokens",
-                                                    0,
-                                                )
-                                                or 0
-                                            ),
-                                            output_tokens=int(
-                                                native_usage.get(
-                                                    "output_tokens",
-                                                    0,
-                                                )
-                                                or 0
-                                            ),
-                                            request_type=(
-                                                "native_search"
-                                            ),
-                                            provider_actual_cost_usd=(
-                                                native_usage.get(
-                                                    "provider_cost_usd"
-                                                )
-                                            ),
-                                            metadata={
-                                                "source": (
-                                                    "native_search"
-                                                ),
-                                                "server_side_tools": (
-                                                    native_usage.get(
-                                                        "server_side_tools",
-                                                        0,
-                                                    )
-                                                ),
-                                                "cost_in_usd_ticks": (
-                                                    native_usage.get(
-                                                        "cost_in_usd_ticks",
-                                                        0,
-                                                    )
-                                                ),
-                                            },
-                                        )
-
-                                        print(
-                                            "💳 Native search usage recorded:",
-                                            f"model={selected_model_name},",
-                                            "cost_usd="
-                                            f"{native_usage.get('provider_cost_usd')}",
-                                        )
-
-                                except Exception as usage_error:
-                                    # 记账失败不能破坏搜索结果
-                                    print(
-                                        "⚠️ Native search usage "
-                                        "recording failed:",
-                                        repr(usage_error),
-                                    )
-
-                                print(
-                                    f"💳 [NATIVE PERF] usage_recording = "
-                                    f"{time.perf_counter() - native_usage_start:.3f}s"
-                                )
+                                        ),
+                                        "cost_in_usd_ticks": (
+                                            native_usage.get(
+                                                "cost_in_usd_ticks",
+                                                0,
+                                            )
+                                        ),
+                                    },
+                                }
 
                         else:
                             print(
@@ -2874,7 +2967,12 @@ if st.session_state.processing:
                 )
                 perf_last = time.perf_counter()
 
-                if current_user_id:
+                # 正常额度阶段只读上一轮缓存，不访问数据库。
+                # 只有缓存显示剩余 <= 10% 时，才执行严格审查。
+                if (
+                    current_user_id
+                    and should_run_strict_credit_preflight()
+                ):
                     preflight = can_start_request(
                         supabase_admin,
                         user_id=str(current_user_id),
@@ -3106,12 +3204,54 @@ if st.session_state.processing:
                     repr(persistence_error),
                 )
 
-            # 只有模型成功返回后才扣除额度
+            # ==================================================
+            # 完整答案已经输出并保存后，再统一记录 usage / 次数，
+            # 最后刷新最新额度快照，供下一轮只读本地缓存。
+            # ==================================================
             try:
                 user_id = st.session_state.user.id
-                user_plan = get_user_plan(user_id) or "free"
-                user_plan = str(user_plan).lower()
 
+                # Native Search 的 usage 到这里才真正写入 usage_events。
+                if pending_native_usage_event:
+                    try:
+                        record_usage_event(
+                            supabase_admin,
+                            user_id=str(user_id),
+                            model_key=(
+                                pending_native_usage_event[
+                                    "model_key"
+                                ]
+                            ),
+                            input_tokens=(
+                                pending_native_usage_event[
+                                    "input_tokens"
+                                ]
+                            ),
+                            output_tokens=(
+                                pending_native_usage_event[
+                                    "output_tokens"
+                                ]
+                            ),
+                            request_type="native_search",
+                            provider_actual_cost_usd=(
+                                pending_native_usage_event[
+                                    "provider_actual_cost_usd"
+                                ]
+                            ),
+                            metadata=(
+                                pending_native_usage_event[
+                                    "metadata"
+                                ]
+                            ),
+                        )
+                    except Exception as native_usage_error:
+                        # 记账失败不能破坏已经完成的回答。
+                        print(
+                            "Native search usage recording failed:",
+                            repr(native_usage_error),
+                        )
+
+                # 聊天 / 图片次数同样只在成功回答后更新。
                 increase_chat_usage(
                     supabase_admin,
                     user_id,
@@ -3122,6 +3262,12 @@ if st.session_state.processing:
                         supabase_admin,
                         user_id,
                     )
+
+                # 最后只读取一次最新额度，并写回 session。
+                # 下一轮 >10% 时完全不调用 can_start_request。
+                refresh_usage_snapshot(
+                    st.session_state.user
+                )
 
             except Exception as usage_error:
                 print(

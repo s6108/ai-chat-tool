@@ -48,7 +48,7 @@ TEXT = {
     "subscription_not_found": "暂时无法找到订阅记录，如持续出现请联系支持。",
     "manage_subscription": "💳 管理订阅",
     "portal_unavailable": "暂时无法连接订阅管理中心，请稍后重试。",
-    "upgrade_premium": "🚀 升级 Premium",
+    "upgrade_premium": "🚀 升级高级会员",
 
     # 历史会话
     "chat_history": "历史会话",
@@ -65,15 +65,15 @@ TEXT = {
     "ask_anything": "输入你的问题…",
 
     # 免费额度
-    "free_chat_exhausted": "今日免费聊天额度已用完。升级 Premium 可继续使用。",
-    "free_image_exhausted": "今日免费图片识别额度已用完。升级 Premium 可继续使用。",
+    "free_chat_exhausted": "今日免费聊天额度已用完。升级高级会员可继续使用。",
+    "free_image_exhausted": "今日免费图片识别额度已用完。升级高级会员可继续使用。",
 
     # 图片
     "describe_image": "请描述这张图片",
     "image_uploaded": "📸 图片已上传",
 
     # 搜索
-    "searching": "🔍 正在联网搜索…",
+    "searching": "🔍 请稍等…",
 
     # API
     "api_key_missing": "{model} 的 API Key 未配置。",
@@ -100,7 +100,7 @@ TEXT = {
     ),
 
     "advanced_search_requires_premium": (
-        "实时高级搜索需要更多额度，请升级 Premium 后使用。"
+        "实时高级搜索需要更多额度，请升级高级会员后使用。"
     ),
 
     # 调试
@@ -110,8 +110,8 @@ TEXT = {
     "email_caption": "邮箱",
 
     # 套餐
-    "premium": "💎 Premium",
-    "free": "🆓 Free",
+    "premium": "高级会员",
+    "free": "免费会员",
     "active": "有效",
     "inactive": "无效",
 
@@ -136,4 +136,8 @@ TEXT = {
     "today_chat": "今日聊天",
     "today_images": "今日识图",
     "remaining_times": "剩余 {count} 次",
+    "buy_30_day_pass": "高级会员30天",
+    "premium_price_description": "高级会员 $14.99/月，自动续费。",
+    "upgrade_premium": "高级会员",
+    "pass_30_day_description": "一次购买 $19.99/30天(可用支付宝)，不自动续费。",
 }

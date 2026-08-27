@@ -95,7 +95,7 @@ TEXT = {
     "image_uploaded": "📸 Image uploaded",
 
     # Search
-    "searching": "🔍 Searching the web…",
+    "searching": "🔍 Please wait a moment…",
 
     # API
     "api_key_missing": (
@@ -170,4 +170,8 @@ TEXT = {
     "today_chat": "Today's chats",
     "today_images": "Today's images",
     "remaining_times": "{count} remaining",
+    "buy_30_day_pass": "30-Day Pass",
+    "premium_price_description": "Premium $14.99/month · Auto-renewal",
+    "upgrade_premium": "Upgrade to Premium",
+    "pass_30_day_description": "One-time purchase · $19.99/30 days · No auto-renewal",
 }
