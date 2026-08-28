@@ -50,12 +50,11 @@ class FreshnessDecision:
 
 def _extract_json(text: str) -> dict:
     """
-    从模型返回内容中提取 JSON。
+    Extract a JSON object from model output.
 
-    正常情况下模型应该只返回 JSON，
-    这里保留容错，防止模型偶尔加 ```json 或其他文字。
+    Normal path is strict JSON. This helper also tolerates fenced JSON
+    and surrounding prose without triggering a second model call.
     """
-
     text = (text or "").strip()
 
     if not text:
@@ -63,20 +62,17 @@ def _extract_json(text: str) -> dict:
             "Freshness judge returned empty text."
         )
 
-    # 先直接尝试
     try:
         return json.loads(text)
     except Exception:
         pass
 
-    # 去掉 ```json ... ```
     cleaned = re.sub(
         r"^```(?:json)?\s*",
         "",
         text,
         flags=re.IGNORECASE,
     )
-
     cleaned = re.sub(
         r"\s*```$",
         "",
@@ -88,9 +84,8 @@ def _extract_json(text: str) -> dict:
     except Exception:
         pass
 
-    # 最后尝试提取第一个 JSON 对象
     match = re.search(
-        r"\{.*\}",
+        r"\{.*?\}",
         cleaned,
         flags=re.DOTALL,
     )
@@ -100,9 +95,101 @@ def _extract_json(text: str) -> dict:
             "No JSON object found in freshness response."
         )
 
-    return json.loads(
-        match.group(0)
+    return json.loads(match.group(0))
+
+
+def _parse_freshness_output(text: str) -> dict:
+    """
+    Parse the Qwen judge response without making another API call.
+
+    Qwen is instructed to return JSON, but an OpenAI-compatible endpoint can
+    occasionally return a short non-JSON form. In that case, recover the two
+    fields locally instead of defaulting every parse anomaly to web search.
+    """
+    raw = (text or "").strip()
+
+    if not raw:
+        raise ValueError(
+            "Freshness judge returned empty text."
+        )
+
+    try:
+        return _extract_json(raw)
+    except Exception:
+        pass
+
+    lowered = raw.casefold()
+
+    # Recover need_search from common compact forms such as:
+    # need_search=true
+    # "need_search": true
+    # search: yes/no
+    need_match = re.search(
+        r"(?:need[_\s-]*search|search)"
+        r"\s*[:=]\s*"
+        r"(true|false|yes|no|1|0)",
+        lowered,
     )
+
+    need_search = None
+
+    if need_match:
+        token = need_match.group(1)
+        need_search = token in {
+            "true",
+            "yes",
+            "1",
+        }
+    elif lowered in {
+        "true",
+        "yes",
+        "search",
+        "web",
+    }:
+        need_search = True
+    elif lowered in {
+        "false",
+        "no",
+        "none",
+        "no_search",
+        "no search",
+    }:
+        need_search = False
+
+    type_match = re.search(
+        r"(?:search[_\s-]*type|type)"
+        r"\s*[:=]\s*"
+        r"[\"']?"
+        r"(none|current_fact|recent_event|realtime_data|general_web)"
+        r"[\"']?",
+        lowered,
+    )
+
+    search_type = (
+        type_match.group(1)
+        if type_match
+        else None
+    )
+
+    if need_search is None and search_type is not None:
+        need_search = search_type != "none"
+
+    if need_search is None:
+        raise ValueError(
+            "Could not recover freshness fields from response."
+        )
+
+    if search_type is None:
+        search_type = (
+            "general_web"
+            if need_search
+            else "none"
+        )
+
+    return {
+        "need_search": need_search,
+        "search_type": search_type,
+    }
 
 
 @lru_cache(maxsize=512)
@@ -142,13 +229,13 @@ def judge_freshness(
 
         system_prompt = (
             "Decide whether the CURRENT user request needs fresh web data. "
-            "Work semantically in any language. Do not answer the user. "
-            "Return JSON only with exactly two keys: need_search and search_type. "
-            "need_search is true or false. search_type is one of: "
-            "none, current_fact, recent_event, realtime_data, general_web. "
-            "Search for changing current facts, news/recent events, weather, "
-            "prices, markets, scores, exchange rates, schedules, current roles, "
-            "current product/version/status, or broader current web research. "
+            "Understand the request semantically in any language. "
+            "Do not answer the user. Return exactly one JSON object and nothing else. "
+            "Schema: {\"need_search\":true|false,"
+            "\"search_type\":\"none|current_fact|recent_event|realtime_data|general_web\"}. "
+            "Use search for changing current facts, recent events, weather, prices, "
+            "markets, scores, exchange rates, schedules, current roles, current "
+            "product/version/status, or broader current web research. "
             "Use none for stable knowledge, explanation, writing, math, coding, "
             "summarization, translation, or casual conversation. "
             "If stale knowledge could materially mislead the answer, search."
@@ -167,7 +254,7 @@ def judge_freshness(
                 },
             ],
             temperature=0,
-            max_tokens=32,
+            max_tokens=48,
             extra_body={
                 "enable_thinking": False,
             },
@@ -186,7 +273,7 @@ def judge_freshness(
             or ""
         )
 
-        data = _extract_json(raw_text)
+        data = _parse_freshness_output(raw_text)
 
         need_search_raw = data.get(
             "need_search",

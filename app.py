@@ -74,7 +74,7 @@ from services.search_planner import (
     resolve_search_query,
 )
 from services.search_evaluator import evaluate_search_results
-from services.model_router import choose_auto_model
+from services.auto_router_service import route_auto_model
 from services.model_config import (
     MODEL_CONFIGS,
     get_model_config,
@@ -1735,12 +1735,11 @@ if st.session_state.processing:
     perf_last = time.perf_counter()    
 
     # ==================================================
-    # Self-deciding native search models
+    # Auto Router / Search Judge
     #
-    # ChatGPT / Grok / Gemini / Claude 在手动选择时，
-    # 不再先调用 Qwen / Freshness AI 判断是否需要联网。
-    # 是否真正执行原生搜索，由各自模型的 native search 流程自行决定。
-    # Auto 模式暂时保持原有分类 / 路由逻辑，避免影响自动路由。
+    # 先在 Auto Mode 下完成语义选模，再决定是否需要 Qwen Freshness。
+    # 这样 Auto 选到 ChatGPT / Grok / Gemini / Claude 时，
+    # 不会先经过 Qwen Freshness，再由海外模型自行判断联网。
     # ==================================================
     SELF_DECIDING_SEARCH_MODELS = {
         "ChatGPT",
@@ -1749,16 +1748,23 @@ if st.session_state.processing:
         "Claude",
     }
 
+    route_decision = None
+
+    if st.session_state.auto_mode:
+        route_decision = route_auto_model(
+            prompt,
+            has_image=bool(uploaded_file),
+        )
+        st.session_state.selected_model = route_decision.model
+
     selected_model_before_routing = st.session_state.selected_model
 
     self_deciding_search_mode = (
-        not st.session_state.auto_mode
-        and selected_model_before_routing in SELF_DECIDING_SEARCH_MODELS
+        selected_model_before_routing in SELF_DECIDING_SEARCH_MODELS
         and not bool(uploaded_file)
     )
 
-    # 保留 ChatGPT 专用 unified Responses 标记，
-    # 供后续 ChatGPT-specific 分支继续使用。
+    # ChatGPT 专用 unified Responses 标记。
     chatgpt_unified_mode = (
         self_deciding_search_mode
         and selected_model_before_routing == "ChatGPT"
@@ -1779,15 +1785,14 @@ if st.session_state.processing:
     # ===== 最终联网判定 =====
     needs_web_search = task_info.need_search
 
-    # 四个支持自主联网判断的模型，在手动选择时必须进入各自的
-    # native search / unified 流程。这里的 True 仅表示“进入可联网流程”，
-    # 不代表本轮一定实际联网；是否真正搜索由模型自身决定。
+    # 海外四模型进入自主联网流程。
+    # True 只代表允许进入 Native Search / unified 流程，
+    # 是否真正联网由对应模型自己决定。
     if self_deciding_search_mode:
         needs_web_search = True
 
     # 图片本身不是联网理由。
-    # 普通的看图、描述、识别、分析任务直接交给视觉模型。
-    # 只有用户明确要求查询外部/实时信息时，才允许 Vision + Search。
+    # 保留现有 Vision + Search 规则，不改其他业务结构。
     if task_info.task_type == "vision":
         prompt_lower = prompt.casefold()
 
@@ -1836,15 +1841,6 @@ if st.session_state.processing:
         "DEBUG SHOULD_SEARCH:",
         needs_web_search,
     )
-    route_decision = None
-
-    if st.session_state.auto_mode:
-        route_decision = choose_auto_model(
-            prompt,
-            has_image=bool(uploaded_file),
-            needs_search=needs_web_search,
-        )
-        st.session_state.selected_model = route_decision.model
 
     used_model = st.session_state.selected_model
     used_model_icon = MODEL_ICONS.get(
@@ -1960,17 +1956,9 @@ if st.session_state.processing:
                 history_limit=12,
             )
 
-            selected_max_tokens = (
-                route_decision.max_tokens
-                if route_decision is not None
-                else 1200
-            )
-            selected_temperature = (
-                route_decision.temperature
-                if route_decision is not None
-                else 0.7
-            )
-
+            selected_max_tokens = 1200
+            selected_temperature = 0.7
+            
             # ===== 自动判断并执行联网搜索 =====
                         # ===== 自动判断并执行联网搜索 =====
             print(f"🧠 判断是否联网：{prompt}")
@@ -2086,83 +2074,96 @@ if st.session_state.processing:
 
 
                         # ==================================================
-                        # ChatGPT：
-                        # 使用 OpenAI Responses API 真正流式 Native Search
+                        # 8 个 Native Search 模型统一真流式
+                        #
+                        # ChatGPT / Grok / Gemini / Claude：
+                        #   各模型自己判断本轮是否真正联网。
+                        #
+                        # Qwen / Kimi / Doubao-Pro / GLM：
+                        #   是否联网已经由 Qwen Freshness 判断完成，
+                        #   进入这里后直接执行各自原生搜索。
+                        #
+                        # DeepSeek 不在这里：
+                        #   DeepSeek 继续使用 Tavily + Provider 真流式。
                         # ==================================================
 
-                        if selected_model_name == "ChatGPT":
+                        NATIVE_STREAM_MODELS = {
+                            "ChatGPT",
+                            "Grok",
+                            "Gemini",
+                            "Claude",
+                            "Qwen",
+                            "Kimi",
+                            "Doubao-Pro",
+                            "GLM",
+                        }
 
-                            openai_search_mode = (
-                                "fast"
-                                if task_info.task_type == "fast"
-                                else "research"
-                            )
-
-                            print(
-                                "⚡ OpenAI Native Search mode:",
-                                openai_search_mode,
-                            )
+                        if selected_model_name in NATIVE_STREAM_MODELS:
 
                             native_search_response = None
                             native_stream_answer = ""
+                            native_first_delta_time = None
 
-                            # ==================================================
-                            # Native Search 上下文
-                            #
-                            # 只提供“紧邻当前问题的上一轮完整问答”，
-                            # 不再把 api_messages 最近 4 条直接交给搜索。
-                            #
-                            # 当前 prompt 已经加入 st.session_state.messages，
-                            # 所以通常：
-                            #   -3 = 上一轮 user
-                            #   -2 = 上一轮 assistant
-                            #   -1 = 当前 user
-                            # ==================================================
+                            # ----------------------------------------------
+                            # 上下文：
+                            # 海外自判模型只带紧邻当前问题的上一轮完整问答；
+                            # 中国原生搜索模型继续沿用当前 api_messages。
+                            # ----------------------------------------------
+                            if selected_model_name in SELF_DECIDING_SEARCH_MODELS:
+                                native_context_messages = []
 
-                            native_context_messages = []
+                                session_messages = st.session_state.get(
+                                    "messages",
+                                    [],
+                                )
 
-                            session_messages = st.session_state.get(
-                                "messages",
-                                [],
-                            )
+                                if len(session_messages) >= 3:
+                                    previous_user = session_messages[-3]
+                                    previous_assistant = session_messages[-2]
+                                    current_message = session_messages[-1]
 
-                            if len(session_messages) >= 3:
+                                    if (
+                                        previous_user.get("role") == "user"
+                                        and previous_assistant.get("role") == "assistant"
+                                        and current_message.get("role") == "user"
+                                    ):
+                                        native_context_messages = [
+                                            previous_user,
+                                            previous_assistant,
+                                        ]
+                            else:
+                                native_context_messages = api_messages
 
-                                previous_user = session_messages[-3]
-                                previous_assistant = session_messages[-2]
-                                current_message = session_messages[-1]
+                            stream_kwargs = {
+                                "query": resolved_search_prompt,
+                                "messages": native_context_messages,
+                                "max_results": 8,
+                            }
 
-                                if (
-                                    previous_user.get("role") == "user"
-                                    and previous_assistant.get("role") == "assistant"
-                                    and current_message.get("role") == "user"
-                                ):
-                                    native_context_messages = [
-                                        previous_user,
-                                        previous_assistant,
-                                    ]
+                            # ChatGPT 保留自己的搜索模式参数。
+                            if selected_model_name == "ChatGPT":
+                                openai_search_mode = (
+                                    "fast"
+                                    if task_info.task_type == "fast"
+                                    else "research"
+                                )
+                                stream_kwargs["search_mode"] = (
+                                    openai_search_mode
+                                )
 
-                            print(
-                                "🧩 Native Search previous-turn context:",
-                                [
-                                    message.get("role")
-                                    for message in native_context_messages
-                                ],
-                            )
+                            # Grok / Gemini / Claude 允许模型自行判断
+                            # “本轮无需真正联网”并直接回答。
+                            elif selected_model_name in {
+                                "Grok",
+                                "Gemini",
+                                "Claude",
+                            }:
+                                stream_kwargs["allow_no_search"] = True
 
                             for event_kind, payload in native_search.stream_search(
-                                query=resolved_search_prompt,
-                                messages=native_context_messages,
-                                max_results=8,
-                                search_mode=openai_search_mode,
+                                **stream_kwargs
                             ):
-
-                                # ==============================================
-                                # OpenAI 真正返回的文本 delta
-                                # ==============================================
-
                                 if event_kind == "delta":
-
                                     delta = (
                                         payload
                                         if isinstance(payload, str)
@@ -2172,12 +2173,7 @@ if st.session_state.processing:
                                     if not delta:
                                         continue
 
-                                    # ------------------------------------------
-                                    # 第一个真实 token / delta
-                                    # ------------------------------------------
-
                                     if native_first_delta_time is None:
-
                                         native_first_delta_time = (
                                             time.perf_counter()
                                         )
@@ -2197,8 +2193,6 @@ if st.session_state.processing:
                                         )
 
                                     native_stream_answer += delta
-
-                                    # 使用 OpenAI 真实 delta 实时更新 UI
                                     full_response = native_stream_answer
 
                                     placeholder.markdown(
@@ -2207,44 +2201,30 @@ if st.session_state.processing:
 
                                     continue
 
-
-                                # ==============================================
-                                # 整个 Native Search 完成
-                                # ==============================================
-
                                 if event_kind == "complete":
                                     native_search_response = payload
 
-
-                            # 理论上 stream_search 一定应该发送 complete
                             if native_search_response is None:
                                 raise RuntimeError(
-                                    "OpenAI native stream ended "
-                                    "without a final NativeSearchResponse."
+                                    f"{selected_model_name} native stream "
+                                    "ended without a final NativeSearchResponse."
                                 )
 
+                            # 流式正文先去掉光标，最终 citations / sources
+                            # 仍由后面的 native_direct_answer 统一补齐。
+                            if native_stream_answer:
+                                full_response = native_stream_answer
+                                placeholder.markdown(full_response)
 
-                            # 如果 streaming 搜索最终失败：
-                            # 清掉可能已经显示出来的部分答案，
-                            # 后面继续进入现有 Tavily Safety Net。
+                            # 如果最终 Native Search 判定失败，
+                            # 清掉可能已经显示的部分流式正文。
                             if not native_search_response.success:
-
                                 placeholder.empty()
                                 full_response = ""
 
-                                print(
-                                    "⚠️ OpenAI native streaming failed; "
-                                    "partial streamed text cleared."
-                                )
-
-
-                        # ==================================================
-                        # 其他模型：
-                        # 暂时保持原来的 Native Search
-                        # ==================================================
-
                         else:
-
+                            # 当前模型不支持 Native Streaming 时，
+                            # 保留原同步路径。正常情况下 DeepSeek 不会进入这里。
                             native_search_response = native_search.search(
                                 query=resolved_search_prompt,
                                 messages=api_messages,
@@ -2913,13 +2893,10 @@ if st.session_state.processing:
                     "⚡ [PERF] SECOND_PROVIDER_CALL = SKIPPED"
                 )
 
-                # ChatGPT 真正流式模式：
+                # 真流式模式：
                 # 首字时间已经在第一个 delta 时打印，
-                # 这里不再错误地把“全文完成时间”叫 First Token。
-                if (
-                    selected_model_name == "ChatGPT"
-                    and native_first_delta_time is not None
-                ):
+                # 这里仅记录全文完成时间。
+                if native_first_delta_time is not None:
 
                     print(
                         f"🏁 [NATIVE STREAM PERF] "
@@ -2935,7 +2912,6 @@ if st.session_state.processing:
 
                 else:
 
-                    # 其他目前尚未支持 Native Streaming 的模型
                     print(
                         f"🏁 [PERF] TOTAL_TO_FIRST_TOKEN = "
                         f"{native_complete_time - perf_request_start:.3f}s"
