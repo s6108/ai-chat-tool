@@ -1048,10 +1048,27 @@ if not st.session_state.user:
 render_brand_header(width=68)
 
 st.markdown(
+    """
+    <div style="
+        font-size: 1.5rem;
+        font-weight: 400;
+        color: #6b7280;
+        margin-top: -35px;
+        margin-bottom: 12px;
+    ">
+        megor.ai
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
     f"""
     **{t("brand_tagline")}**
     """
 )
+
+
 
 user_email = getattr(
     st.session_state.user,

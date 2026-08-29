@@ -124,7 +124,7 @@ TEXT = {
 
     # 登录提示
     "sign_in_to_account": "登录到你的账户",
-    "brand_tagline": "多个 AI,一场对话,由你主导。",
+    "brand_tagline": "多个 AI, 一场对话, 由你主导。",
     "brand_description": "全球首个由用户主导、多 AI 协同讨论的平台。",
     "login_title": "登录你的账户",
 
