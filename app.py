@@ -1736,7 +1736,7 @@ if submission and (prompt or uploaded_file):
     st.session_state.processing = True
 
 if st.session_state.processing:
-    if not prompt:
+    if not prompt and not uploaded_file:
         st.session_state.processing = False
         st.stop()
 
@@ -1850,6 +1850,7 @@ if st.session_state.processing:
     self_deciding_search_mode = (
         selected_model_before_routing in SELF_DECIDING_SEARCH_MODELS
         and not has_image
+        and not has_document
     )
 
     # ChatGPT 专用 unified Responses 标记。
