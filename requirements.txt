@@ -12,3 +12,5 @@ pydantic-core==2.46.4
 google-genai
 uvicorn
 fastapi
+pypdf>=5.0.0
+python-docx>=1.1.0

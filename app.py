@@ -34,6 +34,12 @@ from services.history_service import (
     load_sessions,
     update_chat_title_if_needed,
 )
+from services.file_service import (
+    build_document_prompt,
+    is_document_file,
+    is_image_file,
+)
+
 from services.task_classifier import classify_task
 from services.subscription_service import get_customer_portal_url
 from services.usage_service import (
@@ -1638,13 +1644,21 @@ render_chat_messages(
 
 
 # ====================== Upload + Chat Input ======================
-
-
-
 submission = st.chat_input(
     t("ask_anything"),
     accept_file=True,
-    file_type=["png", "jpg", "jpeg"],
+    file_type=[
+        "png",
+        "jpg",
+        "jpeg",
+        "pdf",
+        "docx",
+        "txt",
+        "md",
+        "py",
+        "json",
+        "csv",
+    ],
     max_upload_size=20,
     key="main_chat_input",
 )
@@ -1656,6 +1670,17 @@ if submission:
 
     if submission.files:
         uploaded_file = submission.files[0]
+
+
+has_image = (
+    uploaded_file is not None
+    and is_image_file(uploaded_file)
+)
+
+has_document = (
+    uploaded_file is not None
+    and is_document_file(uploaded_file)
+)
 
 # ====================== Process User Input ======================
 if submission and (prompt or uploaded_file):
@@ -1689,7 +1714,7 @@ if submission and (prompt or uploaded_file):
         st.stop()
 
     # 本次包含图片时，再检查图片额度
-    if uploaded_file and not can_use_image(
+    if has_image and not can_use_image(
         supabase_admin,
         user_id,
         user_plan,
@@ -1724,12 +1749,58 @@ if st.session_state.processing:
     # ==================================================
     user_content = prompt
 
-    if uploaded_file:
-        b64 = base64.b64encode(uploaded_file.getvalue()).decode()
+    # ====================== Image ======================
+    if has_image:
+        file_bytes = (
+            uploaded_file.getvalue()
+        )
+
+        b64 = base64.b64encode(
+            file_bytes
+        ).decode()
+
+        mime_type = (
+            uploaded_file.type
+            or "image/jpeg"
+        )
+
         user_content = [
-            {"type": "text", "text": prompt or t("describe_image")},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+            {
+                "type": "text",
+                "text": (
+                    prompt
+                    or t("describe_image")
+                ),
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": (
+                        f"data:{mime_type};"
+                        f"base64,{b64}"
+                    )
+                },
+            },
         ]
+
+    # ====================== Document ======================
+    elif has_document:
+        try:
+            user_content = (
+                build_document_prompt(
+                    uploaded_file,
+                    prompt,
+                )
+            )
+
+        except Exception as file_error:
+            st.error(
+                f"无法读取文件："
+                f"{file_error}"
+            )
+
+            st.session_state.processing = False
+            st.stop()
 
     st.session_state.messages.append({"role": "user", "content": user_content})
 
@@ -1770,7 +1841,7 @@ if st.session_state.processing:
     if st.session_state.auto_mode:
         route_decision = route_auto_model(
             prompt,
-            has_image=bool(uploaded_file),
+            has_image=has_image,
         )
         st.session_state.selected_model = route_decision.model
 
@@ -1778,7 +1849,7 @@ if st.session_state.processing:
 
     self_deciding_search_mode = (
         selected_model_before_routing in SELF_DECIDING_SEARCH_MODELS
-        and not bool(uploaded_file)
+        and not has_image
     )
 
     # ChatGPT 专用 unified Responses 标记。
@@ -1789,7 +1860,7 @@ if st.session_state.processing:
 
     task_info = classify_task(
         prompt,
-        has_image=bool(uploaded_file),
+        has_image=has_image,
         skip_ai_freshness=self_deciding_search_mode,
     )
 
@@ -3250,7 +3321,7 @@ if st.session_state.processing:
                     user_id,
                 )
 
-                if uploaded_file:
+                if has_image:
                     increase_image_usage(
                         supabase_admin,
                         user_id,
