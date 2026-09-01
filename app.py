@@ -261,6 +261,18 @@ components.html(
             bottomContainer.style.removeProperty(
                 "transition"
             );
+
+            /*
+            * Streamlit / WebView 有时会保留 transform 的
+            * 已计算位置，再强制触发一次 layout。
+            */
+            void bottomContainer.offsetHeight;
+
+            requestAnimationFrame(() => {
+                bottomContainer.style.removeProperty(
+                    "transform"
+                );
+            });
         }
 
         function applyKeyboardOffset(data) {
@@ -408,51 +420,103 @@ components.html(
         /*
          * 键盘关闭 / 页面重新获得焦点时兜底恢复。
          */
-        function resetWhenKeyboardClosed() {
-            const viewport =
-                parentWindow.visualViewport;
+        function checkMedianKeyboardState() {
+            const median = parentWindow.median;
 
-            if (!viewport) {
+            if (
+                !median
+                || !median.keyboard
+                || typeof median.keyboard.info !== "function"
+            ) {
                 return;
             }
 
-            const coveredHeight = Math.max(
-                0,
-                parentWindow.innerHeight
-                    - viewport.height
-                    - viewport.offsetTop
-            );
+            try {
+                const result = median.keyboard.info();
 
-            if (coveredHeight < 40) {
-                resetKeyboardOffset();
+                /*
+                * 新版 Median 可以返回 Promise。
+                */
+                if (
+                    result
+                    && typeof result.then === "function"
+                ) {
+                    result
+                        .then((data) => {
+                            if (
+                                data
+                                && data.visible === false
+                            ) {
+                                resetKeyboardOffset();
+                            }
+                        })
+                        .catch(() => {});
+
+                    return;
+                }
+
+                /*
+                * 如果当前 Bridge 版本支持 callback 方式，
+                * 再使用 callback 获取状态。
+                */
+                median.keyboard.info({
+                    callback: function(data) {
+                        if (
+                            data
+                            && data.visible === false
+                        ) {
+                            resetKeyboardOffset();
+                        }
+                    }
+                });
+
+            } catch (error) {
+                // 不影响正常聊天
             }
         }
 
 
         /*
-        * Android 收起软键盘时不一定触发 window focus，
-        * 所以同时监听 visualViewport 和 window resize。
+        * Android 某些 WebView 在关闭键盘时不会稳定触发
+        * visualViewport / window resize。
+        *
+        * 所以除事件监听外，再短周期主动询问 Median
+        * 原生 Keyboard Bridge 当前键盘是否仍然可见。
         */
         if (parentWindow.visualViewport) {
             parentWindow.visualViewport.addEventListener(
                 "resize",
-                resetWhenKeyboardClosed
+                checkMedianKeyboardState
             );
 
             parentWindow.visualViewport.addEventListener(
                 "scroll",
-                resetWhenKeyboardClosed
+                checkMedianKeyboardState
             );
         }
 
         parentWindow.addEventListener(
             "resize",
-            resetWhenKeyboardClosed
+            checkMedianKeyboardState
         );
 
         parentWindow.addEventListener(
             "focus",
-            resetWhenKeyboardClosed
+            checkMedianKeyboardState
+        );
+
+
+        /*
+        * 兜底轮询。
+        *
+        * 只在 Median App 内执行。
+        * 500ms 检查一次，开销极小。
+        */
+        parentWindow.setInterval(
+            () => {
+                checkMedianKeyboardState();
+            },
+            500
         );
     })();
     </script>
