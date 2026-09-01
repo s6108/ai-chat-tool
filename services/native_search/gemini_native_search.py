@@ -81,7 +81,7 @@ class GeminiNativeSearch(BaseNativeSearch):
             context_lines: list[str] = []
 
             if messages:
-                for message in messages[-2:]:
+                for message in messages[-24:]:
                     role = message.get("role")
                     content = message.get("content")
 
@@ -101,9 +101,6 @@ class GeminiNativeSearch(BaseNativeSearch):
 
                     if not content:
                         continue
-
-                    if len(content) > 800:
-                        content = content[:800]
 
                     context_lines.append(
                         f"{role.upper()}: {content}"
@@ -465,8 +462,7 @@ class GeminiNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    if len(content) > 1500:
-                        content = content[:1500]
+                    
 
                     context_lines.append(
                         f"{role.upper()}: {content}"

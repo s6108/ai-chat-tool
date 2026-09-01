@@ -117,7 +117,7 @@ class GrokNativeSearch(BaseNativeSearch):
             recent_context: list[dict[str, Any]] = []
 
             if messages:
-                for message in messages[-2:]:
+                for message in messages[-24:]:
                     role = message.get("role")
                     content = message.get("content")
 
@@ -131,8 +131,7 @@ class GrokNativeSearch(BaseNativeSearch):
                         continue
                     if role == "user" and content == query:
                         continue
-                    if len(content) > 800:
-                        content = content[:800]
+                    
 
                     recent_context.append(
                         {"role": role, "content": content}
@@ -482,9 +481,8 @@ class GrokNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    # 防止长历史占满上下文
-                    if len(content) > 1500:
-                        content = content[:1500]
+                    
+                    
 
                     input_messages.append(
                         {

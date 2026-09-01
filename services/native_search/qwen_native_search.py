@@ -93,7 +93,7 @@ class QwenNativeSearch(BaseNativeSearch):
             history = []
 
             if messages:
-                history = messages[-4:]
+                history = messages[-24:]
 
                 if history:
                     last = history[-1]
@@ -122,8 +122,7 @@ class QwenNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    if len(content) > 1000:
-                        content = content[:1000]
+                    
 
                     input_messages.append(
                         {
@@ -484,8 +483,7 @@ class QwenNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    if len(content) > 1000:
-                        content = content[:1000]
+                   
 
                     input_messages.append(
                         {

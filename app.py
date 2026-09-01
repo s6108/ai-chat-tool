@@ -1792,6 +1792,12 @@ if st.session_state.processing:
                     prompt,
                 )
             )
+            file_display = (
+                f"📄 **{uploaded_file.name}**"
+            )
+
+            if prompt:
+                file_display += f"\n\n{prompt}"
 
         except Exception as file_error:
             st.error(
@@ -1802,7 +1808,17 @@ if st.session_state.processing:
             st.session_state.processing = False
             st.stop()
 
-    st.session_state.messages.append({"role": "user", "content": user_content})
+    message_data = {
+        "role": "user",
+        "content": user_content,
+    }
+
+    if has_document:
+        message_data["display_content"] = file_display
+
+    st.session_state.messages.append(
+        message_data
+    )
 
     display_user_text = prompt if prompt else t("image_uploaded")
     content_to_save = (
@@ -1814,7 +1830,10 @@ if st.session_state.processing:
     # 用户消息先只进入本地 session_state；
     # 数据库持久化延后到模型完整回答之后。
     with st.chat_message("user", avatar=USER_AVATAR):
-        render_user_content(user_content)
+        if has_document:
+            st.markdown(file_display)
+        else:
+            render_user_content(user_content)
 
     print(
         f"⏱️ [PERF] session+render = "
@@ -2042,7 +2061,7 @@ if st.session_state.processing:
             api_messages = prepare_messages(
                 selected_model_name,
                 st.session_state.messages,
-                history_limit=12,
+                history_limit=24,
             )
 
             selected_max_tokens = 1200
@@ -2206,20 +2225,50 @@ if st.session_state.processing:
                                     [],
                                 )
 
-                                if len(session_messages) >= 3:
-                                    previous_user = session_messages[-3]
-                                    previous_assistant = session_messages[-2]
-                                    current_message = session_messages[-1]
+                                # 当前用户消息已经是最后一条，
+                                # Native Search 只取它之前的历史。
+                                history_messages = (
+                                    session_messages[:-1]
+                                    if session_messages
+                                    else []
+                                )
 
-                                    if (
-                                        previous_user.get("role") == "user"
-                                        and previous_assistant.get("role") == "assistant"
-                                        and current_message.get("role") == "user"
-                                    ):
-                                        native_context_messages = [
-                                            previous_user,
-                                            previous_assistant,
-                                        ]
+                                for message in history_messages[-24:]:
+                                    role = message.get("role")
+                                    content = message.get("content")
+
+                                    if role not in {
+                                        "user",
+                                        "assistant",
+                                    }:
+                                        continue
+
+                                    if not isinstance(content, str):
+                                        continue
+
+                                    content = content.strip()
+
+                                    if not content:
+                                        continue
+
+                                    if role == "assistant":
+                                        speaker = (
+                                            message.get("model_name")
+                                            or message.get("model")
+                                            or "Megor"
+                                        )
+
+                                        content = (
+                                            f"[MODEL={speaker}]\n"
+                                            f"{content}"
+                                        )
+
+                                    native_context_messages.append(
+                                        {
+                                            "role": role,
+                                            "content": content,
+                                        }
+                                    )
                             else:
                                 native_context_messages = api_messages
 
@@ -2393,7 +2442,7 @@ if st.session_state.processing:
                         else:
                             print(
                                 f"⚠️ {selected_model_name} 原生搜索失败，"
-                                "进入 Tavily Safety Net"
+                                "不使用 Tavily fallback"
                             )
 
                             if native_search_response.error:
@@ -2501,10 +2550,14 @@ if st.session_state.processing:
                         )
 
                 # ==================================================
-                # 原生搜索失败 / 当前模型尚未接原生搜索
-                # → Tavily Safety Net
+                # DeepSeek 专用 Tavily 搜索
+                #
+                # 最终架构：
+                # - DeepSeek 不使用 Native Search，联网时使用 Tavily。
+                # - 其他模型只使用各自 Native Search。
+                # - 其他模型 Native Search 失败时，不进入 Tavily。
                 # ==================================================
-                else:
+                elif selected_model_name == "DeepSeek":
                     
                     # Reuse the Qwen freshness decision already made by
                     # classify_task(). Do not call the judge a second time.
@@ -2948,11 +3001,45 @@ if st.session_state.processing:
                         *api_messages,
                     ]
 
+                # ==================================================
+                # 非 DeepSeek 模型：
+                # Native Search 失败后不允许退回 Tavily
+                # ==================================================
+                else:
+                    status_placeholder.empty()
+
+                    native_error = ""
+
+                    if native_search_response is not None:
+                        native_error = (
+                            native_search_response.error
+                            or ""
+                        )
+
+                    print(
+                        f"❌ {selected_model_name} "
+                        "Native Search failed; "
+                        "Tavily fallback disabled."
+                    )
+
+                    if native_error:
+                        print(
+                            "   原因：",
+                            native_error,
+                        )
+
+                    placeholder.error(
+                        f"{selected_model_name} 联网搜索失败，"
+                        "请稍后重试。"
+                    )
+
+                    st.session_state.processing = False
+                    st.stop()
+
             else:
                 print("📚 不需要联网")
 
             
-
             # ==================================================
             # 原生搜索已经生成最终答案
             # → 直接显示
@@ -3342,7 +3429,6 @@ if st.session_state.processing:
 
             if uploaded_file:
                 st.session_state.uploader_key += 1
-                st.session_state.selected_model = "DeepSeek"
                 
 
             # 每次成功回答后刷新页面，让侧边栏用量立即更新

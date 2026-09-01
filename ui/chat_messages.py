@@ -38,8 +38,64 @@ def clean_repeated_speaker_label(
 
     return cleaned.lstrip()
 
+def _get_document_display_content(content):
+    """
+    如果 content 是 Megor 文件理解生成的文档消息，
+    返回适合聊天界面显示的紧凑文件卡片文字。
+
+    普通消息返回 None。
+    """
+
+    if not isinstance(content, str):
+        return None
+
+    prefix = 'The user uploaded a file named "'
+    file_start = "===== FILE CONTENT ====="
+    file_end = "===== END FILE CONTENT ====="
+    request_marker = "User request:"
+
+    # 必须同时包含这些标记，避免误判普通聊天内容
+    if (
+        not content.startswith(prefix)
+        or file_start not in content
+        or file_end not in content
+    ):
+        return None
+
+    # 提取文件名
+    remaining = content[len(prefix):]
+    quote_pos = remaining.find('"')
+
+    if quote_pos == -1:
+        return None
+
+    filename = remaining[:quote_pos].strip()
+
+    # 提取用户真正输入的问题
+    user_request = ""
+
+    if request_marker in content:
+        user_request = (
+            content
+            .split(request_marker, 1)[1]
+            .strip()
+        )
+
+    display_text = f"📄 **{filename}**"
+
+    if user_request:
+        display_text += f"\n\n{user_request}"
+
+    return display_text
 
 def render_user_content(content):
+    document_display = _get_document_display_content(
+        content
+    )
+
+    if document_display is not None:
+        st.markdown(document_display)
+        return
     if isinstance(content, str):
         st.markdown(content)
         return

@@ -121,8 +121,7 @@ class DoubaoNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    if len(content) > 1500:
-                        content = content[:1500]
+                   
 
                     input_messages.append(
                         {
@@ -461,7 +460,7 @@ class DoubaoNativeSearch(BaseNativeSearch):
             # 只保留 user + assistant
             # ==================================================
             if messages:
-                for message in messages[-8:]:
+                for message in messages[-24:]:
                     role = message.get("role")
                     content = message.get("content")
 
@@ -479,8 +478,7 @@ class DoubaoNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    if len(content) > 1500:
-                        content = content[:1500]
+                   
 
                     input_messages.append(
                         {

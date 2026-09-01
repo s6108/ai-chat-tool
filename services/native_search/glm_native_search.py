@@ -57,7 +57,7 @@ class GLMNativeSearch(BaseNativeSearch):
             }
         ]
 
-        history = list(messages[-8:]) if messages else []
+        history = list(messages[-24:]) if messages else []
 
         if history:
             last = history[-1]
@@ -80,8 +80,7 @@ class GLMNativeSearch(BaseNativeSearch):
             content = content.strip()
             if not content:
                 continue
-            if len(content) > 1500:
-                content = content[:1500]
+           
 
             glm_messages.append({"role": role, "content": content})
 

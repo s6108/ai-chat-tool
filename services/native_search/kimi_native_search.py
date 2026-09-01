@@ -234,8 +234,7 @@ class KimiNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    if len(content) > 1500:
-                        content = content[:1500]
+                   
 
                     kimi_messages.append(
                         {
@@ -546,7 +545,7 @@ class KimiNativeSearch(BaseNativeSearch):
             # 只保留 user + assistant，避免多个 system
             # ==================================================
             if messages:
-                for message in messages[-8:]:
+                for message in messages[-24:]:
                     role = message.get("role")
                     content = message.get("content")
 
@@ -564,8 +563,7 @@ class KimiNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    if len(content) > 1500:
-                        content = content[:1500]
+                    
 
                     kimi_messages.append(
                         {

@@ -113,7 +113,7 @@ class ClaudeNativeSearch(BaseNativeSearch):
             claude_messages: list[dict[str, Any]] = []
 
             if messages:
-                for message in messages[-2:]:
+                for message in messages[-24:]:
                     role = message.get("role")
                     content = message.get("content")
 
@@ -140,8 +140,6 @@ class ClaudeNativeSearch(BaseNativeSearch):
                     ):
                         continue
 
-                    if len(content) > 800:
-                        content = content[:800]
 
                     claude_messages.append(
                         {
@@ -540,7 +538,7 @@ class ClaudeNativeSearch(BaseNativeSearch):
             context_lines: list[str] = []
 
             if messages:
-                for message in messages[-8:]:
+                for message in messages[-24:]:
                     role = message.get("role")
                     content = message.get("content")
 
@@ -558,9 +556,6 @@ class ClaudeNativeSearch(BaseNativeSearch):
                     if not content:
                         continue
 
-                    # 防止历史长回答占满上下文
-                    if len(content) > 1500:
-                        content = content[:1500]
 
                     context_lines.append(
                         f"{role.upper()}: {content}"

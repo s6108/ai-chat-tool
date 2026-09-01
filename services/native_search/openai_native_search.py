@@ -512,7 +512,7 @@ class OpenAINativeSearch(BaseNativeSearch):
 
             if messages:
 
-                for message in messages[-2:]:
+                for message in messages[-24:]:
 
                     role = message.get("role")
                     content = message.get("content")
@@ -542,10 +542,7 @@ class OpenAINativeSearch(BaseNativeSearch):
                     ):
                         continue
 
-                    # Native Search 只需要知道最近语境，
-                    # 不需要把整篇历史答案全部重新发送。
-                    if len(content) > 800:
-                        content = content[:800]
+                   
 
                     recent_context.append(
                         {
