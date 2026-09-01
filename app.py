@@ -275,33 +275,32 @@ components.html(
                 return;
             }
 
-            const keyboardHeight = Number(
+            const keyboardHeightRaw = Number(
                 data.keyboardWindowSize?.height || 0
             );
 
-            const visibleHeight = Number(
-                data.visibleWindowSize?.height || 0
+            /*
+            * Median Android Bridge 返回的键盘高度可能使用
+            * Android native pixels，而 CSS transform 使用 CSS pixels。
+            *
+            * 必须除以 devicePixelRatio，否则高 DPI 手机/平板
+            * 会把输入框上移两三倍距离。
+            */
+            const dpr = Math.max(
+                1,
+                Number(parentWindow.devicePixelRatio || 1)
             );
 
-            /*
-             * Android WebView 有两种情况：
-             *
-             * 1. WebView 已经随着键盘 resize：
-             *    此时输入框通常已经处于 visible viewport 内，
-             *    不应再次上移完整 keyboardHeight。
-             *
-             * 2. WebView 没有 resize：
-             *    键盘覆盖页面，需要把输入区域上移。
-             *
-             * 先通过 visualViewport 判断实际被遮挡高度，
-             * Median Bridge 提供的 keyboardHeight 作为兜底。
-             */
-            const viewport = parentWindow.visualViewport;
+            const keyboardHeightCss =
+                keyboardHeightRaw / dpr;
 
-            let coveredHeight = 0;
+            const viewport =
+                parentWindow.visualViewport;
+
+            let viewportCoveredHeight = 0;
 
             if (viewport) {
-                coveredHeight = Math.max(
+                viewportCoveredHeight = Math.max(
                     0,
                     parentWindow.innerHeight
                         - viewport.height
@@ -309,22 +308,36 @@ components.html(
                 );
             }
 
-            if (
-                coveredHeight < 40
-                && keyboardHeight > 0
-                && visibleHeight > 0
-            ) {
-                coveredHeight = keyboardHeight;
+            /*
+            * 优先使用 visualViewport 的 CSS 像素高度。
+            * 如果 Median WebView 不改变 visualViewport，
+            * 再使用经过 DPR 换算后的原生键盘高度。
+            */
+            let offset = viewportCoveredHeight;
+
+            if (offset < 40) {
+                offset = keyboardHeightCss;
             }
 
-            if (coveredHeight < 40) {
+            /*
+            * 防止极端设备返回异常值。
+            */
+            offset = Math.max(
+                0,
+                Math.min(
+                    offset,
+                    parentWindow.innerHeight * 0.55
+                )
+            );
+
+            if (offset < 40) {
                 resetKeyboardOffset();
                 return;
             }
 
             bottomContainer.style.setProperty(
                 "transform",
-                `translateY(-${coveredHeight}px)`,
+                `translateY(-${offset}px)`,
                 "important"
             );
 
@@ -333,19 +346,6 @@ components.html(
                 "transform 0.12s ease-out",
                 "important"
             );
-
-            requestAnimationFrame(() => {
-                const input = parentDocument.querySelector(
-                    '[data-testid="stChatInput"] textarea'
-                );
-
-                if (input) {
-                    input.scrollIntoView({
-                        block: "nearest",
-                        behavior: "smooth",
-                    });
-                }
-            });
         }
 
         /*
@@ -408,19 +408,51 @@ components.html(
         /*
          * 键盘关闭 / 页面重新获得焦点时兜底恢复。
          */
+        function resetWhenKeyboardClosed() {
+            const viewport =
+                parentWindow.visualViewport;
+
+            if (!viewport) {
+                return;
+            }
+
+            const coveredHeight = Math.max(
+                0,
+                parentWindow.innerHeight
+                    - viewport.height
+                    - viewport.offsetTop
+            );
+
+            if (coveredHeight < 40) {
+                resetKeyboardOffset();
+            }
+        }
+
+
+        /*
+        * Android 收起软键盘时不一定触发 window focus，
+        * 所以同时监听 visualViewport 和 window resize。
+        */
+        if (parentWindow.visualViewport) {
+            parentWindow.visualViewport.addEventListener(
+                "resize",
+                resetWhenKeyboardClosed
+            );
+
+            parentWindow.visualViewport.addEventListener(
+                "scroll",
+                resetWhenKeyboardClosed
+            );
+        }
+
+        parentWindow.addEventListener(
+            "resize",
+            resetWhenKeyboardClosed
+        );
+
         parentWindow.addEventListener(
             "focus",
-            () => {
-                if (
-                    parentWindow.visualViewport
-                    && Math.abs(
-                        parentWindow.innerHeight
-                        - parentWindow.visualViewport.height
-                    ) < 40
-                ) {
-                    resetKeyboardOffset();
-                }
-            }
+            resetWhenKeyboardClosed
         );
     })();
     </script>
