@@ -220,6 +220,215 @@ components.html(
     width=0,
 )
 
+# ====================== Median Android Keyboard Fix ======================
+components.html(
+    """
+    <script>
+    (() => {
+        const parentWindow = window.parent;
+        const parentDocument = parentWindow.document;
+
+        // 防止 Streamlit rerun 后重复安装监听器
+        if (parentWindow.__megorMedianKeyboardInstalled) {
+            return;
+        }
+
+        parentWindow.__megorMedianKeyboardInstalled = true;
+
+        function getBottomContainer() {
+            return (
+                parentDocument.querySelector(
+                    '[data-testid="stBottom"]'
+                )
+                ||
+                parentDocument.querySelector(
+                    '[data-testid="stChatInput"]'
+                )?.parentElement
+            );
+        }
+
+        function resetKeyboardOffset() {
+            const bottomContainer = getBottomContainer();
+
+            if (!bottomContainer) {
+                return;
+            }
+
+            bottomContainer.style.removeProperty(
+                "transform"
+            );
+
+            bottomContainer.style.removeProperty(
+                "transition"
+            );
+        }
+
+        function applyKeyboardOffset(data) {
+            const bottomContainer = getBottomContainer();
+
+            if (!bottomContainer) {
+                return;
+            }
+
+            if (!data || !data.visible) {
+                resetKeyboardOffset();
+                return;
+            }
+
+            const keyboardHeight = Number(
+                data.keyboardWindowSize?.height || 0
+            );
+
+            const visibleHeight = Number(
+                data.visibleWindowSize?.height || 0
+            );
+
+            /*
+             * Android WebView 有两种情况：
+             *
+             * 1. WebView 已经随着键盘 resize：
+             *    此时输入框通常已经处于 visible viewport 内，
+             *    不应再次上移完整 keyboardHeight。
+             *
+             * 2. WebView 没有 resize：
+             *    键盘覆盖页面，需要把输入区域上移。
+             *
+             * 先通过 visualViewport 判断实际被遮挡高度，
+             * Median Bridge 提供的 keyboardHeight 作为兜底。
+             */
+            const viewport = parentWindow.visualViewport;
+
+            let coveredHeight = 0;
+
+            if (viewport) {
+                coveredHeight = Math.max(
+                    0,
+                    parentWindow.innerHeight
+                        - viewport.height
+                        - viewport.offsetTop
+                );
+            }
+
+            if (
+                coveredHeight < 40
+                && keyboardHeight > 0
+                && visibleHeight > 0
+            ) {
+                coveredHeight = keyboardHeight;
+            }
+
+            if (coveredHeight < 40) {
+                resetKeyboardOffset();
+                return;
+            }
+
+            bottomContainer.style.setProperty(
+                "transform",
+                `translateY(-${coveredHeight}px)`,
+                "important"
+            );
+
+            bottomContainer.style.setProperty(
+                "transition",
+                "transform 0.12s ease-out",
+                "important"
+            );
+
+            requestAnimationFrame(() => {
+                const input = parentDocument.querySelector(
+                    '[data-testid="stChatInput"] textarea'
+                );
+
+                if (input) {
+                    input.scrollIntoView({
+                        block: "nearest",
+                        behavior: "smooth",
+                    });
+                }
+            });
+        }
+
+        /*
+         * Median JavaScript Bridge 只存在于 Median App。
+         * 普通浏览器 / PWA 不执行下面的 Median 逻辑。
+         */
+        function installMedianKeyboardListener() {
+            const median = parentWindow.median;
+
+            if (
+                !median
+                || !median.keyboard
+                || typeof median.keyboard.listen !== "function"
+            ) {
+                return false;
+            }
+
+            try {
+                median.keyboard.listen(
+                    (data) => {
+                        applyKeyboardOffset(data);
+                    }
+                );
+
+                console.log(
+                    "✅ Megor Median keyboard listener installed"
+                );
+
+                return true;
+            } catch (error) {
+                console.warn(
+                    "Megor Median keyboard listener failed:",
+                    error
+                );
+
+                return false;
+            }
+        }
+
+        /*
+         * Median Bridge 有可能比 Streamlit component
+         * 稍晚注入，所以短时间重试。
+         */
+        let attempts = 0;
+
+        const timer = parentWindow.setInterval(
+            () => {
+                attempts += 1;
+
+                if (
+                    installMedianKeyboardListener()
+                    || attempts >= 20
+                ) {
+                    parentWindow.clearInterval(timer);
+                }
+            },
+            250
+        );
+
+        /*
+         * 键盘关闭 / 页面重新获得焦点时兜底恢复。
+         */
+        parentWindow.addEventListener(
+            "focus",
+            () => {
+                if (
+                    parentWindow.visualViewport
+                    && Math.abs(
+                        parentWindow.innerHeight
+                        - parentWindow.visualViewport.height
+                    ) < 40
+                ) {
+                    resetKeyboardOffset();
+                }
+            }
+        );
+    })();
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
 
 # ====================== Environment Config ======================
 
