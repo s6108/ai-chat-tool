@@ -228,36 +228,6 @@ components.html(
         const parentWindow = window.parent;
         const parentDocument = parentWindow.document;
 
-        function showKeyboardDebug(text) {
-            let box = parentDocument.getElementById(
-                "megor-keyboard-debug"
-            );
-
-            if (!box) {
-                box = parentDocument.createElement("div");
-                box.id = "megor-keyboard-debug";
-
-                box.style.position = "fixed";
-                box.style.top = "70px";
-                box.style.left = "10px";
-                box.style.zIndex = "999999";
-                box.style.background = "rgba(0,0,0,0.8)";
-                box.style.color = "white";
-                box.style.padding = "8px";
-                box.style.fontSize = "12px";
-                box.style.fontFamily = "monospace";
-                box.style.whiteSpace = "pre-wrap";
-                box.style.borderRadius = "6px";
-
-                parentDocument.body.appendChild(box);
-            }
-
-            box.textContent = text;
-        }
-
-        // 先显示脚本已经真正执行，避免把“没有回调”误判为“脚本没加载”。
-        showKeyboardDebug("SCRIPT LOADED\\nwaiting for Median Bridge...");
-
         function getBottomContainer() {
             return (
                 parentDocument.querySelector(
@@ -359,15 +329,6 @@ components.html(
         }
 
         function renderKeyboardState(source, data) {
-            showKeyboardDebug(
-                source + "\\n"
-                + "visible = " + data?.visible + "\\n"
-                + "keyboardHeight = "
-                + data?.keyboardWindowSize?.height + "\\n"
-                + "visibleHeight = "
-                + data?.visibleWindowSize?.height
-            );
-
             applyKeyboardOffset(data);
         }
 
@@ -379,8 +340,8 @@ components.html(
                 || !median.keyboard
                 || typeof median.keyboard.listen !== "function"
             ) {
-                showKeyboardDebug(
-                    "WAITING\\nMedian keyboard bridge not ready"
+                console.log(
+                    "Megor Median keyboard bridge not ready"
                 );
                 return false;
             }
@@ -409,16 +370,16 @@ components.html(
                     }
                 );
 
-                showKeyboardDebug(
-                    "LISTENER INSTALLED\\nwaiting for keyboard..."
+                console.log(
+                    "Megor Median keyboard listener installed"
                 );
 
                 return true;
 
             } catch (error) {
-                showKeyboardDebug(
-                    "LISTEN ERROR\\n"
-                    + String(error)
+                console.warn(
+                    "Megor Median keyboard listener error:",
+                    error
                 );
                 return false;
             }
@@ -445,9 +406,9 @@ components.html(
                 );
 
             } catch (error) {
-                showKeyboardDebug(
-                    "INFO ERROR\\n"
-                    + String(error)
+                console.warn(
+                    "Megor Median keyboard info error:",
+                    error
                 );
             }
         }
@@ -1402,31 +1363,7 @@ components.html(
         const parentWindow = window.parent;
         const parentDocument = parentWindow.document;
 
-        function showKeyboardDebug(text) {
-            let box = parentDocument.getElementById(
-                "megor-keyboard-debug"
-            );
-
-            if (!box) {
-                box = parentDocument.createElement("div");
-                box.id = "megor-keyboard-debug";
-
-                box.style.position = "fixed";
-                box.style.top = "70px";
-                box.style.left = "10px";
-                box.style.zIndex = "999999";
-                box.style.background = "rgba(0,0,0,0.8)";
-                box.style.color = "white";
-                box.style.padding = "8px";
-                box.style.fontSize = "12px";
-                box.style.fontFamily = "monospace";
-                box.style.whiteSpace = "pre-wrap";
-
-                parentDocument.body.appendChild(box);
-            }
-
-            box.textContent = text;
-        }
+        
 
         if (parentWindow.__megorVisibilityRefreshInstalled) {
             return;
