@@ -228,6 +228,33 @@ components.html(
         const parentWindow = window.parent;
         const parentDocument = parentWindow.document;
 
+        function showKeyboardDebug(text) {
+            let box = parentDocument.getElementById(
+                "megor-keyboard-debug"
+            );
+
+            if (!box) {
+                box = parentDocument.createElement("div");
+                box.id = "megor-keyboard-debug";
+
+                box.style.position = "fixed";
+                box.style.top = "70px";
+                box.style.left = "10px";
+                box.style.zIndex = "999999";
+                box.style.background = "rgba(0,0,0,0.8)";
+                box.style.color = "white";
+                box.style.padding = "8px";
+                box.style.fontSize = "12px";
+                box.style.fontFamily = "monospace";
+                box.style.whiteSpace = "pre-wrap";
+                box.style.borderRadius = "6px";
+
+                parentDocument.body.appendChild(box);
+            }
+
+            box.textContent = text;
+        }
+
         // 防止 Streamlit rerun 后重复安装监听器
         if (parentWindow.__megorMedianKeyboardInstalled) {
             return;
@@ -378,6 +405,15 @@ components.html(
             try {
                 median.keyboard.listen(
                     (data) => {
+                        showKeyboardDebug(
+                            "LISTEN\n"
+                            + "visible = " + data?.visible + "\n"
+                            + "keyboardHeight = "
+                            + data?.keyboardWindowSize?.height + "\n"
+                            + "visibleHeight = "
+                            + data?.visibleWindowSize?.height
+                        );
+
                         applyKeyboardOffset(data);
                     }
                 );
@@ -420,7 +456,7 @@ components.html(
         /*
          * 键盘关闭 / 页面重新获得焦点时兜底恢复。
          */
-        function checkMedianKeyboardState() {
+        async function checkMedianKeyboardState() {
             const median = parentWindow.median;
 
             if (
@@ -432,46 +468,30 @@ components.html(
             }
 
             try {
-                const result = median.keyboard.info();
+                const data =
+                    await median.keyboard.info();
 
-                /*
-                * 新版 Median 可以返回 Promise。
-                */
+                showKeyboardDebug(
+                    "INFO\n"
+                    + "visible = " + data?.visible + "\n"
+                    + "keyboardHeight = "
+                    + data?.keyboardWindowSize?.height + "\n"
+                    + "visibleHeight = "
+                    + data?.visibleWindowSize?.height
+                );
+
                 if (
-                    result
-                    && typeof result.then === "function"
+                    data
+                    && data.visible === false
                 ) {
-                    result
-                        .then((data) => {
-                            if (
-                                data
-                                && data.visible === false
-                            ) {
-                                resetKeyboardOffset();
-                            }
-                        })
-                        .catch(() => {});
-
-                    return;
+                    resetKeyboardOffset();
                 }
 
-                /*
-                * 如果当前 Bridge 版本支持 callback 方式，
-                * 再使用 callback 获取状态。
-                */
-                median.keyboard.info({
-                    callback: function(data) {
-                        if (
-                            data
-                            && data.visible === false
-                        ) {
-                            resetKeyboardOffset();
-                        }
-                    }
-                });
-
             } catch (error) {
-                // 不影响正常聊天
+                showKeyboardDebug(
+                    "INFO ERROR\n"
+                    + String(error)
+                );
             }
         }
 
@@ -524,7 +544,6 @@ components.html(
     height=0,
     width=0,
 )
-
 
 # ====================== Environment Config ======================
 
@@ -1402,6 +1421,32 @@ components.html(
     (() => {
         const parentWindow = window.parent;
         const parentDocument = parentWindow.document;
+
+        function showKeyboardDebug(text) {
+            let box = parentDocument.getElementById(
+                "megor-keyboard-debug"
+            );
+
+            if (!box) {
+                box = parentDocument.createElement("div");
+                box.id = "megor-keyboard-debug";
+
+                box.style.position = "fixed";
+                box.style.top = "70px";
+                box.style.left = "10px";
+                box.style.zIndex = "999999";
+                box.style.background = "rgba(0,0,0,0.8)";
+                box.style.color = "white";
+                box.style.padding = "8px";
+                box.style.fontSize = "12px";
+                box.style.fontFamily = "monospace";
+                box.style.whiteSpace = "pre-wrap";
+
+                parentDocument.body.appendChild(box);
+            }
+
+            box.textContent = text;
+        }
 
         if (parentWindow.__megorVisibilityRefreshInstalled) {
             return;
