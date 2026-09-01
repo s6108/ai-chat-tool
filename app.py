@@ -255,12 +255,8 @@ components.html(
             box.textContent = text;
         }
 
-        // 防止 Streamlit rerun 后重复安装监听器
-        if (parentWindow.__megorMedianKeyboardInstalled) {
-            return;
-        }
-
-        parentWindow.__megorMedianKeyboardInstalled = true;
+        // 先显示脚本已经真正执行，避免把“没有回调”误判为“脚本没加载”。
+        showKeyboardDebug("SCRIPT LOADED\\nwaiting for Median Bridge...");
 
         function getBottomContainer() {
             return (
@@ -281,24 +277,14 @@ components.html(
                 return;
             }
 
-            bottomContainer.style.removeProperty(
-                "transform"
-            );
+            bottomContainer.style.removeProperty("transform");
+            bottomContainer.style.removeProperty("transition");
 
-            bottomContainer.style.removeProperty(
-                "transition"
-            );
-
-            /*
-            * Streamlit / WebView 有时会保留 transform 的
-            * 已计算位置，再强制触发一次 layout。
-            */
+            // 强制 WebView 重新计算布局，再在下一帧确认 transform 已清除。
             void bottomContainer.offsetHeight;
 
-            requestAnimationFrame(() => {
-                bottomContainer.style.removeProperty(
-                    "transform"
-                );
+            parentWindow.requestAnimationFrame(() => {
+                bottomContainer.style.removeProperty("transform");
             });
         }
 
@@ -309,7 +295,7 @@ components.html(
                 return;
             }
 
-            if (!data || !data.visible) {
+            if (!data || data.visible === false) {
                 resetKeyboardOffset();
                 return;
             }
@@ -318,13 +304,6 @@ components.html(
                 data.keyboardWindowSize?.height || 0
             );
 
-            /*
-            * Median Android Bridge 返回的键盘高度可能使用
-            * Android native pixels，而 CSS transform 使用 CSS pixels。
-            *
-            * 必须除以 devicePixelRatio，否则高 DPI 手机/平板
-            * 会把输入框上移两三倍距离。
-            */
             const dpr = Math.max(
                 1,
                 Number(parentWindow.devicePixelRatio || 1)
@@ -347,20 +326,12 @@ components.html(
                 );
             }
 
-            /*
-            * 优先使用 visualViewport 的 CSS 像素高度。
-            * 如果 Median WebView 不改变 visualViewport，
-            * 再使用经过 DPR 换算后的原生键盘高度。
-            */
             let offset = viewportCoveredHeight;
 
             if (offset < 40) {
                 offset = keyboardHeightCss;
             }
 
-            /*
-            * 防止极端设备返回异常值。
-            */
             offset = Math.max(
                 0,
                 Math.min(
@@ -387,10 +358,19 @@ components.html(
             );
         }
 
-        /*
-         * Median JavaScript Bridge 只存在于 Median App。
-         * 普通浏览器 / PWA 不执行下面的 Median 逻辑。
-         */
+        function renderKeyboardState(source, data) {
+            showKeyboardDebug(
+                source + "\\n"
+                + "visible = " + data?.visible + "\\n"
+                + "keyboardHeight = "
+                + data?.keyboardWindowSize?.height + "\\n"
+                + "visibleHeight = "
+                + data?.visibleWindowSize?.height
+            );
+
+            applyKeyboardOffset(data);
+        }
+
         function installMedianKeyboardListener() {
             const median = parentWindow.median;
 
@@ -399,63 +379,51 @@ components.html(
                 || !median.keyboard
                 || typeof median.keyboard.listen !== "function"
             ) {
+                showKeyboardDebug(
+                    "WAITING\\nMedian keyboard bridge not ready"
+                );
                 return false;
             }
 
             try {
+                /*
+                 * Streamlit 会 rerun，并重新创建这个 component iframe。
+                 * 旧代码使用 parentWindow 上的永久布尔锁，会导致新 iframe
+                 * 直接 return，而旧 listener 又可能已经失效。
+                 *
+                 * Median 官方支持 listen("") 停止旧监听。
+                 * 每次重新安装前先清掉旧 listener，再注册当前 listener。
+                 */
+                try {
+                    median.keyboard.listen("");
+                } catch (stopError) {
+                    // 没有旧 listener 时忽略。
+                }
+
                 median.keyboard.listen(
                     (data) => {
-                        showKeyboardDebug(
-                            "LISTEN\n"
-                            + "visible = " + data?.visible + "\n"
-                            + "keyboardHeight = "
-                            + data?.keyboardWindowSize?.height + "\n"
-                            + "visibleHeight = "
-                            + data?.visibleWindowSize?.height
+                        renderKeyboardState(
+                            "LISTEN",
+                            data
                         );
-
-                        applyKeyboardOffset(data);
                     }
                 );
 
-                console.log(
-                    "✅ Megor Median keyboard listener installed"
+                showKeyboardDebug(
+                    "LISTENER INSTALLED\\nwaiting for keyboard..."
                 );
 
                 return true;
-            } catch (error) {
-                console.warn(
-                    "Megor Median keyboard listener failed:",
-                    error
-                );
 
+            } catch (error) {
+                showKeyboardDebug(
+                    "LISTEN ERROR\\n"
+                    + String(error)
+                );
                 return false;
             }
         }
 
-        /*
-         * Median Bridge 有可能比 Streamlit component
-         * 稍晚注入，所以短时间重试。
-         */
-        let attempts = 0;
-
-        const timer = parentWindow.setInterval(
-            () => {
-                attempts += 1;
-
-                if (
-                    installMedianKeyboardListener()
-                    || attempts >= 20
-                ) {
-                    parentWindow.clearInterval(timer);
-                }
-            },
-            250
-        );
-
-        /*
-         * 键盘关闭 / 页面重新获得焦点时兜底恢复。
-         */
         async function checkMedianKeyboardState() {
             const median = parentWindow.median;
 
@@ -471,46 +439,72 @@ components.html(
                 const data =
                     await median.keyboard.info();
 
-                showKeyboardDebug(
-                    "INFO\n"
-                    + "visible = " + data?.visible + "\n"
-                    + "keyboardHeight = "
-                    + data?.keyboardWindowSize?.height + "\n"
-                    + "visibleHeight = "
-                    + data?.visibleWindowSize?.height
-                );
-
-                if (
+                renderKeyboardState(
+                    "INFO",
                     data
-                    && data.visible === false
-                ) {
-                    resetKeyboardOffset();
-                }
+                );
 
             } catch (error) {
                 showKeyboardDebug(
-                    "INFO ERROR\n"
+                    "INFO ERROR\\n"
                     + String(error)
                 );
             }
         }
 
+        /*
+         * 清除上一次 Streamlit rerun 留在 parentWindow 上的定时器。
+         * 这样不会因为 rerun 不断叠加 500ms 轮询。
+         */
+        if (parentWindow.__megorMedianBridgeRetryTimer) {
+            parentWindow.clearInterval(
+                parentWindow.__megorMedianBridgeRetryTimer
+            );
+        }
+
+        if (parentWindow.__megorMedianKeyboardPollTimer) {
+            parentWindow.clearInterval(
+                parentWindow.__megorMedianKeyboardPollTimer
+            );
+        }
+
+        let attempts = 0;
+
+        parentWindow.__megorMedianBridgeRetryTimer =
+            parentWindow.setInterval(
+                () => {
+                    attempts += 1;
+
+                    if (
+                        installMedianKeyboardListener()
+                        || attempts >= 40
+                    ) {
+                        parentWindow.clearInterval(
+                            parentWindow.__megorMedianBridgeRetryTimer
+                        );
+
+                        parentWindow.__megorMedianBridgeRetryTimer = null;
+                    }
+                },
+                250
+            );
 
         /*
-        * Android 某些 WebView 在关闭键盘时不会稳定触发
-        * visualViewport / window resize。
-        *
-        * 所以除事件监听外，再短周期主动询问 Median
-        * 原生 Keyboard Bridge 当前键盘是否仍然可见。
-        */
+         * 主动读取 Median 原生键盘状态。
+         * 即使 Android 在收起键盘时没有可靠触发 resize/focus，
+         * visible=false 仍可触发 resetKeyboardOffset()。
+         */
+        parentWindow.__megorMedianKeyboardPollTimer =
+            parentWindow.setInterval(
+                () => {
+                    checkMedianKeyboardState();
+                },
+                500
+            );
+
         if (parentWindow.visualViewport) {
             parentWindow.visualViewport.addEventListener(
                 "resize",
-                checkMedianKeyboardState
-            );
-
-            parentWindow.visualViewport.addEventListener(
-                "scroll",
                 checkMedianKeyboardState
             );
         }
@@ -523,20 +517,6 @@ components.html(
         parentWindow.addEventListener(
             "focus",
             checkMedianKeyboardState
-        );
-
-
-        /*
-        * 兜底轮询。
-        *
-        * 只在 Median App 内执行。
-        * 500ms 检查一次，开销极小。
-        */
-        parentWindow.setInterval(
-            () => {
-                checkMedianKeyboardState();
-            },
-            500
         );
     })();
     </script>
