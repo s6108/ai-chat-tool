@@ -1286,7 +1286,7 @@ if not st.session_state.user:
                         supabase.auth.reset_password_for_email(
                             reset_email.strip(),
                             {
-                                "redirect_to": "https://megor.ai"
+                                "redirect_to": "https://app.megor.ai"
                             },
                         )
 
