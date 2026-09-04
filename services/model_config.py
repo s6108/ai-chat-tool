@@ -31,6 +31,7 @@ class ModelConfig:
 
     # 可选：同一品牌专用视觉模型
     vision_model_id: str | None = None
+    search_model_id: str | None = None
 
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {
@@ -64,7 +65,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         name="Kimi",
         provider="moonshot",
         base_url="https://api.moonshot.cn/v1",
-        model_id="kimi-k2.5",
+        model_id="kimi-k3",
         api_key=KIMI_API_KEY,
         supports_vision=True,
     ),

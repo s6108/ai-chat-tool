@@ -559,7 +559,7 @@ MODEL_DISPLAY_NAMES = {
     "Gemini": "Gemini-3.6 Flash",
     "GLM": "ZhiPu-GLM 5.2 ",
     "Grok": "Grok-Grok 4.5",
-    "Kimi": "Kimi-K2.5",
+    "Kimi": "Kimi-K3",
     "Qwen": "Qwen-3.6 Flash",
 }
 MODEL_LABEL_TO_NAME = {
@@ -2133,10 +2133,41 @@ if st.session_state.processing:
 
     selected_model_before_routing = st.session_state.selected_model
 
+    # ==================================================
+    # 检查当前圆桌历史中是否仍然包含图片
+    #
+    # 当前轮即使没有重新上传图片，只要最近 24 条历史中
+    # 仍然存在图片，就让视觉模型继续走普通 Provider 路径，
+    # 避免海外 Native Search 路径丢失历史图片。
+    # ==================================================
+    conversation_has_image = False
+
+    for history_message in st.session_state.get("messages", [])[-24:]:
+        history_content = history_message.get("content")
+
+        if not isinstance(history_content, list):
+            continue
+
+        for part in history_content:
+            if not isinstance(part, dict):
+                continue
+
+            if part.get("type") in {
+                "image_url",
+                "input_image",
+                "image",
+            }:
+                conversation_has_image = True
+                break
+
+        if conversation_has_image:
+            break
+
     self_deciding_search_mode = (
         selected_model_before_routing in SELF_DECIDING_SEARCH_MODELS
         and not has_image
         and not has_document
+        and not conversation_has_image
     )
 
     # ChatGPT 专用 unified Responses 标记。
@@ -2508,6 +2539,51 @@ if st.session_state.processing:
                                         "user",
                                         "assistant",
                                     }:
+                                        continue
+
+                                    # ==================================================
+                                    # 圆桌图片上下文
+                                    #
+                                    # 用户历史消息如果包含图片：
+                                    # - 当前模型支持视觉时，保留完整 multimodal content
+                                    # - 当前模型不支持视觉时，只提取其中的文字
+                                    #
+                                    # 这样后续视觉模型仍然可以看到圆桌中的原始图片。
+                                    # ==================================================
+                                    if role == "user" and isinstance(content, list):
+                                        if selected_config.supports_vision:
+                                            native_context_messages.append(
+                                                {
+                                                    "role": "user",
+                                                    "content": content,
+                                                }
+                                            )
+                                            continue
+
+                                        text_parts = []
+
+                                        for part in content:
+                                            if not isinstance(part, dict):
+                                                continue
+
+                                            if part.get("type") == "text":
+                                                text = part.get("text", "")
+
+                                                if isinstance(text, str) and text.strip():
+                                                    text_parts.append(
+                                                        text.strip()
+                                                    )
+
+                                        if text_parts:
+                                            native_context_messages.append(
+                                                {
+                                                    "role": "user",
+                                                    "content": "\n\n".join(
+                                                        text_parts
+                                                    ),
+                                                }
+                                            )
+
                                         continue
 
                                     if not isinstance(content, str):
