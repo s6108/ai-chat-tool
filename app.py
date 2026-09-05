@@ -505,6 +505,24 @@ supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 cookies = create_cookie_manager()
 
 if not cookies_ready(cookies):
+    # Cookie 组件首次建立连接时，不再让页面呈现纯白。
+    # 这里只显示一个极轻量的品牌占位，组件就绪后 Streamlit 会自动重跑。
+    st.markdown(
+        """
+        <div style="
+            min-height:72vh;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            flex-direction:column;
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+        ">
+            <div style="font-size:34px;font-weight:650;letter-spacing:-0.8px;">Megor</div>
+            <div style="margin-top:10px;font-size:14px;opacity:0.55;">Loading...</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 initialize_language(cookies)
@@ -990,6 +1008,114 @@ def should_run_strict_credit_preflight() -> bool:
     except (TypeError, ValueError):
         return True
 
+# ====================== Lightweight Sidebar Cache ======================
+
+ACCOUNT_CACHE_TTL_SECONDS = 30
+TODAY_USAGE_CACHE_TTL_SECONDS = 15
+
+
+def _get_cached_account(user) -> dict:
+    """短时缓存账户/订阅信息，避免每次 Streamlit rerun 都访问 Supabase。"""
+    user_id = str(user.id)
+    now = time.monotonic()
+
+    cached = st.session_state.get("account_snapshot")
+    cached_user_id = st.session_state.get("account_snapshot_user_id")
+    cached_at = st.session_state.get("account_snapshot_at", 0.0)
+
+    if (
+        cached is not None
+        and cached_user_id == user_id
+        and now - float(cached_at) < ACCOUNT_CACHE_TTL_SECONDS
+    ):
+        return cached
+
+    account = get_account_data(supabase_admin, user)
+    st.session_state["account_snapshot"] = account
+    st.session_state["account_snapshot_user_id"] = user_id
+    st.session_state["account_snapshot_at"] = now
+    return account
+
+
+def _get_cached_today_usage(user_id) -> dict:
+    """短时缓存今日聊天/图片次数，减少侧边栏重复数据库读取。"""
+    user_id = str(user_id)
+    now = time.monotonic()
+
+    cached = st.session_state.get("today_usage_snapshot")
+    cached_user_id = st.session_state.get("today_usage_snapshot_user_id")
+    cached_at = st.session_state.get("today_usage_snapshot_at", 0.0)
+
+    if (
+        cached is not None
+        and cached_user_id == user_id
+        and now - float(cached_at) < TODAY_USAGE_CACHE_TTL_SECONDS
+    ):
+        return cached
+
+    usage = get_today_usage(supabase_admin, user_id)
+    st.session_state["today_usage_snapshot"] = usage
+    st.session_state["today_usage_snapshot_user_id"] = user_id
+    st.session_state["today_usage_snapshot_at"] = now
+    return usage
+
+
+def _invalidate_sidebar_data_cache() -> None:
+    """账户切换或成功记账后让下一次 rerun 获取最新数据。"""
+    for key in (
+        "account_snapshot",
+        "account_snapshot_user_id",
+        "account_snapshot_at",
+        "today_usage_snapshot",
+        "today_usage_snapshot_user_id",
+        "today_usage_snapshot_at",
+    ):
+        st.session_state.pop(key, None)
+
+
+# ====================== Chat History Cache ======================
+
+CHAT_HISTORY_CACHE_TTL_SECONDS = 60
+
+
+def _get_cached_sessions(user_id) -> list:
+    """缓存当前用户的聊天历史，减少普通 rerun 对 Supabase 的重复读取。"""
+    user_id = str(user_id)
+    now = time.monotonic()
+
+    cached = st.session_state.get("chat_sessions_snapshot")
+    cached_user_id = st.session_state.get("chat_sessions_snapshot_user_id")
+    cached_at = st.session_state.get("chat_sessions_snapshot_at", 0.0)
+
+    if (
+        cached is not None
+        and cached_user_id == user_id
+        and now - float(cached_at) < CHAT_HISTORY_CACHE_TTL_SECONDS
+    ):
+        return cached
+
+    sessions = [
+        session
+        for session in load_sessions(user_id)
+        if session.get("title") != "新对话"
+    ]
+
+    st.session_state["chat_sessions_snapshot"] = sessions
+    st.session_state["chat_sessions_snapshot_user_id"] = user_id
+    st.session_state["chat_sessions_snapshot_at"] = now
+    return sessions
+
+
+def _invalidate_chat_sessions_cache() -> None:
+    """聊天创建、改标题、删除或切换账户后，让下一次读取拿到最新历史。"""
+    for key in (
+        "chat_sessions_snapshot",
+        "chat_sessions_snapshot_user_id",
+        "chat_sessions_snapshot_at",
+    ):
+        st.session_state.pop(key, None)
+
+
 # ====================== Auto Login ======================
 
 # Cookie 组件准备完成后，
@@ -1087,13 +1213,15 @@ if (
 
 # ================= Load Current Chat =================
 
+# 同一次 Streamlit 执行中只读取一次聊天历史。
+# 后面的侧边栏直接复用，避免重复访问 Supabase。
+sessions = []
+
 if st.session_state.user:
     try:
-        sessions = [
-            session
-            for session in load_sessions(st.session_state.user.id)
-            if session.get("title") != "新对话"
-        ]
+        sessions = _get_cached_sessions(
+            st.session_state.user.id
+        )
 
         valid_session_ids = {
             str(session["id"])
@@ -1419,6 +1547,8 @@ with st.sidebar:
         st.session_state["uploader_key"] += 1
         st.session_state["usage_remaining_percent"] = None
         st.session_state["usage_status_snapshot"] = None
+        _invalidate_sidebar_data_cache()
+        _invalidate_chat_sessions_cache()
 
         # 主动退出后，本次 Streamlit 会话不再尝试自动恢复。
         st.session_state["auth_checked"] = True
@@ -1427,9 +1557,8 @@ with st.sidebar:
     # ====================== Plan and Daily Usage ======================
 
     with st.expander(t("my_account"), expanded=False):
-        account = get_account_data(
-            supabase_admin,
-            st.session_state.user,
+        account = _get_cached_account(
+            st.session_state.user
         )
 
         st.caption(t("email_caption"))
@@ -1445,9 +1574,8 @@ with st.sidebar:
 
         if account["is_premium"]:
             user_id = st.session_state.user.id
-            today_usage = get_today_usage(
-                supabase_admin,
-                user_id,
+            today_usage = _get_cached_today_usage(
+                user_id
             )
             st.markdown(
                 t(
@@ -1467,9 +1595,8 @@ with st.sidebar:
 
         else:
             try:
-                today_usage = get_today_usage(
-                    supabase_admin,
-                    st.session_state.user.id,
+                today_usage = _get_cached_today_usage(
+                    st.session_state.user.id
                 )
 
                 chat_count = int(
@@ -1641,8 +1768,7 @@ with st.sidebar:
         save_last_activity(cookies)
         st.rerun()
 
-    sessions = [s for s in load_sessions(st.session_state.user.id) if s.get("title") != "新对话"]
-
+    # 复用上方已经读取的 sessions，避免同一轮再次访问 Supabase。
     for s in sessions:
         title = s.get("title", "新对话")
         session_id = s["id"]
@@ -1674,7 +1800,10 @@ with st.sidebar:
         st.markdown("---")
         if st.button(t("delete_chat"), use_container_width=True):
             delete_chat(st.session_state.current_session_id)
-            remaining_sessions = [s for s in load_sessions(st.session_state.user.id) if s.get("title") != "新对话"]
+            _invalidate_chat_sessions_cache()
+            remaining_sessions = _get_cached_sessions(
+                st.session_state.user.id
+            )
 
             if remaining_sessions:
                 next_session_id = remaining_sessions[0]["id"]
@@ -3640,6 +3769,10 @@ if st.session_state.processing:
                     prompt,
                 )
 
+                # 新会话或标题可能已变化；只让聊天历史缓存失效，
+                # 不触发整页 rerun。下一次正常交互时再刷新。
+                _invalidate_chat_sessions_cache()
+
                 save_message(
                     st.session_state.current_session_id,
                     "assistant",
@@ -3726,6 +3859,15 @@ if st.session_state.processing:
                 refresh_usage_snapshot(
                     st.session_state.user
                 )
+
+                # 次数已经变化，只让“今日用量”缓存失效；
+                # 账户/订阅缓存继续保留，避免无意义的订阅查询。
+                for key in (
+                    "today_usage_snapshot",
+                    "today_usage_snapshot_user_id",
+                    "today_usage_snapshot_at",
+                ):
+                    st.session_state.pop(key, None)
 
             except Exception as usage_error:
                 print(
