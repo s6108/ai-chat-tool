@@ -1354,48 +1354,11 @@ if not st.session_state.messages:
     st.markdown(user_email)
 
 # ====================== Sidebar ======================
-# 用户从付款页返回 Megor 时，自动刷新一次页面，
-# 以便重新读取最新的订阅状态。
-components.html(
-    """
-    <script>
-    (() => {
-        const parentWindow = window.parent;
-        const parentDocument = parentWindow.document;
-
-        
-
-        if (parentWindow.__megorVisibilityRefreshInstalled) {
-            return;
-        }
-
-        parentWindow.__megorVisibilityRefreshInstalled = true;
-
-        let wasHidden = parentDocument.hidden;
-
-        parentDocument.addEventListener(
-            "visibilitychange",
-            () => {
-                if (parentDocument.hidden) {
-                    wasHidden = true;
-                    return;
-                }
-
-                if (wasHidden) {
-                    wasHidden = false;
-
-                    // 稍等 Webhook 完成数据库更新后再刷新。
-                    setTimeout(() => {
-                        parentWindow.location.reload();
-                    }, 2500);
-                }
-            }
-        );
-    })();
-    </script>
-    """,
-    height=0,
-)
+# 不再监听 visibilitychange 强制执行 window.location.reload()。
+# 原来的逻辑会在手机切到后台、锁屏后返回、切换应用等场景下
+# 对整个 Megor 页面做浏览器级重载，是移动端短暂白屏的主要来源之一。
+# 支付完成后返回 Megor 时，正常页面导航 / 下一次 Streamlit rerun
+# 会重新读取订阅状态，无需在任何“重新可见”事件中强制刷新整页。
 
 premium_checkout_url = get_premium_checkout_url(
     st.session_state.user
@@ -3774,8 +3737,9 @@ if st.session_state.processing:
                 st.session_state.uploader_key += 1
                 
 
-            # 每次成功回答后刷新页面，让侧边栏用量立即更新
-            st.rerun()
+            # 完整回答已经直接渲染到当前页面，额度快照也已经更新到
+            # st.session_state，因此这里不再强制整页 st.rerun()。
+            # 下一次用户交互本身会触发 Streamlit 的正常 rerun。
 
         except Exception as e:
             st.session_state.processing = False
