@@ -429,26 +429,28 @@ components.html(
             );
         }
 
-        let attempts = 0;
+        if (parentWindow.median) {
+            let attempts = 0;
 
-        parentWindow.__megorMedianBridgeRetryTimer =
-            parentWindow.setInterval(
-                () => {
-                    attempts += 1;
+            parentWindow.__megorMedianBridgeRetryTimer =
+                parentWindow.setInterval(
+                    () => {
+                        attempts += 1;
 
-                    if (
-                        installMedianKeyboardListener()
-                        || attempts >= 40
-                    ) {
-                        parentWindow.clearInterval(
-                            parentWindow.__megorMedianBridgeRetryTimer
-                        );
+                        if (
+                            installMedianKeyboardListener()
+                            || attempts >= 40
+                        ) {
+                            parentWindow.clearInterval(
+                                parentWindow.__megorMedianBridgeRetryTimer
+                            );
 
-                        parentWindow.__megorMedianBridgeRetryTimer = null;
-                    }
-                },
-                250
-            );
+                            parentWindow.__megorMedianBridgeRetryTimer = null;
+                        }
+                    },
+                    250
+                );
+        }
 
         /*
          * 主动读取 Median 原生键盘状态。
