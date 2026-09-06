@@ -1960,7 +1960,7 @@ st.markdown(
                     min-height: 48px !important;
 
                     position: relative !important;
-                    left: 12px !important;
+                    left: -5px !important;
                 }
 
                 [data-testid="stSidebarCollapsedControl"] button {
