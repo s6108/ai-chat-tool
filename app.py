@@ -1951,23 +1951,30 @@ st.markdown(
                 }
             }
 
-            /* 手机端扩大左上角侧边栏展开按钮触控区域 */
+            /* 手机端：扩大并右移左上角侧边栏展开按钮 */
             @media (max-width: 768px) {
-                [data-testid="stSidebarCollapsedControl"] button {
-                    width: 48px !important;
-                    height: 48px !important;
-                    min-width: 48px !important;
-                    min-height: 48px !important;
 
-                    position: relative !important;
-                    left: -5px !important;
+                [data-testid="stSidebarCollapsedControl"] {
+                    position: fixed !important;
+                    left: 12px !important;
+                    top: 8px !important;
+
+                    width: 52px !important;
+                    height: 52px !important;
+                    min-width: 52px !important;
+                    min-height: 52px !important;
+
+                    z-index: 999999 !important;
                 }
 
                 [data-testid="stSidebarCollapsedControl"] button {
-                    width: 48px !important;
-                    height: 48px !important;
-                    min-width: 48px !important;
-                    min-height: 48px !important;
+                    width: 52px !important;
+                    height: 52px !important;
+                    min-width: 52px !important;
+                    min-height: 52px !important;
+
+                    padding: 12px !important;
+                    margin: 0 !important;
                 }
             }
             </style>
