@@ -429,28 +429,26 @@ components.html(
             );
         }
 
-        if (parentWindow.median) {
-            let attempts = 0;
+        let attempts = 0;
 
-            parentWindow.__megorMedianBridgeRetryTimer =
-                parentWindow.setInterval(
-                    () => {
-                        attempts += 1;
+        parentWindow.__megorMedianBridgeRetryTimer =
+            parentWindow.setInterval(
+                () => {
+                    attempts += 1;
 
-                        if (
-                            installMedianKeyboardListener()
-                            || attempts >= 40
-                        ) {
-                            parentWindow.clearInterval(
-                                parentWindow.__megorMedianBridgeRetryTimer
-                            );
+                    if (
+                        installMedianKeyboardListener()
+                        || attempts >= 40
+                    ) {
+                        parentWindow.clearInterval(
+                            parentWindow.__megorMedianBridgeRetryTimer
+                        );
 
-                            parentWindow.__megorMedianBridgeRetryTimer = null;
-                        }
-                    },
-                    250
-                );
-        }
+                        parentWindow.__megorMedianBridgeRetryTimer = null;
+                    }
+                },
+                250
+            );
 
         /*
          * 主动读取 Median 原生键盘状态。
@@ -537,7 +535,18 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 # ====================== Device ID ======================
-device_id = get_device_id(cookies)
+device_id = get_device_id()
+
+if not device_id:
+    device_id = st.session_state.get(
+        "fallback_device_id"
+    )
+
+if not device_id:
+    import uuid
+
+    device_id = str(uuid.uuid4())
+    st.session_state["fallback_device_id"] = device_id
 
 # ====================== Model Config ======================
 # Provider URLs, model IDs and API keys are centralized in
