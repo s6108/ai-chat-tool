@@ -1884,15 +1884,17 @@ st.markdown(
         width: 180px !important;
         flex-shrink: 0;
     }
-    /* 缩小模型选择框高度 */
+    /* 模型选择框高度 */
     .st-key-top_model_selector div[data-baseweb="select"] > div {
-        min-height: 34px !important;
-        height: 34px !important;
+        min-height: 42px !important;
+        height: 42px !important;
+        align-items: center !important;
     }
 
     /* 让框内文字和图标垂直居中 */
     .st-key-top_model_selector div[data-baseweb="select"] {
-        min-height: 34px !important;
+        min-height: 42px !important;
+        overflow: visible !important;
     }
 
     /* 手机端 */
@@ -1909,6 +1911,10 @@ st.markdown(
 
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
             width: 190px !important;
+        .st-key-top_model_selector div[data-baseweb="select"] span {
+            line-height: 24px !important;
+            overflow: visible !important;
+        }
         }
         /* 手机端：模型文字和下拉框强制紧贴 */
         .st-key-top_model_selector div[data-testid="stHorizontalBlock"] {
