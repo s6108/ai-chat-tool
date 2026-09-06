@@ -1953,12 +1953,14 @@ st.markdown(
 
             /* 手机端扩大左上角侧边栏展开按钮触控区域 */
             @media (max-width: 768px) {
-                [data-testid="stSidebarCollapsedControl"] {
+                [data-testid="stSidebarCollapsedControl"] button {
                     width: 48px !important;
                     height: 48px !important;
                     min-width: 48px !important;
                     min-height: 48px !important;
-                    transform: translateX(11px) !important;
+
+                    position: relative !important;
+                    left: 12px !important;
                 }
 
                 [data-testid="stSidebarCollapsedControl"] button {
