@@ -537,12 +537,11 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 # ====================== Device ID ======================
-device_id = get_device_id()
+# device_id = get_device_id()  # TEMP: startup timing test
 
-if not device_id:
-    device_id = st.session_state.get(
-        "fallback_device_id"
-    )
+device_id = st.session_state.get(
+    "fallback_device_id"
+)
 
 if not device_id:
     import uuid
