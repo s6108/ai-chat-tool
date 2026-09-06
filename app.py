@@ -537,17 +537,7 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 # ====================== Device ID ======================
-# device_id = get_device_id()  # TEMP: startup timing test
-
-device_id = st.session_state.get(
-    "fallback_device_id"
-)
-
-if not device_id:
-    import uuid
-
-    device_id = str(uuid.uuid4())
-    st.session_state["fallback_device_id"] = device_id
+device_id = get_device_id(cookies)
 
 # ====================== Model Config ======================
 # Provider URLs, model IDs and API keys are centralized in
