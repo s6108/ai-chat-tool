@@ -1951,20 +1951,28 @@ st.markdown(
                 }
             }
 
-            /* 手机端：扩大并右移真正的侧边栏展开按钮 */
+            /* 手机端：侧边栏按钮整体右移，保持原容器尺寸 */
             @media (max-width: 768px) {
 
-                [data-testid="stExpandSidebarButton"] {
+                /* 原来的 48×28 容器整体右移 */
+                [data-testid="stToolbar"]
+                div:has(> [data-testid="stExpandSidebarButton"]) {
                     position: relative !important;
                     left: 11px !important;
+                }
 
-                    width: 41px !important;
-                    height: 41px !important;
-                    min-width: 41px !important;
-                    min-height: 41px !important;
+                /* 真正可点击按钮：48×24 */
+                [data-testid="stExpandSidebarButton"] {
+                    width: 48px !important;
+                    height: 24px !important;
+                    min-width: 48px !important;
+                    min-height: 24px !important;
 
-                    padding: 11px !important;
+                    padding: 0 !important;
                     margin: 0 !important;
+
+                    pointer-events: auto !important;
+                    touch-action: manipulation !important;
                 }
             }
             </style>
