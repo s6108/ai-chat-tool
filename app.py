@@ -1958,19 +1958,6 @@ st.markdown(
                     margin-left: 12px !important;
                 }
 
-                [data-testid="stToolbar"] > div:first-child button {
-                    width: 52px !important;
-                    height: 52px !important;
-                    min-width: 52px !important;
-                    min-height: 52px !important;
-
-                    padding: 11px !important;
-                    margin: 0 !important;
-                }
-
-                [data-testid="stToolbar"] > div:first-child button span {
-                    pointer-events: none !important;
-                }
             }
             </style>
     """,
