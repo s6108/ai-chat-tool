@@ -1951,13 +1951,21 @@ st.markdown(
                 }
             }
 
-            /* 手机端：扩大并右移左上角侧边栏展开按钮 */
+            /* 手机端：扩大并右移真正的侧边栏展开按钮 */
             @media (max-width: 768px) {
 
-                [data-testid="stToolbar"] > div:first-child {
-                    margin-left: 12px !important;
-                }
+                [data-testid="stExpandSidebarButton"] {
+                    position: relative !important;
+                    left: 11px !important;
 
+                    width: 41px !important;
+                    height: 41px !important;
+                    min-width: 41px !important;
+                    min-height: 41px !important;
+
+                    padding: 11px !important;
+                    margin: 0 !important;
+                }
             }
             </style>
     """,
