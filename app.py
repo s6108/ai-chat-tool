@@ -1952,8 +1952,22 @@ st.markdown(
             }
 
             @media (max-width: 768px) {
+
                 [data-testid="stExpandSidebarButton"] {
-                    margin-left: 5px !important;
+                    position: relative !important;
+                    z-index: 10 !important;
+                }
+
+                [data-testid="stExpandSidebarButton"]::before {
+                    content: "";
+                    position: absolute;
+
+                    left: -8px;
+                    right: -8px;
+                    top: -8px;
+                    bottom: -8px;
+
+                    background: transparent;
                 }
             }
             </style>
