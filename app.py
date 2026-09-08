@@ -1953,19 +1953,169 @@ st.markdown(
 
             @media (max-width: 768px) {
 
-                [data-testid="stExpandSidebarButton"] {
-                    padding: 11px !important;
+                /* 直接移动真实按钮的父容器 */
+                [data-testid="stToolbar"]
+                div:has(> button[data-testid="stExpandSidebarButton"]) {
+                    transform: translateX(5px) !important;
+                    overflow: visible !important;
+                    position: relative !important;
+                    z-index: 100 !important;
+                }
 
+                /* 保留已经验证有效的触控区扩大 */
+                button[data-testid="stExpandSidebarButton"] {
+                    padding: 11px !important;
                     margin: -11px !important;
 
                     box-sizing: content-box !important;
-
                     touch-action: manipulation !important;
                 }
             }
             </style>
     """,
     unsafe_allow_html=True,
+)
+
+# ====================== Mobile Sidebar Touch Proxy ======================
+components.html(
+    """
+    <script>
+    (() => {
+        const parentWindow = window.parent;
+        const parentDocument = parentWindow.document;
+
+        const PROXY_ID = "megor-sidebar-touch-proxy";
+
+        function updateSidebarTouchProxy() {
+            let proxy = parentDocument.getElementById(
+                PROXY_ID
+            );
+
+            /*
+             * 只在手机宽度下启用。
+             * 桌面和平板宽屏完全不处理。
+             */
+            if (parentWindow.innerWidth > 768) {
+                if (proxy) {
+                    proxy.style.display = "none";
+                }
+                return;
+            }
+
+            const button = parentDocument.querySelector(
+                'button[data-testid="stExpandSidebarButton"]'
+            );
+
+            /*
+             * 侧边栏已经打开时，这个按钮可能不存在。
+             */
+            if (!button) {
+                if (proxy) {
+                    proxy.style.display = "none";
+                }
+                return;
+            }
+
+            const rect = button.getBoundingClientRect();
+
+            if (!proxy) {
+                proxy = parentDocument.createElement("div");
+                proxy.id = PROXY_ID;
+
+                proxy.style.position = "fixed";
+                proxy.style.isolation = "isolate";
+                proxy.style.background = "transparent";
+                proxy.style.border = "none";
+                proxy.style.zIndex = "2147483647";
+                proxy.style.pointerEvents = "auto";
+                proxy.style.touchAction = "manipulation";
+                proxy.style.cursor = "pointer";
+
+                parentDocument.body.appendChild(proxy);
+            }
+
+            /*
+             * 点击代理区跟随当前按钮实际显示位置。
+             *
+             * 左边少扩一点，主要向右扩大，
+             * 避免安卓屏幕最左边缘难以触发的问题。
+             */
+            const extraLeft = 2;
+            const extraRight = 22;
+            const extraTop = 11;
+            const extraBottom = 11;
+
+            proxy.style.left =
+                `${Math.max(
+                    0,
+                    rect.left - extraLeft
+                )}px`;
+
+            proxy.style.top =
+                `${Math.max(
+                    0,
+                    rect.top - extraTop
+                )}px`;
+
+            proxy.style.width =
+                `${rect.width
+                    + extraLeft
+                    + extraRight}px`;
+
+            proxy.style.height =
+                `${rect.height
+                    + extraTop
+                    + extraBottom}px`;
+
+            proxy.style.display = "block";
+
+            /*
+             * 每次重新获取当前 Streamlit button，
+             * 避免 rerun 后引用旧 DOM。
+             */
+            proxy.onclick = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const currentButton =
+                    parentDocument.querySelector(
+                        'button[data-testid="stExpandSidebarButton"]'
+                    );
+
+                if (currentButton) {
+                    currentButton.click();
+                }
+            };
+        }
+
+        /*
+         * Streamlit rerun 后防止重复创建 timer。
+         */
+        if (
+            parentWindow.__megorSidebarTouchProxyTimer
+        ) {
+            parentWindow.clearInterval(
+                parentWindow.__megorSidebarTouchProxyTimer
+            );
+        }
+
+        updateSidebarTouchProxy();
+
+        parentWindow.__megorSidebarTouchProxyTimer =
+            parentWindow.setInterval(
+                updateSidebarTouchProxy,
+                500
+            );
+
+        parentWindow.addEventListener(
+            "resize",
+            updateSidebarTouchProxy
+        );
+    })();
+    </script>
+    """,
+    height=0,
+    width=0,
 )
 
 options = get_model_selector_options()
