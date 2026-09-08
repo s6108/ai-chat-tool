@@ -1954,20 +1954,13 @@ st.markdown(
             @media (max-width: 768px) {
 
                 [data-testid="stExpandSidebarButton"] {
-                    position: relative !important;
-                    z-index: 10 !important;
-                }
+                    padding: 11px !important;
 
-                [data-testid="stExpandSidebarButton"]::before {
-                    content: "";
-                    position: absolute;
+                    margin: -11px !important;
 
-                    left: -8px;
-                    right: -8px;
-                    top: -8px;
-                    bottom: -8px;
+                    box-sizing: content-box !important;
 
-                    background: transparent;
+                    touch-action: manipulation !important;
                 }
             }
             </style>
