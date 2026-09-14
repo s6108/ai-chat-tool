@@ -1558,15 +1558,35 @@ def can_start_request(
 
     plan_key = status["plan_key"]
 
-
-
-      
+    normalized_request_type = str(
+        request_type or "text"
+    ).strip().lower()
 
     # --------------------------------------------------------
-    # 已经达到硬额度
+    # Free 基础中国模型兜底
     # --------------------------------------------------------
+    # Free 用户即使 Credit 已经达到 Daily / Monthly hard limit，
+    # 只要当天 8 次聊天次数尚未用完，仍允许 5 个中国基础模型
+    # 继续进行普通文本回答。每日 8 次的硬上限由 can_use_chat()
+    # 在 app.py 请求入口统一控制。
+    #
+    # 注意：Native Search 仍属于高成本能力，不走这个兜底。
+    # 因此不会因为这个修复而放开搜索成本保护。
+    is_free_basic_text_fallback = (
+        plan_key == "free"
+        and normalized_request_type == "text"
+        and model_key in FREE_BASIC_MODELS
+    )
 
-    if not status["allowed"]:
+    # --------------------------------------------------------
+    # 已经达到 Credit 硬额度
+    # --------------------------------------------------------
+    # 高级模型 / Native Search：继续严格拦截。
+    # Free 基础中国模型普通文本：允许继续到当天第 8 次。
+    if (
+        not status["allowed"]
+        and not is_free_basic_text_fallback
+    ):
         return {
             "allowed": False,
             "reason": (
@@ -1620,10 +1640,6 @@ def can_start_request(
     # --------------------------------------------------------
     # 当前请求至少需要多少剩余额度
     # --------------------------------------------------------
-
-    normalized_request_type = str(
-        request_type or "text"
-    ).strip().lower()
 
     if normalized_request_type == "native_search":
         required = (

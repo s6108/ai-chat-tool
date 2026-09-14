@@ -549,9 +549,59 @@ class OpenAICompatibleProvider(BaseProvider):
                     "returned an empty response."
                 )
 
-                # DeepSeek 空响应继续保留原来的特殊逻辑。
-                if self.config.provider == "deepseek":
+                # 空响应发生在真正输出任何文字之前，
+                # 按“初始请求失败”处理并有限重试。
+                #
+                # DeepSeek 在较长历史对话中偶尔会返回空流；
+                # 第一次空响应先原样重试，第二次仍为空时，
+                # 第三次自动缩短上下文，只保留 system 消息
+                # 和最近 6 条非 system 消息。这样既保留最近语境，
+                # 又避免用户必须手动新建对话。
+                initial_attempt += 1
+
+                if initial_attempt >= max_initial_attempts:
                     break
+
+                if (
+                    self.config.provider == "deepseek"
+                    and initial_attempt >= 2
+                ):
+                    system_messages = [
+                        message
+                        for message in messages
+                        if message.get("role") == "system"
+                    ]
+
+                    non_system_messages = [
+                        message
+                        for message in messages
+                        if message.get("role") != "system"
+                    ]
+
+                    current_messages = (
+                        system_messages
+                        + non_system_messages[-6:]
+                    )
+
+                    print(
+                        "⚠️ DeepSeek empty response; "
+                        "retrying with reduced recent context: "
+                        f"messages={len(current_messages)}"
+                    )
+
+                wait_seconds = 0.6 * initial_attempt
+
+                print(
+                    "Provider returned an empty response; "
+                    "retrying: "
+                    f"model={self.config.name}, "
+                    f"attempt={initial_attempt}/"
+                    f"{max_initial_attempts}, "
+                    f"wait={wait_seconds:.1f}s"
+                )
+
+                time.sleep(wait_seconds)
+                continue
 
             except Exception as error:
 

@@ -1900,7 +1900,13 @@ st.markdown(
     /* 手机端 */
     @media (max-width: 768px) {
         .st-key-top_model_selector {
-            top: 0.30rem;
+            top: 0.30rem !important;
+
+            left: auto !important;
+            transform: none !important;
+
+            right: 72px !important;
+
             width: auto !important;
         }
 
@@ -1911,11 +1917,12 @@ st.markdown(
 
         .st-key-top_model_selector div[data-testid="stSelectbox"] {
             width: 190px !important;
+        }
         .st-key-top_model_selector div[data-baseweb="select"] span {
             line-height: 24px !important;
             overflow: visible !important;
         }
-        }
+        
         /* 手机端：模型文字和下拉框强制紧贴 */
         .st-key-top_model_selector div[data-testid="stHorizontalBlock"] {
             display: flex !important;
@@ -1964,8 +1971,8 @@ st.markdown(
 
                 /* 保留已经验证有效的触控区扩大 */
                 button[data-testid="stExpandSidebarButton"] {
-                    padding: 11px !important;
-                    margin: -11px !important;
+                    padding: 8px !important;
+                    margin: -8px !important;
 
                     box-sizing: content-box !important;
                     touch-action: manipulation !important;
@@ -1975,6 +1982,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 # ====================== Mobile Sidebar Touch Proxy ======================
 components.html(
@@ -2327,6 +2335,23 @@ if st.session_state.processing:
     if has_document:
         message_data["display_content"] = file_display
 
+    # --------------------------------------------------
+    # 清理上一轮失败请求留下的悬空 user 消息。
+    # 正常完成的一轮对话一定以 assistant 结束；
+    # 如果上一轮因额度预检 / Provider 异常被中止，
+    # user 消息只存在于 session_state、尚未持久化，
+    # 这里在新一轮开始前移除，避免污染模型历史。
+    # --------------------------------------------------
+    while (
+        st.session_state.messages
+        and st.session_state.messages[-1].get("role") == "user"
+    ):
+        stale_user_message = st.session_state.messages.pop()
+        print(
+            "🧹 Removed stale failed user message from history:",
+            repr(stale_user_message.get("content"))[:200],
+        )
+
     st.session_state.messages.append(
         message_data
     )
@@ -2597,6 +2622,11 @@ if st.session_state.processing:
             if not selected_config.api_key:
                 placeholder.error(t("api_key_missing", model=selected_model_name))
                 st.session_state.processing = False
+                if (
+                    st.session_state.messages
+                    and st.session_state.messages[-1] is message_data
+                ):
+                    st.session_state.messages.pop()
                 st.stop()
 
             # The unified provider layer handles message-format differences.
@@ -2704,6 +2734,11 @@ if st.session_state.processing:
                                         t("advanced_search_requires_premium")
                                     )
 
+                                if (
+                                    st.session_state.messages
+                                    and st.session_state.messages[-1] is message_data
+                                ):
+                                    st.session_state.messages.pop()
                                 st.stop()
                         factory_start = time.perf_counter()
 
@@ -3621,6 +3656,11 @@ if st.session_state.processing:
                     )
 
                     st.session_state.processing = False
+                    if (
+                        st.session_state.messages
+                        and st.session_state.messages[-1] is message_data
+                    ):
+                        st.session_state.messages.pop()
                     st.stop()
 
             else:
@@ -3749,6 +3789,11 @@ if st.session_state.processing:
                                 )
                             )
 
+                        if (
+                            st.session_state.messages
+                            and st.session_state.messages[-1] is message_data
+                        ):
+                            st.session_state.messages.pop()
                         st.stop()
 
                     usage_max_output = (
@@ -4037,6 +4082,15 @@ if st.session_state.processing:
 
         except Exception as e:
             st.session_state.processing = False
+
+            # 本轮模型失败时，当前 user 消息尚未持久化。
+            # 从 session_state 中移除，避免下一轮把失败问题
+            # 当成有效历史继续传给其他模型。
+            if (
+                st.session_state.messages
+                and st.session_state.messages[-1] is message_data
+            ):
+                st.session_state.messages.pop()
 
             print("❌ 聊天调用完整异常：")
             traceback.print_exc()
