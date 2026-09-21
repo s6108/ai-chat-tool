@@ -9,7 +9,7 @@ from services.native_search.qwen_native_search import QwenNativeSearch
 from services.native_search.kimi_native_search import KimiNativeSearch
 from services.native_search.doubao_native_search import DoubaoNativeSearch
 from services.native_search.glm_native_search import GLMNativeSearch
-
+from services.native_search.deepseek_native_search import DeepSeekNativeSearch
 
 class NativeSearchFactory:
     """
@@ -44,6 +44,7 @@ class NativeSearchFactory:
         "kimi": KimiNativeSearch,
         "doubao-pro": DoubaoNativeSearch,
         "glm": GLMNativeSearch,
+        "deepseek": DeepSeekNativeSearch,
     }
 
     @classmethod

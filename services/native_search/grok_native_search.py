@@ -188,6 +188,24 @@ class GrokNativeSearch(BaseNativeSearch):
 
             answer = full_answer.strip()
 
+            if final_response is not None:
+                print(
+                    "🔍 Grok final response:",
+                    {
+                        "status": getattr(
+                            final_response, "status", None
+                        ),
+                        "incomplete_details": str(
+                            getattr(
+                                final_response,
+                                "incomplete_details",
+                                None,
+                            )
+                        ),
+                        "streamed_answer_chars": len(full_answer),
+                    },
+                )
+
             if final_response is None:
                 yield (
                     "complete",
