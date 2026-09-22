@@ -41,6 +41,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         base_url="https://api.deepseek.com",
         model_id="deepseek-v4-flash",
         api_key=DEEPSEEK_API_KEY,
+        supports_vision=True,
         
     ),
 

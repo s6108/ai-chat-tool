@@ -141,6 +141,13 @@ class OpenAICompatibleProvider(BaseProvider):
             "messages": messages,
             "stream": True,
         }
+
+        # 仅降低 Kimi-K3 普通聊天的思考强度
+        if (
+            self.config.provider == "moonshot"
+            and selected_model_id == "kimi-k3"
+        ):
+            request_params["reasoning_effort"] = "low"
         # OpenAI 流式响应最后返回真实 token usage。
         # 暂时只对 OpenAI 开启，避免影响其他兼容供应商。
         usage_supported_providers = {

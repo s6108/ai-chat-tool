@@ -2545,6 +2545,51 @@ if st.session_state.processing:
 
         status_placeholder = st.empty()
         placeholder = st.empty()
+
+        # 等待模型回答时显示三个明暗变化的圆点
+        placeholder.html(
+            """
+            <style>
+            .megor-waiting-dots {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                height: 24px;
+            }
+
+            .megor-waiting-dots span {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: #888;
+                animation: megor-dot-pulse 1.2s infinite ease-in-out;
+            }
+
+            .megor-waiting-dots span:nth-child(2) {
+                animation-delay: 0.2s;
+            }
+
+            .megor-waiting-dots span:nth-child(3) {
+                animation-delay: 0.4s;
+            }
+
+            @keyframes megor-dot-pulse {
+                0%, 60%, 100% {
+                    opacity: 0.25;
+                }
+                30% {
+                    opacity: 1;
+                }
+            }
+            </style>
+
+            <div class="megor-waiting-dots" aria-label="Loading">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            """
+        )
         full_response = ""
         selected_model_name = st.session_state.selected_model
 
@@ -2634,7 +2679,7 @@ if st.session_state.processing:
                 history_limit=24,
             )
 
-            selected_max_tokens = 1200
+            selected_max_tokens = 35000
             selected_temperature = 0.7
             
             # ===== 自动判断并执行联网搜索 =====
