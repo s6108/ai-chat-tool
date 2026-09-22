@@ -1,1 +1,0 @@
-"""Megor test suite."""
