@@ -26,7 +26,7 @@ class ClaudeProvider(BaseProvider):
         self,
         *,
         messages: list[dict[str, Any]],
-        max_tokens: int = 1200,
+        max_tokens: int = 11000,
         temperature: float = 0.7,
     ) -> Iterator[str]:
         

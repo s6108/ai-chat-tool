@@ -80,9 +80,9 @@ class ClaudeNativeSearch(BaseNativeSearch):
 
             # Keep the fast path deliberately small.
             max_tokens = (
-                700
+                3500
                 if is_fast_search
-                else 1400
+                else 11000
             )
 
             max_uses = (
