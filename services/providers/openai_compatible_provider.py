@@ -181,6 +181,10 @@ class OpenAICompatibleProvider(BaseProvider):
                     "temperature"
                 ] = 1
 
+                request_params[
+                    "reasoning_effort"
+                ] = "low"
+
             else:
                 request_params[
                     "temperature"

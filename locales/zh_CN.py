@@ -89,7 +89,8 @@ TEXT = {
     ),
     "model_quota_insufficient": (
         "当前剩余额度不足以使用 {model}，"
-        "你仍可尝试使用其他模型。"
+        "你可以改用 DeepSeek、Doubao、Qwen、Kimi 或 GLM 继续使用，"
+        "或者升级高级会员继续使用此模型。"
     ),
     "pro_fair_use_limit": (
         "当前已达到高级 AI 使用的公平使用限制。"

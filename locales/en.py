@@ -119,7 +119,8 @@ TEXT = {
     ),
     "model_quota_insufficient": (
         "Your remaining allowance isn't enough to use {model}. "
-        "You can still try another model."
+        "You can continue with DeepSeek, Doubao, Qwen, Kimi, or GLM, "
+        "or upgrade to Premium to continue using this model."
     ),
     "pro_fair_use_limit": (
         "You've reached the current fair-use limit "

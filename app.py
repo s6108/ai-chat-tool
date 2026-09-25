@@ -14,6 +14,9 @@ from PIL import Image
 from services.cookie_service import (
     create_cookie_manager,
     cookies_ready,
+    get_cookie,
+    set_cookie,
+    persist_cookies,
 )
 from supabase import create_client
 
@@ -909,6 +912,83 @@ if "new_chat_mode" not in st.session_state:
 
 
 
+# ====================== Persistent Startup Cache ======================
+
+USAGE_SNAPSHOT_COOKIE = "usage_snapshot_v1"
+
+
+def _restore_persistent_usage_snapshot(user) -> bool:
+    """从第一方 Cookie 恢复上次成功额度快照，避免 App 重启后先查额度。"""
+    if user is None:
+        return False
+
+    raw = get_cookie(cookies, USAGE_SNAPSHOT_COOKIE)
+    if not raw:
+        return False
+
+    try:
+        cached = json.loads(raw)
+        if str(cached.get("user_id")) != str(user.id):
+            return False
+
+        remaining = float(cached.get("remaining_percent"))
+        saved_date = str(cached.get("date_utc") or "")
+        today_utc = datetime.now(timezone.utc).date().isoformat()
+
+        # 新的一天不能被昨天的 0 额度锁住。
+        # 若昨天仍有额度，则继续信任上次快照；若为 0，则乐观恢复为 100，
+        # 当前回答完成后再用服务器最新值覆盖。
+        if saved_date != today_utc and remaining <= 0:
+            remaining = 100.0
+
+        st.session_state["usage_remaining_percent"] = remaining
+        st.session_state["usage_status_snapshot"] = cached.get("status")
+        return True
+    except Exception as error:
+        print("Persistent usage snapshot restore failed:", repr(error))
+        return False
+
+
+def _persist_usage_snapshot(user) -> None:
+    """把最新额度快照保存为跨 WebView/Streamlit 重启可恢复的第一方 Cookie。"""
+    if user is None:
+        return
+
+    remaining = st.session_state.get("usage_remaining_percent")
+    if remaining is None:
+        return
+
+
+    try:
+        payload = {
+            "user_id": str(user.id),
+            "remaining_percent": float(remaining),
+            "date_utc": datetime.now(timezone.utc).date().isoformat(),
+        }
+        # 不把完整 status 写入 Cookie，避免超过浏览器单 Cookie 大小限制。
+        set_cookie(cookies, USAGE_SNAPSHOT_COOKIE, json.dumps(payload, separators=(",", ":")))
+        persist_cookies(cookies)
+    except Exception as error:
+        print("Persistent usage snapshot save failed:", repr(error))
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_sessions_startup_cached(user_id: str) -> list:
+    """跨 Streamlit 会话复用短时聊天列表缓存；数据库仍是最终数据源。"""
+    return load_sessions(user_id)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_messages_startup_cached(session_id: str) -> list:
+    """跨 Streamlit 会话复用短时当前聊天缓存，减少 App 重开后的重复读取。"""
+    return load_messages(session_id)
+
+
+def _invalidate_persistent_history_cache() -> None:
+    _load_sessions_startup_cached.clear()
+    _load_messages_startup_cached.clear()
+
+
 # ====================== Usage Snapshot ======================
 
 def _minimum_remaining_percent_from_status(status: dict) -> float | None:
@@ -973,15 +1053,18 @@ def refresh_usage_snapshot(user) -> None:
             remaining_percent
         )
 
+        _persist_usage_snapshot(user)
+
     except Exception as snapshot_error:
         print(
             "Usage snapshot refresh failed:",
             repr(snapshot_error),
         )
 
-        # Fail-safe：无法读取快照时，下一轮走严格 can_start_request。
-        st.session_state["usage_status_snapshot"] = None
-        st.session_state["usage_remaining_percent"] = 0.0
+        # 网络失败时保留上次可用快照，不因为一次刷新失败把用户立即锁死。
+        # 只有完全没有任何缓存时才进入严格检查。
+        if st.session_state.get("usage_remaining_percent") is None:
+            st.session_state["usage_status_snapshot"] = None
 
 
 def should_run_strict_credit_preflight() -> bool:
@@ -1096,7 +1179,7 @@ def _get_cached_sessions(user_id) -> list:
 
     sessions = [
         session
-        for session in load_sessions(user_id)
+        for session in _load_sessions_startup_cached(user_id)
         if session.get("title") != "新对话"
     ]
 
@@ -1114,6 +1197,7 @@ def _invalidate_chat_sessions_cache() -> None:
         "chat_sessions_snapshot_at",
     ):
         st.session_state.pop(key, None)
+    _invalidate_persistent_history_cache()
 
 
 # ====================== Auto Login ======================
@@ -1149,6 +1233,11 @@ if (
 
     if restored_user is not None:
         st.session_state["user"] = restored_user
+
+        # App / Streamlit 会话重建后先恢复上次额度快照；
+        # 不在启动关键路径访问额度服务器。
+        if st.session_state.get("usage_remaining_percent") is None:
+            _restore_persistent_usage_snapshot(restored_user)
 
         restored_chat_id = get_chat_id_from_url()
 
@@ -1202,15 +1291,6 @@ if (
             print(
                 "✅ 长期登录恢复成功"
             )
-# 登录 / 恢复登录后只初始化一次额度快照。
-if (
-    st.session_state.user is not None
-    and st.session_state.get("usage_remaining_percent") is None
-):
-    refresh_usage_snapshot(
-        st.session_state.user
-    )
-
 # ================= Load Current Chat =================
 
 # 同一次 Streamlit 执行中只读取一次聊天历史。
@@ -1238,7 +1318,7 @@ if st.session_state.user:
             # 安全检查：只能恢复属于当前用户的聊天
             if current_session_id in valid_session_ids:
                 if not st.session_state.messages:
-                    st.session_state.messages = load_messages(
+                    st.session_state.messages = _load_messages_startup_cached(
                         current_session_id
                     )
 
@@ -1257,7 +1337,7 @@ if st.session_state.user:
             latest_session_id = str(sessions[0]["id"])
 
             st.session_state.current_session_id = latest_session_id
-            st.session_state.messages = load_messages(
+            st.session_state.messages = _load_messages_startup_cached(
                 latest_session_id
             )
 
@@ -1785,7 +1865,7 @@ with st.sidebar:
             use_container_width=True,
         ):
             st.session_state.current_session_id = session_id
-            st.session_state.messages = load_messages(session_id)
+            st.session_state.messages = _load_messages_startup_cached(session_id)
             st.session_state.new_chat_mode = False
             st.query_params["chat"] = str(session_id)
 
@@ -1809,7 +1889,7 @@ with st.sidebar:
                 next_session_id = remaining_sessions[0]["id"]
 
                 st.session_state.current_session_id = next_session_id
-                st.session_state.messages = load_messages(next_session_id)
+                st.session_state.messages = _load_messages_startup_cached(next_session_id)
                 st.session_state.new_chat_mode = False
 
                 st.query_params["chat"] = str(next_session_id)
@@ -2221,6 +2301,19 @@ has_document = (
     and is_document_file(uploaded_file)
 )
 
+# 首次额度快照不再阻塞启动。
+# 只有用户真正提交第一条消息时，才在进入请求处理前初始化一次；
+# 后续仍沿用“完整回答后更新快照”的原有逻辑。
+if (
+    submission
+    and (prompt or uploaded_file)
+    and st.session_state.user is not None
+    and st.session_state.get("usage_remaining_percent") is None
+):
+    refresh_usage_snapshot(
+        st.session_state.user
+    )
+
 # ====================== Process User Input ======================
 if submission and (prompt or uploaded_file):
     perf_request_start = time.perf_counter()
@@ -2242,29 +2335,35 @@ if submission and (prompt or uploaded_file):
         else "free"
     )
     
-    # 先检查文字聊天额度
-    if not can_use_chat(supabase_admin, user_id, user_plan):
-        st.error(t("free_chat_exhausted"))
-        st.link_button(
-            t("upgrade_premium"),
-            premium_checkout_url,
-            use_container_width=True,
-        )
-        st.stop()
+    # 图片请求与文字聊天使用独立额度。
+    if has_image:
+        if not can_use_image(
+            supabase_admin,
+            user_id,
+            user_plan,
+        ):
+            st.error(t("free_image_exhausted"))
+            st.link_button(
+                t("upgrade_premium"),
+                premium_checkout_url,
+                use_container_width=True,
+            )
+            st.stop()
 
-    # 本次包含图片时，再检查图片额度
-    if has_image and not can_use_image(
-        supabase_admin,
-        user_id,
-        user_plan,
-    ):
-        st.error(t("free_image_exhausted"))
-        st.link_button(
-            t("upgrade_premium"),
-            premium_checkout_url,
-            use_container_width=True,
-        )
-        st.stop()
+    # 非图片请求才检查聊天额度。
+    else:
+        if not can_use_chat(
+            supabase_admin,
+            user_id,
+            user_plan,
+        ):
+            st.error(t("free_chat_exhausted"))
+            st.link_button(
+                t("upgrade_premium"),
+                premium_checkout_url,
+                use_container_width=True,
+            )
+            st.stop()
 
     print(
         f"⏱️ [PERF] initial_quota_check = "
@@ -2757,27 +2856,57 @@ if st.session_state.processing:
                             )
 
                             if not native_preflight["allowed"]:
-                                print(
-                                    "⛔ Native search blocked:",
-                                    f"model={selected_model_name},",
-                                    f"reason={native_preflight.get('reason')}",
+                                reason = native_preflight.get("reason")
+
+                                FREE_CONTINUE_MODELS = {
+                                    "DeepSeek",
+                                    "Doubao-Pro",
+                                    "Qwen",
+                                    "Kimi",
+                                    "GLM",
+                                }
+
+                                allow_free_continue = (
+                                    str(current_plan).lower() == "free"
+                                    and selected_model_name in FREE_CONTINUE_MODELS
+                                    and reason in {
+                                        "insufficient_daily_credit_for_model",
+                                        "daily_credit_exhausted",
+                                        "monthly_credit_exhausted",
+                                    }
+
                                 )
 
-                                if str(current_plan).lower() in {
-                                    "pro",
-                                    "premium",
-                                    "paid",
-                                }:
-                                    st.warning(
-                                        "Advanced real-time search is temporarily "
-                                        "limited under fair-use controls."
-                                    )
-                                else:
-                                    st.warning(
-                                        t("advanced_search_requires_premium")
+                                if allow_free_continue:
+                                    print(
+                                        "✅ Free model continue allowed:",
+                                        f"model={selected_model_name},",
+                                        f"reason={reason}",
                                     )
 
-                                st.stop()
+                                else:
+                                    print(
+                                        "⛔ Native search blocked:",
+                                        f"model={selected_model_name},",
+                                        f"reason={reason}",
+                                    )
+
+                                    if str(current_plan).lower() in {
+                                        "pro",
+                                        "premium",
+                                        "paid",
+                                    }:
+                                        st.warning(
+                                            t("pro_fair_use_limit")
+                                        )
+                                    else:
+                                        st.warning(
+                                            t("model_quota_insufficient").format(
+                                                model=selected_model_name
+                                            )
+                                        )
+
+                                    st.stop()
                         factory_start = time.perf_counter()
 
                         native_search = NativeSearchFactory.create(
@@ -3351,7 +3480,32 @@ if st.session_state.processing:
                     if not preflight["allowed"]:
                         reason = preflight.get("reason")
 
-                        if str(current_plan).lower() in {
+                        FREE_CONTINUE_MODELS = {
+                            "DeepSeek",
+                            "Doubao-Pro",
+                            "Qwen",
+                            "Kimi",
+                            "GLM",
+                        }
+
+                        allow_free_continue = (
+                            str(current_plan).lower() == "free"
+                            and selected_model_name in FREE_CONTINUE_MODELS
+                            and reason in {
+                                "insufficient_daily_credit_for_model",
+                                "daily_credit_exhausted",
+                                "monthly_credit_exhausted",
+                            }
+                        )
+
+                        if allow_free_continue:
+                            print(
+                                "✅ Free model continue allowed:",
+                                f"model={selected_model_name},",
+                                f"reason={reason}",
+                            )
+
+                        elif str(current_plan).lower() in {
                             "pro",
                             "premium",
                             "paid",
@@ -3359,25 +3513,15 @@ if st.session_state.processing:
                             st.warning(
                                 t("pro_fair_use_limit")
                             )
-
-                        elif reason in {
-                            "daily_credit_exhausted",
-                            "monthly_credit_exhausted",
-                        }:
-                            st.warning(
-                                t("free_quota_exhausted")
-                            )
+                            st.stop()
 
                         else:
                             st.warning(
-                                t(
-                                    "model_quota_insufficient"
-                                ).format(
+                                t("model_quota_insufficient").format(
                                     model=selected_model_name
                                 )
                             )
-
-                        st.stop()
+                            st.stop()
 
                     usage_max_output = (
                         preflight
@@ -3561,6 +3705,10 @@ if st.session_state.processing:
                     model_icon=used_model_icon,
                 )
 
+                # 数据库已是最新状态；清除跨会话历史缓存，
+                # 确保下一次真正重开 App 时不会看到旧消息。
+                _invalidate_persistent_history_cache()
+
                 # 每轮完整问答只保存一次最后活动时间
                 save_last_activity(cookies)
 
@@ -3622,14 +3770,15 @@ if st.session_state.processing:
                             repr(native_usage_error),
                         )
 
-                # 聊天 / 图片次数同样只在成功回答后更新。
-                increase_chat_usage(
-                    supabase_admin,
-                    user_id,
-                )
-
+                # 聊天与图片使用独立次数额度；
+                # 只在完整回答成功后记录对应的那一种。
                 if has_image:
                     increase_image_usage(
+                        supabase_admin,
+                        user_id,
+                    )
+                else:
+                    increase_chat_usage(
                         supabase_admin,
                         user_id,
                     )

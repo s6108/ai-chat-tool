@@ -101,30 +101,58 @@ def restore_login_from_remember(
     saved = result.data[0]
 
     # ==================================================
-    # 3. 到这里已经可以确认用户身份
-    #    last_seen / device_id 更新失败不能影响登录
+    # 3. 到这里已经可以确认用户身份。
+    #    为减少 App 启动关键路径中的数据库写入：
+    #    - device_id 发生变化时才立即同步；
+    #    - device_id 未变化时，last_seen 仅在距离上次更新 >= 24 小时后同步。
+    #    这不会改变 remember_token 的身份验证逻辑。
     # ==================================================
-    try:
-        (
-            supabase_admin
-            .table("remember_sessions")
-            .update({
-                "last_seen": now_utc(),
-                "device_id": (
-                    device_id
-                    or saved.get("device_id")
-                ),
-            })
-            .eq("id", saved["id"])
-            .execute()
-        )
+    should_update_session = False
 
-    except Exception as error:
-        print(
-            "⚠️ remember_session 状态更新失败，"
-            "但不影响登录：",
-            repr(error),
-        )
+    saved_device_id = saved.get("device_id")
+    current_device_id = device_id or saved_device_id
+
+    if current_device_id and current_device_id != saved_device_id:
+        should_update_session = True
+    else:
+        last_seen_raw = saved.get("last_seen")
+        if not last_seen_raw:
+            should_update_session = True
+        else:
+            try:
+                last_seen = datetime.fromisoformat(
+                    str(last_seen_raw).replace("Z", "+00:00")
+                )
+                if last_seen.tzinfo is None:
+                    last_seen = last_seen.replace(tzinfo=timezone.utc)
+
+                should_update_session = (
+                    datetime.now(timezone.utc) - last_seen
+                    >= timedelta(hours=24)
+                )
+            except (TypeError, ValueError):
+                # 无法解析旧记录时允许修复一次，不影响登录结果。
+                should_update_session = True
+
+    if should_update_session:
+        try:
+            (
+                supabase_admin
+                .table("remember_sessions")
+                .update({
+                    "last_seen": now_utc(),
+                    "device_id": current_device_id,
+                })
+                .eq("id", saved["id"])
+                .execute()
+            )
+
+        except Exception as error:
+            print(
+                "⚠️ remember_session 状态更新失败，"
+                "但不影响登录：",
+                repr(error),
+            )
 
     # ==================================================
     # 4. 返回已恢复用户

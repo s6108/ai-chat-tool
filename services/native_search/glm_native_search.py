@@ -238,22 +238,6 @@ class GLMNativeSearch(BaseNativeSearch):
                 },
             )
 
-            if not used_web_search and not allow_no_search:
-                yield (
-                    "complete",
-                    NativeSearchResponse(
-                        success=False,
-                        model_name=self.model_name,
-                        provider=self.provider,
-                        query=query,
-                        answer=answer,
-                        results=native_results,
-                        error="GLM returned without detectable native web search results.",
-                        should_fallback=False,
-                    ),
-                )
-                return
-
             if not answer:
                 yield (
                     "complete",
@@ -268,6 +252,13 @@ class GLMNativeSearch(BaseNativeSearch):
                     ),
                 )
                 return
+
+            if not used_web_search and not allow_no_search:
+                print(
+                    "⚠️ GLM returned a valid answer, but no detectable "
+                    "native web search metadata/sources were exposed; "
+                    "keeping the completed answer."
+                )
 
             print(
                 f"✅ GLM native streaming search succeeded: "
@@ -410,18 +401,6 @@ class GLMNativeSearch(BaseNativeSearch):
                 },
             )
 
-            if not used_web_search:
-                return NativeSearchResponse(
-                    success=False,
-                    model_name=self.model_name,
-                    provider=self.provider,
-                    query=query,
-                    answer=answer,
-                    results=native_results,
-                    error="GLM returned without detectable native web search results.",
-                    should_fallback=True,
-                )
-
             if not answer:
                 return NativeSearchResponse(
                     success=False,
@@ -431,6 +410,13 @@ class GLMNativeSearch(BaseNativeSearch):
                     results=native_results,
                     error="GLM native web search produced no final answer.",
                     should_fallback=True,
+                )
+
+            if not used_web_search:
+                print(
+                    "⚠️ GLM returned a valid answer, but no detectable "
+                    "native web search metadata/sources were exposed; "
+                    "keeping the completed answer."
                 )
 
             print(
