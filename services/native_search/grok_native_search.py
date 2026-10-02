@@ -95,11 +95,20 @@ class GrokNativeSearch(BaseNativeSearch):
             else:
                 instruction = (
                     "Answer the user's request completely and analytically. "
-                    "Use native web_search or x_search when current, recent, "
-                    "changing, externally verifiable, social, or otherwise "
-                    "unavailable information is needed. Stable reasoning and "
-                    "knowledge may be answered directly. Prefer reliable "
-                    "primary and authoritative sources when searching."
+                    "Use native web_search or x_search only as much as necessary "
+                    "to obtain sufficient current information. Avoid redundant "
+                    "searches and do not keep searching once enough reliable "
+                    "information has been gathered. Prefer reliable primary and "
+                    "authoritative sources. "
+                    "After research, always provide a complete final answer that "
+                    "fully addresses the user's request. Do not shorten, truncate, "
+                    "or prematurely end the final answer because research or "
+                    "reasoning consumed substantial context. "
+                    "For summaries, news roundups, comparisons, lists, and other "
+                    "multi-part requests, complete all major items before ending "
+                    "the response. Prioritize the final user-visible answer over "
+                    "additional searching or internal reasoning once sufficient "
+                    "evidence has been collected."
                 )
 
             input_messages: list[dict[str, Any]] = [
@@ -158,7 +167,8 @@ class GrokNativeSearch(BaseNativeSearch):
                 include=[
                     "web_search_call.action.sources",
                 ],
-                store=False,
+                max_output_tokens=15000,
+                store=True,
                 stream=True,
             )
 
@@ -185,6 +195,7 @@ class GrokNativeSearch(BaseNativeSearch):
                         "response",
                         None,
                     )
+                    
 
             answer = full_answer.strip()
 
@@ -205,6 +216,34 @@ class GrokNativeSearch(BaseNativeSearch):
                         "streamed_answer_chars": len(full_answer),
                     },
                 )
+
+                # ===== DIAG: compare streamed text with final response text =====
+                final_text_parts = []
+
+                for item in getattr(final_response, "output", None) or []:
+                    if getattr(item, "type", "") != "message":
+                        continue
+
+                    for content_item in getattr(item, "content", None) or []:
+                        if getattr(content_item, "type", "") == "output_text":
+                            text = getattr(content_item, "text", "") or ""
+                            if text:
+                                final_text_parts.append(text)
+
+                final_output_text = "".join(final_text_parts).strip()
+                stream_output_text = full_answer.strip()
+
+                print(
+                    "🧪 Grok TEXT INTEGRITY:",
+                    {
+                        "stream_chars": len(stream_output_text),
+                        "final_chars": len(final_output_text),
+                        "same": stream_output_text == final_output_text,
+                        "stream_tail": stream_output_text[-120:],
+                        "final_tail": final_output_text[-120:],
+                    },
+                )
+                # ===== END DIAG =====
 
             if final_response is None:
                 yield (
@@ -233,6 +272,21 @@ class GrokNativeSearch(BaseNativeSearch):
                 output_tokens = int(
                     getattr(usage, "output_tokens", 0) or 0
                 )
+                output_details = getattr(
+                    usage,
+                    "output_tokens_details",
+                    None,
+                )
+
+                reasoning_tokens = int(
+                    getattr(
+                        output_details,
+                        "reasoning_tokens",
+                        0,
+                    )
+                    or 0
+                )
+
                 total_tokens = int(
                     getattr(usage, "total_tokens", 0) or 0
                 )
@@ -254,6 +308,7 @@ class GrokNativeSearch(BaseNativeSearch):
                 self.last_usage = {
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
+                    "reasoning_tokens": reasoning_tokens,
                     "total_tokens": total_tokens,
                     "cost_in_usd_ticks": cost_ticks,
                     "provider_cost_usd": provider_cost_usd,

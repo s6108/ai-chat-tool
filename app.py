@@ -2255,6 +2255,33 @@ with st.container(
 
 handle_model_selector_change()
 
+# ====================== Mobile Chat Layout ======================
+st.markdown(
+    """
+    <style>
+    @media (max-width: 768px) {
+
+        /* 手机端：头像在上，正文在下 */
+        [data-testid="stChatMessage"] {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 6px !important;
+            width: 100% !important;
+        }
+
+        /* 正文与头像使用相同左边线，并占满可用宽度 */
+        [data-testid="stChatMessageContent"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+            padding-left: 0 !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ====================== Display Messages ======================
 render_chat_messages(
     st.session_state.messages
