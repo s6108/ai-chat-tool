@@ -195,9 +195,15 @@ class GrokNativeSearch(BaseNativeSearch):
                         "response",
                         None,
                     )
-                    
+
 
             answer = full_answer.strip()
+            usage_responses = []
+            response_id = (
+                getattr(final_response, "id", None)
+                if final_response is not None
+                else None
+            )
 
             if final_response is not None:
                 print(
@@ -217,33 +223,153 @@ class GrokNativeSearch(BaseNativeSearch):
                     },
                 )
 
-                # ===== DIAG: compare streamed text with final response text =====
-                final_text_parts = []
+                # ===== Grok false-completion guard =====
+                # Short output is only a reason to inspect, not proof of failure.
+                # The model itself decides whether the original request was completed.
+                if (
+                    response_id
+                    and search_mode == "research"
+                    and len(full_answer.strip()) < 800
+                ):
+                    try:
+                        print(
+                            "🩺 Grok completion check started:",
+                            {
+                                "previous_response_id": response_id,
+                                "original_chars": len(full_answer.strip()),
+                            },
+                        )
 
-                for item in getattr(final_response, "output", None) or []:
-                    if getattr(item, "type", "") != "message":
-                        continue
+                        judge_stream = self.client.responses.create(
+                            model=self.config.model_id,
+                            previous_response_id=response_id,
+                            input=[
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        "Evaluate whether your previous response fully "
+                                        "answered my original request. Consider the "
+                                        "requested scope and level of detail. "
+                                        "Reply with exactly one word: COMPLETE or INCOMPLETE."
+                                    ),
+                                }
+                            ],
+                            max_output_tokens=20,
+                            store=True,
+                            stream=True,
+                        )
 
-                    for content_item in getattr(item, "content", None) or []:
-                        if getattr(content_item, "type", "") == "output_text":
-                            text = getattr(content_item, "text", "") or ""
-                            if text:
-                                final_text_parts.append(text)
+                        judge_text = ""
+                        judge_response = None
 
-                final_output_text = "".join(final_text_parts).strip()
-                stream_output_text = full_answer.strip()
+                        for event in judge_stream:
+                            event_type = getattr(event, "type", "") or ""
 
-                print(
-                    "🧪 Grok TEXT INTEGRITY:",
-                    {
-                        "stream_chars": len(stream_output_text),
-                        "final_chars": len(final_output_text),
-                        "same": stream_output_text == final_output_text,
-                        "stream_tail": stream_output_text[-120:],
-                        "final_tail": final_output_text[-120:],
-                    },
-                )
-                # ===== END DIAG =====
+                            if event_type == "response.output_text.delta":
+                                delta = getattr(event, "delta", "") or ""
+                                if delta:
+                                    judge_text += delta
+                                continue
+
+                            if event_type == "response.completed":
+                                judge_response = getattr(
+                                    event,
+                                    "response",
+                                    None,
+                                )
+                        if judge_response is not None:
+                            usage_responses.append(judge_response)
+
+                        judge_result = judge_text.strip().upper()
+
+                        print(
+                            "🩺 Grok completion check:",
+                            {
+                                "result": judge_result,
+                                "judge_response_id": getattr(
+                                    judge_response,
+                                    "id",
+                                    None,
+                                ),
+                            },
+                        )
+
+                        if judge_result == "INCOMPLETE":
+                            judge_response_id = getattr(
+                                judge_response,
+                                "id",
+                                None,
+                            )
+
+                            continuation_from_id = (
+                                judge_response_id or response_id
+                            )
+
+                            print(
+                                "🔄 Grok continuation started:",
+                                {
+                                    "previous_response_id": continuation_from_id,
+                                    "original_chars": len(full_answer.strip()),
+                                },
+                            )
+
+                            continuation_stream = self.client.responses.create(
+                                model=self.config.model_id,
+                                previous_response_id=continuation_from_id,
+                                input=[
+                                    {
+                                        "role": "user",
+                                        "content": (
+                                            "Complete the original answer now. "
+                                            "Do not repeat content already provided. "
+                                            "Use the information already gathered. "
+                                            "Do not describe the research process. "
+                                            "Do not perform additional searches "
+                                            "unless necessary."
+                                        ),
+                                    }
+                                ],
+                                max_output_tokens=15000,
+                                store=True,
+                                stream=True,
+                            )
+
+                            continuation_answer = ""
+                            continuation_response = None
+                            for event in continuation_stream:
+                                event_type = (
+                                    getattr(event, "type", "") or ""
+                                )
+
+                                if event_type == "response.output_text.delta":
+                                    delta = (
+                                        getattr(event, "delta", "") or ""
+                                    )
+
+                                    if delta:
+                                        continuation_answer += delta
+                                        full_answer += delta
+                                        yield ("delta", delta)
+
+                            answer = full_answer.strip()
+
+                            print(
+                                "🔄 Grok continuation completed:",
+                                {
+                                    "continuation_chars": len(
+                                        continuation_answer
+                                    ),
+                                    "total_chars": len(answer),
+                                },
+                            )
+
+                    except Exception as recovery_error:
+                        print(
+                            "⚠️ Grok completion recovery skipped:",
+                            repr(recovery_error),
+                        )
+
+                # ===== END Grok false-completion guard =====
 
             if final_response is None:
                 yield (
@@ -263,22 +389,44 @@ class GrokNativeSearch(BaseNativeSearch):
                 )
                 return
 
-            usage = getattr(final_response, "usage", None)
+            # ===== Aggregate usage from original + judge + continuation =====
+            all_usage_responses = [final_response] + usage_responses
 
-            if usage is not None:
-                input_tokens = int(
+            total_input_tokens = 0
+            total_output_tokens = 0
+            total_reasoning_tokens = 0
+            total_tokens = 0
+            total_cost_ticks = 0
+            total_server_side_tools = 0
+
+            for usage_response in all_usage_responses:
+                if usage_response is None:
+                    continue
+
+                usage = getattr(
+                    usage_response,
+                    "usage",
+                    None,
+                )
+
+                if usage is None:
+                    continue
+
+                total_input_tokens += int(
                     getattr(usage, "input_tokens", 0) or 0
                 )
-                output_tokens = int(
+
+                total_output_tokens += int(
                     getattr(usage, "output_tokens", 0) or 0
                 )
+
                 output_details = getattr(
                     usage,
                     "output_tokens_details",
                     None,
                 )
 
-                reasoning_tokens = int(
+                total_reasoning_tokens += int(
                     getattr(
                         output_details,
                         "reasoning_tokens",
@@ -287,16 +435,20 @@ class GrokNativeSearch(BaseNativeSearch):
                     or 0
                 )
 
-                total_tokens = int(
+                total_tokens += int(
                     getattr(usage, "total_tokens", 0) or 0
                 )
-                cost_ticks = int(
-                    getattr(usage, "cost_in_usd_ticks", 0) or 0
+
+                total_cost_ticks += int(
+                    getattr(
+                        usage,
+                        "cost_in_usd_ticks",
+                        0,
+                    )
+                    or 0
                 )
-                provider_cost_usd = (
-                    cost_ticks / 10_000_000_000
-                )
-                server_side_tools = int(
+
+                total_server_side_tools += int(
                     getattr(
                         usage,
                         "num_server_side_tools_used",
@@ -305,19 +457,31 @@ class GrokNativeSearch(BaseNativeSearch):
                     or 0
                 )
 
+            if all_usage_responses:
                 self.last_usage = {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "reasoning_tokens": reasoning_tokens,
+                    "input_tokens": total_input_tokens,
+                    "output_tokens": total_output_tokens,
+                    "reasoning_tokens": total_reasoning_tokens,
                     "total_tokens": total_tokens,
-                    "cost_in_usd_ticks": cost_ticks,
-                    "provider_cost_usd": provider_cost_usd,
-                    "server_side_tools": server_side_tools,
+                    "cost_in_usd_ticks": total_cost_ticks,
+                    "provider_cost_usd": (
+                        total_cost_ticks / 10_000_000_000
+                    ),
+                    "server_side_tools": total_server_side_tools,
                 }
 
                 print(
-                    "💳 Grok native usage:",
-                    self.last_usage,
+                    "💳 Grok native TOTAL usage:",
+                    {
+                        **self.last_usage,
+                        "responses_count": len(
+                            [
+                                response
+                                for response in all_usage_responses
+                                if response is not None
+                            ]
+                        ),
+                    },
                 )
 
             used_web_search = False
