@@ -119,11 +119,38 @@ from i18n import initialize_language, t
 # ============ 内存诊断 ============
 def log_memory(tag: str):
     try:
+        # 当前实际占用内存（Render/Linux）
+        current_mb = None
+
+        with open("/proc/self/status", "r") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    current_mb = int(line.split()[1]) / 1024
+                    break
+
+        # Python 进程启动以来的最高内存峰值
         usage = resource.getrusage(resource.RUSAGE_SELF)
-        memory_mb = usage.ru_maxrss / 1024
-        print(f"[MEMORY] {tag}: {memory_mb:.1f} MB", flush=True)
+        peak_mb = usage.ru_maxrss / 1024
+
+        if current_mb is not None:
+            print(
+                f"[MEMORY] {tag}: "
+                f"CURRENT={current_mb:.1f} MB | "
+                f"PEAK={peak_mb:.1f} MB",
+                flush=True,
+            )
+        else:
+            print(
+                f"[MEMORY] {tag}: "
+                f"PEAK={peak_mb:.1f} MB",
+                flush=True,
+            )
+
     except Exception as e:
-        print(f"[MEMORY] {tag}: unavailable ({e})", flush=True)
+        print(
+            f"[MEMORY] {tag}: unavailable ({e})",
+            flush=True,
+        )
 log_memory("APP RUN START")
 
 # ====================== Page Config ======================
