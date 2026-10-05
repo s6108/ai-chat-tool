@@ -3,7 +3,6 @@ import json
 import traceback
 import uuid
 import time
-import resource
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -116,42 +115,7 @@ from i18n import initialize_language, t
 # Megor v2 Stable
 # Streamlit + Supabase + Multi-model AI Chat
 # ============================================================
-# ============ 内存诊断 ============
-def log_memory(tag: str):
-    try:
-        # 当前实际占用内存（Render/Linux）
-        current_mb = None
 
-        with open("/proc/self/status", "r") as f:
-            for line in f:
-                if line.startswith("VmRSS:"):
-                    current_mb = int(line.split()[1]) / 1024
-                    break
-
-        # Python 进程启动以来的最高内存峰值
-        usage = resource.getrusage(resource.RUSAGE_SELF)
-        peak_mb = usage.ru_maxrss / 1024
-
-        if current_mb is not None:
-            print(
-                f"[MEMORY] {tag}: "
-                f"CURRENT={current_mb:.1f} MB | "
-                f"PEAK={peak_mb:.1f} MB",
-                flush=True,
-            )
-        else:
-            print(
-                f"[MEMORY] {tag}: "
-                f"PEAK={peak_mb:.1f} MB",
-                flush=True,
-            )
-
-    except Exception as e:
-        print(
-            f"[MEMORY] {tag}: unavailable ({e})",
-            flush=True,
-        )
-log_memory("APP RUN START")
 
 # ====================== Page Config ======================
 APP_DIR = Path(__file__).resolve().parent
@@ -2458,8 +2422,6 @@ if st.session_state.processing:
 
     # ====================== Image ======================
     if has_image:
-        log_memory("BEFORE IMAGE READ")
-
         file_bytes = (
             uploaded_file.getvalue()
         )
@@ -2467,8 +2429,6 @@ if st.session_state.processing:
         b64 = base64.b64encode(
             file_bytes
         ).decode()
-
-        log_memory("AFTER IMAGE BASE64")
 
         mime_type = (
             uploaded_file.type
@@ -2531,7 +2491,6 @@ if st.session_state.processing:
     st.session_state.messages.append(
         message_data
     )
-    log_memory(f"AFTER USER MESSAGE APPEND ({len(st.session_state.messages)} messages)")
 
     display_user_text = prompt if prompt else t("image_uploaded")
     content_to_save = (
@@ -3647,7 +3606,6 @@ if st.session_state.processing:
                 # ==================================================
                 # 真正的模型生成
                 # ==================================================
-                log_memory(f"BEFORE MODEL {selected_model_name}")
                 stream = stream_model_response(
                     model_name=selected_model_name,
                     messages=api_messages,
@@ -3740,9 +3698,6 @@ if st.session_state.processing:
                 placeholder.markdown(
                     full_response
                 )
-                log_memory(f"AFTER MODEL {selected_model_name}")
-
-
             st.session_state.messages.append(
                 {
                     "role": "assistant",
@@ -3792,8 +3747,6 @@ if st.session_state.processing:
 
                 # 每轮完整问答只保存一次最后活动时间
                 save_last_activity(cookies)
-
-                log_memory(f"AFTER PERSISTENCE ({len(st.session_state.messages)} messages)")
 
                 # 回答与数据库保存都完成后，再更新 URL
                 st.query_params["chat"] = str(
