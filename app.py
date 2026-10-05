@@ -791,6 +791,7 @@ SESSION_DEFAULTS = {
     "auth_checked": False,
     "uploader_key": 0,
     "processing": False,
+    "submission_locked": False,
     "page": "chat",
 
     # 成本额度快照：
@@ -1013,8 +1014,6 @@ def _load_sessions_startup_cached(user_id: str) -> list:
     """跨 Streamlit 会话复用短时聊天列表缓存；数据库仍是最终数据源。"""
     return load_sessions(user_id)
 
-
-@st.cache_data(ttl=300, show_spinner=False)
 def _load_messages_startup_cached(session_id: str) -> list:
     """跨 Streamlit 会话复用短时当前聊天缓存，减少 App 重开后的重复读取。"""
     return load_messages(session_id)
@@ -1022,9 +1021,7 @@ def _load_messages_startup_cached(session_id: str) -> list:
 
 def _invalidate_persistent_history_cache() -> None:
     _load_sessions_startup_cached.clear()
-    _load_messages_startup_cached.clear()
-
-
+    
 # ====================== Usage Snapshot ======================
 
 def _minimum_remaining_percent_from_status(status: dict) -> float | None:
@@ -2378,7 +2375,13 @@ if (
     )
 
 # ====================== Process User Input ======================
-if submission and (prompt or uploaded_file):
+if (
+    submission
+    and (prompt or uploaded_file)
+    and not st.session_state.submission_locked
+):
+    st.session_state.submission_locked = True
+
     perf_request_start = time.perf_counter()
     perf_last = perf_request_start
 
@@ -2411,6 +2414,7 @@ if submission and (prompt or uploaded_file):
                 premium_checkout_url,
                 use_container_width=True,
             )
+            st.session_state.submission_locked = False
             st.stop()
 
     # 非图片请求才检查聊天额度。
@@ -2426,6 +2430,7 @@ if submission and (prompt or uploaded_file):
                 premium_checkout_url,
                 use_container_width=True,
             )
+            st.session_state.submission_locked = False
             st.stop()
 
     print(
@@ -2439,6 +2444,7 @@ if submission and (prompt or uploaded_file):
 if st.session_state.processing:
     if not prompt and not uploaded_file:
         st.session_state.processing = False
+        st.session_state.submission_locked = False
         st.stop()
 
     # ==================================================
@@ -2511,6 +2517,7 @@ if st.session_state.processing:
             )
 
             st.session_state.processing = False
+            st.session_state.submission_locked = False
             st.stop()
 
     message_data = {
@@ -2837,6 +2844,7 @@ if st.session_state.processing:
             if not selected_config.api_key:
                 placeholder.error(t("api_key_missing", model=selected_model_name))
                 st.session_state.processing = False
+                st.session_state.submission_locked = False
                 st.stop()
 
             # The unified provider layer handles message-format differences.
@@ -2973,7 +2981,7 @@ if st.session_state.processing:
                                                 model=selected_model_name
                                             )
                                         )
-
+                                    st.session_state.submission_locked = False
                                     st.stop()
                         factory_start = time.perf_counter()
 
@@ -3401,6 +3409,7 @@ if st.session_state.processing:
                             "请稍后重试。"
                         )
                         st.session_state.processing = False
+                        st.session_state.submission_locked = False
                         st.stop()
 
                     native_direct_answer = native_answer
@@ -3446,6 +3455,7 @@ if st.session_state.processing:
                     )
 
                     st.session_state.processing = False
+                    st.session_state.submission_locked = False
                     st.stop()
 
             else:
@@ -3581,6 +3591,7 @@ if st.session_state.processing:
                             st.warning(
                                 t("pro_fair_use_limit")
                             )
+                            st.session_state.submission_locked = False
                             st.stop()
 
                         else:
@@ -3589,6 +3600,7 @@ if st.session_state.processing:
                                     model=selected_model_name
                                 )
                             )
+                            st.session_state.submission_locked = False
                             st.stop()
 
                     usage_max_output = (
@@ -3874,6 +3886,7 @@ if st.session_state.processing:
                     f"Usage update failed: {usage_error}"
                 )
             st.session_state.processing = False
+            st.session_state.submission_locked = False
 
             if uploaded_file:
                 st.session_state.uploader_key += 1
@@ -3885,6 +3898,7 @@ if st.session_state.processing:
 
         except Exception as e:
             st.session_state.processing = False
+            st.session_state.submission_locked = False
 
             print("❌ 聊天调用完整异常：")
             traceback.print_exc()
