@@ -715,20 +715,25 @@ def render_ios_storekit_purchase_button(
                 typeof capacitor.getPlatform === "function" &&
                 capacitor.getPlatform() === "ios";
 
-            if (!isIOSNative) {{
+            if (!isIOSNative) {
+                wrap.style.display = "block";
+                button.style.display = "none";
+                status.textContent =
+                    "DIAG: Capacitor iOS not detected";
                 return;
-            }}
+            }
 
             const store =
                 capacitor.Plugins &&
                 capacitor.Plugins.MegorStore;
 
-            if (!store) {{
-                status.textContent =
-                    "Apple purchase service is unavailable.";
+            if (!store) {
                 wrap.style.display = "block";
+                button.style.display = "none";
+                status.textContent =
+                    "DIAG: MegorStore plugin not found";
                 return;
-            }}
+            }
 
             wrap.style.display = "block";
 
