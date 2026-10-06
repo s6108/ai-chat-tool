@@ -706,7 +706,10 @@ def render_ios_storekit_purchase_button(
                 "megor-ios-purchase-status"
             );
 
-            const capacitor = parentWindow.Capacitor;
+            const capacitor =
+                window.Capacitor ||
+                window.parent?.Capacitor ||
+                window.top?.Capacitor;
 
             const isIOSNative =
                 capacitor &&
