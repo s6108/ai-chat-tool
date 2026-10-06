@@ -721,8 +721,6 @@ def render_ios_storekit_purchase_button(
             if (!isIOSNative) {{
                 wrap.style.display = "block";
                 button.style.display = "none";
-                status.textContent =
-                    "DIAG: Capacitor iOS not detected";
                 return;
             }}
 
@@ -733,8 +731,6 @@ def render_ios_storekit_purchase_button(
             if (!store) {{
                 wrap.style.display = "block";
                 button.style.display = "none";
-                status.textContent =
-                    "DIAG: MegorStore plugin not found";
                 return;
             }}
 
