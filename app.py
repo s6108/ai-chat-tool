@@ -793,7 +793,7 @@ def clean_auth_fragment():
     st.html(
         """
         <script>
-        const megorAuthHash = window.location.hash;
+        var megorAuthHash = window.location.hash;
 
         if (
             megorAuthHash.includes("error=") ||
