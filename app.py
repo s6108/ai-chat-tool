@@ -656,12 +656,11 @@ def render_ios_storekit_purchase_button(
 ) -> None:
     """
     iOS 原生 Megor App：
-    通过 Capacitor MegorStorePlugin 调用 Apple StoreKit。
+    通过 megor://purchase-premium 调用原生 StoreKit。
 
     普通浏览器中隐藏此按钮，不影响现有 Lemon Squeezy。
     """
     safe_label = json.dumps(label)
-    safe_user_id = json.dumps(str(user_id))
 
     components.html(
         f"""
@@ -682,89 +681,40 @@ def render_ios_storekit_purchase_button(
             >
                 {label}
             </button>
-
-            <div
-                id="megor-ios-purchase-status"
-                style="
-                    margin-top:8px;
-                    font-size:13px;
-                    color:#666;
-                "
-            ></div>
         </div>
 
         <script>
         (() => {{
-            const parentWindow = window.parent;
             const wrap = document.getElementById(
                 "megor-ios-purchase-wrap"
             );
             const button = document.getElementById(
                 "megor-ios-purchase-button"
             );
-            const status = document.getElementById(
-                "megor-ios-purchase-status"
-            );
 
-            const capacitor =
-                window.Capacitor ||
-                window.parent?.Capacitor ||
-                window.top?.Capacitor;
+            const ua =
+                window.navigator.userAgent ||
+                window.parent?.navigator?.userAgent ||
+                "";
 
-            const isIOSNative =
-                capacitor &&
-                typeof capacitor.isNativePlatform === "function" &&
-                capacitor.isNativePlatform() &&
-                typeof capacitor.getPlatform === "function" &&
-                capacitor.getPlatform() === "ios";
+            const isMegorIOS =
+                ua.includes("MegorNativeIOS");
 
-            if (!isIOSNative) {{
-                wrap.style.display = "block";
-                button.style.display = "none";
-                return;
-            }}
-
-            const store =
-                capacitor.Plugins &&
-                capacitor.Plugins.MegorStore;
-
-            if (!store) {{
-                wrap.style.display = "block";
-                button.style.display = "none";
+            if (!isMegorIOS) {{
+                wrap.style.display = "none";
                 return;
             }}
 
             wrap.style.display = "block";
 
-            button.addEventListener("click", async () => {{
-                button.disabled = true;
-                status.textContent = "";
-
-                try {{
-                    const result = await store.purchase({{
-                        userId: {safe_user_id}
-                    }});
-
-                    if (result && result.success) {{
-                        status.textContent =
-                            "Purchase successful.";
-                    }}
-                }} catch (error) {{
-                    console.error(
-                        "Megor StoreKit purchase failed:",
-                        error
-                    );
-
-                    status.textContent =
-                        "Purchase was not completed.";
-                }} finally {{
-                    button.disabled = false;
-                }}
+            button.addEventListener("click", () => {{
+                window.top.location.href =
+                    "megor://purchase-premium";
             }});
         }})();
         </script>
         """,
-        height=70,
+        height=55,
     )
 
 
