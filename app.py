@@ -708,7 +708,7 @@ def render_ios_storekit_purchase_button(
             wrap.style.display = "block";
 
             button.addEventListener("click", () => {{
-                window.top.location.href =
+                window.parent.location.href =
                     "megor://purchase-premium";
             }});
         }})();
