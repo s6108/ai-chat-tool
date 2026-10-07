@@ -1930,11 +1930,7 @@ with st.sidebar:
                 user_id=str(st.session_state.user.id),
             )
 
-            st.link_button(
-                t("upgrade_premium"),
-                premium_checkout_url,
-                use_container_width=True,
-            )
+            
             st.caption(
                 t("premium_price_description")
             )
