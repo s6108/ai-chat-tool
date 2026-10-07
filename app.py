@@ -793,12 +793,12 @@ def clean_auth_fragment():
     st.html(
         """
         <script>
-        const hash = window.location.hash;
+        const megorAuthHash = window.location.hash;
 
         if (
-            hash.includes("error=") ||
-            hash.includes("error_code=") ||
-            hash.includes("error_description=")
+            megorAuthHash.includes("error=")
+            megorAuthHash.includes("error_code=")
+            megorAuthHash.includes("error_description=")
         ) {
             history.replaceState(
                 null,
