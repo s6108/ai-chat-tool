@@ -650,73 +650,110 @@ def get_30_day_pass_checkout_url(user) -> str:
         f"{separator}{urlencode(params)}"
     )
 
-def render_ios_storekit_purchase_button(
-    label: str,
-    user_id: str,
+def render_platform_purchase_buttons(
+    premium_url: str,
+    pass_url: str,
+    show_pass: bool = True,
 ) -> None:
-    """
-    iOS 原生 Megor App：
-    通过 megor://purchase-premium 调用原生 StoreKit。
+    """按平台显示 StoreKit 或 Lemon Squeezy 支付入口。"""
+    import html
 
-    普通浏览器中隐藏此按钮，不影响现有 Lemon Squeezy。
-    """
-    safe_label = json.dumps(label)
+    premium_label = html.escape(t("upgrade_premium"))
+    pass_label = html.escape(t("buy_30_day_pass"))
+    premium_desc = html.escape(t("premium_price_description"))
+    pass_desc = html.escape(t("pass_30_day_description"))
+
+    premium_href = html.escape(premium_url, quote=True)
+    pass_href = html.escape(pass_url, quote=True)
+
+    pass_html = ""
+    if show_pass:
+        pass_html = f"""
+        <a class="megor-pay-button" href="{pass_href}"
+           target="_blank" rel="noopener noreferrer">
+            {pass_label}
+        </a>
+        <p class="megor-pay-caption">{pass_desc}</p>
+        """
 
     components.html(
         f"""
-        <div id="megor-ios-purchase-wrap" style="display:none;">
-            <button
-                id="megor-ios-purchase-button"
-                style="
-                    width:100%;
-                    min-height:40px;
-                    border:1px solid rgba(49,51,63,.2);
-                    border-radius:8px;
-                    background:white;
-                    color:#31333f;
-                    font-size:14px;
-                    font-weight:400;
-                    cursor:pointer;
-                "
-            >
-                {label}
+        <style>
+            body {{
+                margin: 0;
+                font-family: -apple-system, BlinkMacSystemFont,
+                             "Segoe UI", sans-serif;
+            }}
+            .megor-pay-button {{
+                display: block;
+                box-sizing: border-box;
+                width: 100%;
+                padding: 10px;
+                margin-bottom: 8px;
+                border: 1px solid #ccc;
+                border-radius: 8px;
+                background: white;
+                color: #31333f;
+                font-size: 14px;
+                text-align: center;
+                text-decoration: none;
+                cursor: pointer;
+            }}
+            .megor-pay-caption {{
+                margin: 4px 0 12px;
+                color: #777;
+                font-size: 12px;
+            }}
+        </style>
+
+        <div id="megor-ios-payment" style="display:none">
+            <button id="megor-storekit-button"
+                    class="megor-pay-button">
+                {premium_label}
             </button>
+            <p class="megor-pay-caption">{premium_desc}</p>
+        </div>
+
+        <div id="megor-web-payment" style="display:none">
+            <a class="megor-pay-button"
+               href="{premium_href}"
+               target="_blank"
+               rel="noopener noreferrer">
+                {premium_label}
+            </a>
+            <p class="megor-pay-caption">{premium_desc}</p>
+            {pass_html}
         </div>
 
         <script>
         (() => {{
-            const wrap = document.getElementById(
-                "megor-ios-purchase-wrap"
-            );
-            const button = document.getElementById(
-                "megor-ios-purchase-button"
-            );
+            const ua = window.navigator.userAgent || "";
 
-            const ua =
-                window.navigator.userAgent ||
-                window.parent?.navigator?.userAgent ||
-                "";
+            const isMegorIOS = ua.includes("MegorNativeIOS");
 
-            const isMegorIOS =
-                ua.includes("MegorNativeIOS");
+            const iosPayment =
+                document.getElementById("megor-ios-payment");
+            const webPayment =
+                document.getElementById("megor-web-payment");
 
-            if (!isMegorIOS) {{
-                wrap.style.display = "none";
-                return;
+            if (isMegorIOS) {{
+                iosPayment.style.display = "block";
+
+                document.getElementById(
+                    "megor-storekit-button"
+                ).addEventListener("click", () => {{
+                    window.parent.location.href =
+                        "megor://purchase-premium";
+                }});
+            }} else {{
+                webPayment.style.display = "block";
             }}
-
-            wrap.style.display = "block";
-
-            button.addEventListener("click", () => {{
-                window.parent.location.href =
-                    "megor://purchase-premium";
-            }});
         }})();
         </script>
         """,
-        height=55,
+        height=180 if show_pass else 100,
+        scrolling=False,
     )
-
 
 # ====================== Device / Login Management ======================
 def get_user_plan(user_id: str) -> str:
@@ -1875,23 +1912,9 @@ with st.sidebar:
                 None,
             )
 
-            render_ios_storekit_purchase_button(
-                label=t("upgrade_premium"),
-                user_id=str(st.session_state.user.id),
-            )
-
-            
-            st.caption(
-                t("premium_price_description")
-            )
-
-            st.link_button(
-                t("buy_30_day_pass"),
-                pass_30_day_checkout_url,
-                use_container_width=True,
-            )
-            st.caption(
-                t("pass_30_day_description")
+            render_platform_purchase_buttons(
+                premium_url=premium_checkout_url,
+                pass_url=pass_30_day_checkout_url,
             )
     
 
@@ -2439,10 +2462,10 @@ if (
             user_plan,
         ):
             st.error(t("free_image_exhausted"))
-            st.link_button(
-                t("upgrade_premium"),
-                premium_checkout_url,
-                use_container_width=True,
+            render_platform_purchase_buttons(
+                premium_url=premium_checkout_url,
+                pass_url=pass_30_day_checkout_url,
+                show_pass=False,
             )
             st.session_state.submission_locked = False
             st.stop()
@@ -2455,10 +2478,10 @@ if (
             user_plan,
         ):
             st.error(t("free_chat_exhausted"))
-            st.link_button(
-                t("upgrade_premium"),
-                premium_checkout_url,
-                use_container_width=True,
+            render_platform_purchase_buttons(
+                premium_url=premium_checkout_url,
+                pass_url=pass_30_day_checkout_url,
+                show_pass=False,
             )
             st.session_state.submission_locked = False
             st.stop()
