@@ -16,7 +16,7 @@ MODEL_AVATARS = {
     "Qwen": str(STATIC_DIR / "avatar-qwen.png"),
     "GLM": str(STATIC_DIR / "avatar-glm-4v.png"),
     "Kimi": str(STATIC_DIR / "avatar-kimi.png"),
-    "Doubao-Pro": str(STATIC_DIR / "avatar-doubao-pro.png"),
+    "Doubao": str(STATIC_DIR / "avatar-doubao-pro.png"),
     "ChatGPT": str(STATIC_DIR / "avatar-chatgpt.png"),
     "Gemini": str(STATIC_DIR / "avatar-gemini.png"),
     "Grok": str(STATIC_DIR / "avatar-grok.png"),

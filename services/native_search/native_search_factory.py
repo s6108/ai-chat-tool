@@ -42,7 +42,7 @@ class NativeSearchFactory:
         "chatgpt": OpenAINativeSearch,
         "qwen": QwenNativeSearch,
         "kimi": KimiNativeSearch,
-        "doubao-pro": DoubaoNativeSearch,
+        "doubao": DoubaoNativeSearch,
         "glm": GLMNativeSearch,
         "deepseek": DeepSeekNativeSearch,
     }

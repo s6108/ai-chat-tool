@@ -1428,7 +1428,7 @@ def get_usage_status(
 FREE_BASIC_MODELS = {
     "DeepSeek",
     "Qwen",
-    "Doubao-Pro",
+    "Doubao",
     "GLM",
     "Kimi",
 }
@@ -1436,7 +1436,7 @@ FREE_BASIC_MODELS = {
 MODEL_MIN_REMAINING_CREDITS = {
     "DeepSeek": Decimal("3000"),
     "Qwen": Decimal("3000"),
-    "Doubao-Pro": Decimal("5000"),
+    "Doubao": Decimal("5000"),
     "Kimi": Decimal("8000"),
     "GLM": Decimal("10000"),
     "ChatGPT": Decimal("10000"),

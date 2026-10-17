@@ -21,11 +21,11 @@ class DoubaoNativeSearch(BaseNativeSearch):
     原生搜索失败时直接返回失败，不进入 Tavily 兜底。
     """
 
-    model_name = "Doubao-Pro"
+    model_name = "Doubao"
     provider = "volcengine"
 
     def __init__(self) -> None:
-        self.config = get_model_config("Doubao-Pro")
+        self.config = get_model_config("Doubao")
 
         if not self.config.api_key:
             raise RuntimeError(
@@ -151,6 +151,9 @@ class DoubaoNativeSearch(BaseNativeSearch):
                         "type": "web_search",
                     }
                 ],
+                tool_choice={
+                    "type": "web_search",
+                },
                 stream=True,
             )
 

@@ -47,7 +47,7 @@ MODEL_CAPABILITIES: Final[dict[str, ModelCapability]] = {
         10, 10, 8, 8, 9, 8, 0, 8, 10, 8, 4, 7,
         False, False, True,
         ("fast", "general", "writing", "translation", "summarization"),
-        ("DeepSeek", "Doubao-Pro", "Kimi"),
+        ("DeepSeek", "Doubao", "Kimi"),
     ),
     "Kimi": ModelCapability(
         "Kimi", "moonshot", "Moonshot AI", "CN",
@@ -69,8 +69,8 @@ MODEL_CAPABILITIES: Final[dict[str, ModelCapability]] = {
         },
         {"Gemini", "ChatGPT"},
     ),
-    "Doubao-Pro": ModelCapability(
-        "Doubao-Pro", "volcengine", "ByteDance", "CN",
+    "Doubao": ModelCapability(
+        "Doubao", "volcengine", "ByteDance", "CN",
         9, 9, 7, 7, 9, 7, 0, 8, 10, 7, 4, 6,
         False, False, True,
         ("creative_writing", "writing", "marketing", "business_plan"),

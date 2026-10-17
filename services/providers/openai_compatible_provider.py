@@ -142,6 +142,21 @@ class OpenAICompatibleProvider(BaseProvider):
             "stream": True,
         }
 
+        # Doubao 2.1 Lite 思考模式测试
+        # None = 默认；"disabled" = 快速；"enabled" = 深度
+        doubao_thinking_mode = "disabled"
+
+        if (
+            self.config.provider == "volcengine"
+            and selected_model_id == "doubao-seed-2-1-lite-260915"
+            and doubao_thinking_mode is not None
+        ):
+            request_params["extra_body"] = {
+                "thinking": {
+                    "type": doubao_thinking_mode
+                }
+            }
+
         # 仅降低 Kimi-K3 普通聊天的思考强度
         if (
             self.config.provider == "moonshot"

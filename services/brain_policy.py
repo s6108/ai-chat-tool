@@ -128,14 +128,14 @@ BRAIN_POLICIES: Final[dict[str, BrainPolicy]] = {
 
     "creative_writing": BrainPolicy(
         policy_name="creative_writing",
-        preferred_model="Doubao-Pro",
+        preferred_model="Doubao",
         fallback_models=("Qwen", "Claude"),
         use_capability_ranking=False,
-        allowed_models=("Doubao-Pro", "Qwen", "Claude"),
+        allowed_models=("Doubao", "Qwen", "Claude"),
         prefer_chinese_models=True,
         max_tokens=1800,
         temperature=0.75,
-        reason="长篇创作、营销和商业写作固定优先使用 Doubao-Pro",
+        reason="长篇创作、营销和商业写作固定优先使用 Doubao",
     ),
 
     "complex_coding": BrainPolicy(
@@ -169,9 +169,9 @@ BRAIN_POLICIES: Final[dict[str, BrainPolicy]] = {
     "writing": BrainPolicy(
         policy_name="writing",
         preferred_model="Qwen",
-        fallback_models=("Doubao-Pro", "Kimi"),
+        fallback_models=("Doubao", "Kimi"),
         use_capability_ranking=True,
-        allowed_models=("Qwen", "Doubao-Pro", "Kimi"),
+        allowed_models=("Qwen", "Doubao", "Kimi"),
         prefer_chinese_models=True,
         max_tokens=1400,
         temperature=0.65,
@@ -193,9 +193,9 @@ BRAIN_POLICIES: Final[dict[str, BrainPolicy]] = {
     "fast": BrainPolicy(
         policy_name="fast",
         preferred_model="Qwen",
-        fallback_models=("DeepSeek", "Doubao-Pro"),
+        fallback_models=("DeepSeek", "Doubao"),
         use_capability_ranking=True,
-        allowed_models=("Qwen", "DeepSeek", "Doubao-Pro"),
+        allowed_models=("Qwen", "DeepSeek", "Doubao"),
         prefer_chinese_models=True,
         max_tokens=800,
         temperature=0.5,
@@ -205,9 +205,9 @@ BRAIN_POLICIES: Final[dict[str, BrainPolicy]] = {
     "general": BrainPolicy(
         policy_name="general",
         preferred_model="DeepSeek",
-        fallback_models=("Qwen", "GLM", "Doubao-Pro"),
+        fallback_models=("Qwen", "GLM", "Doubao"),
         use_capability_ranking=True,
-        allowed_models=("DeepSeek", "Qwen", "GLM", "Doubao-Pro"),
+        allowed_models=("DeepSeek", "Qwen", "GLM", "Doubao"),
         prefer_chinese_models=True,
         max_tokens=1100,
         temperature=0.45,

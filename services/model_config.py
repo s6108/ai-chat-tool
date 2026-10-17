@@ -70,11 +70,11 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         api_key=KIMI_API_KEY,
         supports_vision=True,
     ),
-    "Doubao-Pro": ModelConfig(
-        name="Doubao-Pro",
+    "Doubao": ModelConfig(
+        name="Doubao",
         provider="volcengine",
         base_url="https://ark.cn-beijing.volces.com/api/v3",
-        model_id="ep-20260415022601-jm5b7",
+        model_id="doubao-seed-2-1-lite-260915",
         api_key=DOUBAO_API_KEY,
         supports_vision=True,
     ),

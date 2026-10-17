@@ -576,7 +576,7 @@ MODEL_DISPLAY_NAMES = {
     "ChatGPT": "ChatGPT-5.4 Mini",
     "Claude": "Claude-Sonnet 5",
     "DeepSeek": "DeepSeek-V4 Flash",
-    "Doubao-Pro": "Doubao-Doubao Pro",
+    "Doubao": "Doubao-Seed 2.1 Lite",
     "Gemini": "Gemini-3.6 Flash",
     "GLM": "ZhiPu-GLM 5.2 ",
     "Grok": "Grok-Grok 4.5",
@@ -756,17 +756,47 @@ def render_platform_purchase_buttons(
     )
 
 # ====================== Device / Login Management ======================
+
 def get_user_plan(user_id: str) -> str:
+    from types import SimpleNamespace
+
+    # 从订阅和 30-Day Pass 的有效期判断真实会员等级，
+    # 不再把 device_sessions.plan 当作权限依据。
+    account = get_account_data(
+        supabase_admin,
+        SimpleNamespace(id=user_id, email=None),
+        strict=True,
+    )
+
+    plan = (
+        "premium"
+        if account.get("is_premium")
+        else "free"
+    )
+
+    # 同步设备缓存，避免下次登录沿用过期等级。
     result = (
         supabase_admin.table("device_sessions")
-        .select("plan")
+        .select("id, plan")
         .eq("user_id", user_id)
-        .limit(1)
         .execute()
     )
-    if result.data:
-        return result.data[0].get("plan") or "free"
-    return "free"
+
+    devices = result.data or []
+
+    if any(
+        device.get("plan") != plan
+        for device in devices
+    ):
+        (
+            supabase_admin.table("device_sessions")
+            .update({"plan": plan})
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+    return plan
+
 
 
 def enforce_device_limit(user_id: str, current_device_id: str, plan: str = "free"):
@@ -2376,6 +2406,7 @@ render_chat_messages(
 
 
 # ====================== Upload + Chat Input ======================
+
 submission = st.chat_input(
     t("ask_anything"),
     accept_file=True,
@@ -2984,7 +3015,7 @@ if st.session_state.processing:
 
                                 FREE_CONTINUE_MODELS = {
                                     "DeepSeek",
-                                    "Doubao-Pro",
+                                    "Doubao",
                                     "Qwen",
                                     "Kimi",
                                     "GLM",
@@ -3055,7 +3086,7 @@ if st.session_state.processing:
                         # ChatGPT / Grok / Gemini / Claude：
                         #   各模型自己判断本轮是否真正联网。
                         #
-                        # Qwen / Kimi / Doubao-Pro / GLM /DeepSeek：
+                        # Qwen / Kimi / Doubao / GLM /DeepSeek：
                         #   是否联网已经由 Qwen Freshness 判断完成，
                         #   进入这里后直接执行各自原生搜索。
                         #
@@ -3068,7 +3099,7 @@ if st.session_state.processing:
                             "Claude",
                             "Qwen",
                             "Kimi",
-                            "Doubao-Pro",
+                            "Doubao",
                             "GLM",
                             "DeepSeek",
                         }
@@ -3608,7 +3639,7 @@ if st.session_state.processing:
 
                         FREE_CONTINUE_MODELS = {
                             "DeepSeek",
-                            "Doubao-Pro",
+                            "Doubao",
                             "Qwen",
                             "Kimi",
                             "GLM",
@@ -3847,6 +3878,7 @@ if st.session_state.processing:
                     "Post-response persistence failed:",
                     repr(persistence_error),
                 )
+                traceback.print_exc()
 
             # ==================================================
             # 完整答案已经输出并保存后，再统一记录 usage / 次数，
@@ -3927,6 +3959,7 @@ if st.session_state.processing:
                 print(
                     f"Usage update failed: {usage_error}"
                 )
+                traceback.print_exc()
             st.session_state.processing = False
             st.session_state.submission_locked = False
 
