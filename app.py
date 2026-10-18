@@ -2406,72 +2406,19 @@ render_chat_messages(
 
 
 # ====================== Upload + Chat Input ======================
-components.html(
+st.markdown(
     """
-    <script>
-    (() => {
-        const parentWindow = window.parent;
-        const parentDocument = parentWindow.document;
-
-        function hideMegorUploadHint() {
-            const elements = parentDocument.querySelectorAll(
-                '[role="tooltip"], div, span, p'
-            );
-
-            for (const element of elements) {
-                const text = (
-                    element.textContent || ""
-                ).trim();
-
-                if (
-                    text.startsWith(
-                        "Upload or drag and drop a file"
-                    )
-                ) {
-                    const target =
-                        element.closest('[role="tooltip"]')
-                        || element;
-
-                    target.style.setProperty(
-                        "display",
-                        "none",
-                        "important"
-                    );
-                }
-            }
-        }
-
-        if (
-            parentWindow.__megorUploadHintObserver
-        ) {
-            parentWindow
-                .__megorUploadHintObserver
-                .disconnect();
-        }
-
-        const observer = new MutationObserver(
-            hideMegorUploadHint
-        );
-
-        observer.observe(
-            parentDocument.body,
-            {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                characterData: true,
-            }
-        );
-
-        parentWindow.__megorUploadHintObserver =
-            observer;
-
-        hideMegorUploadHint();
-    })();
-    </script>
+    <style>
+    /* 隐藏 Streamlit 文件上传按钮的提示浮层。
+       只处理 tooltip，不修改上传组件 DOM 和事件。 */
+    [role="tooltip"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+    </style>
     """,
-    height=0,
-    width=0,
+    unsafe_allow_html=True,
 )
 submission = st.chat_input(
     t("ask_anything"),
