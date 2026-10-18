@@ -2406,7 +2406,73 @@ render_chat_messages(
 
 
 # ====================== Upload + Chat Input ======================
+components.html(
+    """
+    <script>
+    (() => {
+        const parentWindow = window.parent;
+        const parentDocument = parentWindow.document;
 
+        function hideMegorUploadHint() {
+            const elements = parentDocument.querySelectorAll(
+                '[role="tooltip"], div, span, p'
+            );
+
+            for (const element of elements) {
+                const text = (
+                    element.textContent || ""
+                ).trim();
+
+                if (
+                    text.startsWith(
+                        "Upload or drag and drop a file"
+                    )
+                ) {
+                    const target =
+                        element.closest('[role="tooltip"]')
+                        || element;
+
+                    target.style.setProperty(
+                        "display",
+                        "none",
+                        "important"
+                    );
+                }
+            }
+        }
+
+        if (
+            parentWindow.__megorUploadHintObserver
+        ) {
+            parentWindow
+                .__megorUploadHintObserver
+                .disconnect();
+        }
+
+        const observer = new MutationObserver(
+            hideMegorUploadHint
+        );
+
+        observer.observe(
+            parentDocument.body,
+            {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                characterData: true,
+            }
+        );
+
+        parentWindow.__megorUploadHintObserver =
+            observer;
+
+        hideMegorUploadHint();
+    })();
+    </script>
+    """,
+    height=0,
+    width=0,
+)
 submission = st.chat_input(
     t("ask_anything"),
     accept_file=True,
