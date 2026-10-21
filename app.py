@@ -1963,7 +1963,38 @@ with st.sidebar:
         remove_chat_id_from_url()
         save_last_activity(cookies)
         st.rerun()
+    # 删除当前选中的历史会话
+    if st.button(
+        t("delete_chat"),
+        key="sidebar_delete_chat",
+        use_container_width=True,
+        disabled=not bool(st.session_state.current_session_id),
+    ):
+        delete_chat(st.session_state.current_session_id)
+        _invalidate_chat_sessions_cache()
 
+        remaining_sessions = _get_cached_sessions(
+            st.session_state.user.id
+        )
+
+        if remaining_sessions:
+            next_session_id = remaining_sessions[0]["id"]
+
+            st.session_state.current_session_id = next_session_id
+            st.session_state.messages = _load_messages_startup_cached(
+                next_session_id
+            )
+            st.session_state.new_chat_mode = False
+            st.query_params["chat"] = str(next_session_id)
+        else:
+            st.session_state.current_session_id = None
+            st.session_state.messages = []
+            st.session_state.new_chat_mode = True
+            remove_chat_id_from_url()
+
+        st.session_state.uploader_key += 1
+        st.session_state.processing = False
+        st.rerun()
     # 复用上方已经读取的 sessions，避免同一轮再次访问 Supabase。
     for s in sessions:
         title = s.get("title", "新对话")
@@ -1992,56 +2023,30 @@ with st.sidebar:
             st.session_state.processing = False
             st.rerun()
 
-    if st.session_state.current_session_id:
+
+    if DEBUG:
+
         st.markdown("---")
-        if st.button(t("delete_chat"), use_container_width=True):
-            delete_chat(st.session_state.current_session_id)
-            _invalidate_chat_sessions_cache()
-            remaining_sessions = _get_cached_sessions(
-                st.session_state.user.id
-            )
+        st.subheader("🔧 Debug")
 
-            if remaining_sessions:
-                next_session_id = remaining_sessions[0]["id"]
+        st.write("Device ID:", device_id)
 
-                st.session_state.current_session_id = next_session_id
-                st.session_state.messages = _load_messages_startup_cached(next_session_id)
-                st.session_state.new_chat_mode = False
+        
 
-                st.query_params["chat"] = str(next_session_id)
-            else:
-                st.session_state.current_session_id = None
-                st.session_state.messages = []
-                st.session_state.new_chat_mode = True
+        st.write(
+            "User:",
+            getattr(st.session_state.user, "email", None)
+        )
 
-                remove_chat_id_from_url()
+        st.write(
+            "Current Session:",
+            st.session_state.current_session_id
+        )
 
-            st.session_state.uploader_key += 1
-            st.session_state.processing = False
-            st.rerun()
-        if DEBUG:
-
-            st.markdown("---")
-            st.subheader("🔧 Debug")
-
-            st.write("Device ID:", device_id)
-
-            
-
-            st.write(
-                "User:",
-                getattr(st.session_state.user, "email", None)
-            )
-
-            st.write(
-                "Current Session:",
-                st.session_state.current_session_id
-            )
-
-            st.write(
-                "Processing:",
-                st.session_state.processing
-            )
+        st.write(
+            "Processing:",
+            st.session_state.processing
+        )
 
 
 # ====================== Fixed Top Model Selector ======================
