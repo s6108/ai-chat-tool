@@ -141,4 +141,10 @@ TEXT = {
     "premium_price_description": "高级会员 $14.99/月，自动续费。",
     "upgrade_premium": "高级会员",
     "pass_30_day_description": "一次购买 $19.99/30天(可用支付宝)，不自动续费。",
+    "delete_all_chats": "🗑️ 删除全部历史会话",
+    "delete_all_chats_warning": "⚠️ 确定删除全部历史会话吗？此操作将永久删除当前账号的所有历史会话及消息记录，删除后无法恢复。",
+    "confirm_delete_all_chats": "确认全部删除",
+    "delete_all_chats_success": "已删除 {count} 条历史会话",
+    "delete_all_chats_failed": "删除未能全部完成：{error}",
+    "cancel": "取消",
 }

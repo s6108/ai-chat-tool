@@ -33,6 +33,7 @@ from services.history_service import (
     clear_chat_messages,
     create_new_chat,
     delete_chat,
+    delete_all_chats,
     load_messages,
     load_sessions,
     update_chat_title_if_needed,
@@ -1995,6 +1996,71 @@ with st.sidebar:
         st.session_state.uploader_key += 1
         st.session_state.processing = False
         st.rerun()
+
+    # ====================== Delete All Chat History ======================
+
+    if "confirm_delete_all_chats" not in st.session_state:
+        st.session_state.confirm_delete_all_chats = False
+
+    if st.button(
+        t("delete_all_chats"),
+        key="sidebar_delete_all_chats",
+        use_container_width=True,
+        disabled=st.session_state.processing,
+    ):
+        st.session_state.confirm_delete_all_chats = True
+
+    if st.session_state.confirm_delete_all_chats:
+
+        st.warning(t("delete_all_chats_warning"))
+
+        col_cancel, col_confirm = st.columns(2)
+
+        with col_cancel:
+            if st.button(
+                t("cancel"),
+                key="cancel_delete_all_chats",
+                use_container_width=True,
+            ):
+                st.session_state.confirm_delete_all_chats = False
+                st.rerun()
+
+        with col_confirm:
+            if st.button(
+                t("confirm_delete_all_chats"),
+                key="confirm_delete_all_chats_btn",
+                type="primary",
+                use_container_width=True,
+            ):
+                try:
+                    deleted_count = delete_all_chats(
+                        st.session_state.user.id
+                    )
+
+                except Exception as error:
+                    _invalidate_chat_sessions_cache()
+                    st.error(
+                        t("delete_all_chats_failed", error=str(error))
+                    )
+
+                else:
+                    _invalidate_chat_sessions_cache()
+
+                    st.session_state.current_session_id = None
+                    st.session_state.messages = []
+                    st.session_state.new_chat_mode = True
+                    st.session_state.page = "chat"
+                    st.session_state.processing = False
+                    st.session_state.uploader_key += 1
+                    st.session_state.confirm_delete_all_chats = False
+
+                    remove_chat_id_from_url()
+
+                    st.toast(
+                        t("delete_all_chats_success", count=deleted_count)
+                    )
+
+                    st.rerun()
     # 复用上方已经读取的 sessions，避免同一轮再次访问 Supabase。
     for s in sessions:
         title = s.get("title", "新对话")

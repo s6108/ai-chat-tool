@@ -71,6 +71,51 @@ def delete_chat(session_id: str):
     supabase_admin.table("messages").delete().eq("session_id", session_id).execute()
     supabase_admin.table("chat_sessions").delete().eq("id", session_id).execute()
 
+def delete_all_chats(user_id: str) -> int:
+    """删除指定用户的全部历史会话及对应消息。"""
+    if not user_id:
+        raise ValueError("missing_user_id")
+
+    deleted_count = 0
+
+    while True:
+        result = (
+            supabase_admin.table("chat_sessions")
+            .select("id")
+            .eq("user_id", str(user_id))
+            .limit(100)
+            .execute()
+        )
+
+        session_ids = [
+            row["id"]
+            for row in (result.data or [])
+        ]
+
+        if not session_ids:
+            break
+
+        # 先删除这些会话的消息
+        (
+            supabase_admin.table("messages")
+            .delete()
+            .in_("session_id", session_ids)
+            .execute()
+        )
+
+        # 再删除属于当前用户的会话
+        (
+            supabase_admin.table("chat_sessions")
+            .delete()
+            .eq("user_id", str(user_id))
+            .in_("id", session_ids)
+            .execute()
+        )
+
+        deleted_count += len(session_ids)
+
+    return deleted_count
+
 
 def clear_chat_messages(session_id: str):
     if not session_id:

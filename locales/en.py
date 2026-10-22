@@ -175,4 +175,10 @@ TEXT = {
     "premium_price_description": "Premium $14.99/month · Auto-renewal",
     "upgrade_premium": "Upgrade to Premium",
     "pass_30_day_description": "One-time purchase · $19.99/30 days · No auto-renewal",
+    "delete_all_chats": "🗑️ Delete All Chat History",
+    "delete_all_chats_warning": "⚠️ Are you sure you want to delete all chat history? All conversations and messages in your account will be permanently deleted. This action cannot be undone.",
+    "confirm_delete_all_chats": "Delete All",
+    "delete_all_chats_success": "Deleted {count} conversations",
+    "delete_all_chats_failed": "Could not complete deletion: {error}",
+    "cancel": "Cancel",
 }
