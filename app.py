@@ -923,6 +923,14 @@ if (
     and recovery_token_hash
     and not st.session_state["password_recovery_mode"]
 ):
+    st.info("请点击下方按钮，继续重置密码。")
+
+    if not st.button(
+        "继续重置密码",
+        key="confirm_password_recovery",
+    ):
+        st.stop()
+
     try:
         recovery_res = supabase.auth.verify_otp(
             {
