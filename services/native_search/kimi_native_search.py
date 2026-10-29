@@ -308,20 +308,33 @@ class KimiNativeSearch(BaseNativeSearch):
         stream = self.client.chat.completions.create(
             model=model_id,
             messages=messages,
-            max_tokens=2500,
+            max_tokens=15000,
             temperature=1,
             stream=True,
         )
+
+        finish_reason = None
 
         for chunk in stream:
             if not chunk.choices:
                 continue
 
-            delta = chunk.choices[0].delta
+            choice = chunk.choices[0]
+
+            if choice.finish_reason:
+                finish_reason = choice.finish_reason
+
+            delta = choice.delta
             content = getattr(delta, "content", None)
 
             if isinstance(content, str) and content:
                 yield content
+
+        if finish_reason != "stop":
+            raise RuntimeError(
+                f"Kimi final stream incomplete: "
+                f"finish_reason={finish_reason}"
+            )
 
     # ==================================================
     # 真流式 Formula Search
@@ -485,6 +498,12 @@ class KimiNativeSearch(BaseNativeSearch):
                     )
 
                 except Exception as fast_error:
+                    if final_answer_parts:
+                        raise RuntimeError(
+                            "Kimi fast stream interrupted after "
+                            f"{sum(len(part) for part in final_answer_parts)} "
+                            "characters; fallback disabled to prevent duplication."
+                        ) from fast_error
                     print(
                         "⚠️ Kimi Formula fast path failed; "
                         "falling back to tool-selection flow:",

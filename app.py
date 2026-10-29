@@ -3381,11 +3381,14 @@ if st.session_state.processing:
                                 full_response = native_stream_answer
                                 placeholder.markdown(full_response)
 
-                            # 如果最终 Native Search 判定失败，
-                            # 清掉可能已经显示的部分流式正文。
+                            # Preserve streamed text on failure.
+                            # An incomplete response must not be treated as successful.
                             if not native_search_response.success:
-                                placeholder.empty()
-                                full_response = ""
+                                if native_stream_answer.strip():
+                                    full_response = native_stream_answer
+                                    placeholder.markdown(full_response)
+                                else:
+                                    full_response = ""
 
                         else:
                             # 当前模型不支持 Native Streaming 时，
@@ -3480,9 +3483,28 @@ if st.session_state.processing:
 
                     except Exception as error:
                         print(
-                            f"⚠️ {selected_model_name} 原生搜索异常：",
-                            error,
+                            f"⚠️ {selected_model_name} native search exception:",
+                            repr(error),
                         )
+
+                        native_search_used = False
+
+                        if native_search_response is None:
+                            from services.native_search.base_native_search import (
+                                NativeSearchResponse,
+                            )
+
+                            native_search_response = NativeSearchResponse(
+                                success=False,
+                                model_name=selected_model_name,
+                                provider="native_search",
+                                query=resolved_search_prompt,
+                                answer=locals().get(
+                                    "native_stream_answer", ""
+                                ),
+                                error=f"{type(error).__name__}: {error}",
+                                should_fallback=False,
+                            )
 
                 # ==================================================
                 # 原生搜索成功
@@ -3612,10 +3634,21 @@ if st.session_state.processing:
                             native_error,
                         )
 
-                    placeholder.error(
-                        f"{selected_model_name} 联网搜索失败，"
-                        "请稍后重试。"
-                    )
+                    partial_answer = locals().get("native_stream_answer", "")
+
+                    if partial_answer.strip():
+                        placeholder.markdown(partial_answer)
+                        st.warning(
+                            t("native_search_incomplete").format(
+                                model=selected_model_name
+                            )
+                        )
+                    else:
+                        placeholder.error(
+                            t("native_search_failed").format(
+                                model=selected_model_name
+                            )
+                        )
 
                     st.session_state.processing = False
                     st.session_state.submission_locked = False

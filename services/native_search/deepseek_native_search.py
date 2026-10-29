@@ -42,6 +42,8 @@ class DeepSeekNativeSearch(BaseNativeSearch):
         seen_urls: set[str] = set()
         search_called = False
         finish_reason: str | None = None
+
+        message_stopped = False
         usage: dict[str, Any] | None = None
         error: str | None = None
         current_block_type = ""
@@ -160,6 +162,7 @@ class DeepSeekNativeSearch(BaseNativeSearch):
                         if isinstance(message.get("usage"), dict):
                             usage = message["usage"]
                     elif kind == "message_stop":
+                        message_stopped = True
                         break
         except requests.RequestException as exc:
             error = f"DeepSeek native search request failed: {type(exc).__name__}: {exc}"
@@ -167,7 +170,21 @@ class DeepSeekNativeSearch(BaseNativeSearch):
             error = f"DeepSeek native search stream failed: {type(exc).__name__}: {exc}"
 
         answer = "".join(answer_parts).strip()
-        success = bool(answer and search_called and not error and finish_reason != "max_tokens")
+        success = bool(
+            answer
+            and search_called
+            and message_stopped
+            and not error
+            and finish_reason in {"end_turn", "stop_sequence"}
+        )
+
+        if not success and not error:
+            error = (
+                f"Incomplete DeepSeek stream: "
+                f"message_stopped={message_stopped}, "
+                f"finish_reason={finish_reason}, "
+                f"answer_chars={len(answer)}"
+            )
         yield "complete", NativeSearchResponse(
             success=success,
             model_name=self.model_name,

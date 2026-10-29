@@ -181,4 +181,6 @@ TEXT = {
     "delete_all_chats_success": "Deleted {count} conversations",
     "delete_all_chats_failed": "Could not complete deletion: {error}",
     "cancel": "Cancel",
+    "native_search_incomplete": "⚠️ {model}'s response was interrupted. The generated text has been preserved, but the answer is incomplete. Please try again.",
+    "native_search_failed": "{model} web search failed. Please try again later.",
 }

@@ -147,4 +147,6 @@ TEXT = {
     "delete_all_chats_success": "已删除 {count} 条历史会话",
     "delete_all_chats_failed": "删除未能全部完成：{error}",
     "cancel": "取消",
+    "native_search_incomplete": "⚠️ {model} 的回答中途发生中断。已保留生成的内容，但回答尚未完成，请重试。",
+    "native_search_failed": "{model} 联网搜索失败，请稍后重试。",
 }

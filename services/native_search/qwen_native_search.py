@@ -158,6 +158,7 @@ class QwenNativeSearch(BaseNativeSearch):
 
             answer_parts: list[str] = []
             final_response = None
+            stream_failure = None
 
             for event in stream:
                 event_type = (
@@ -185,9 +186,34 @@ class QwenNativeSearch(BaseNativeSearch):
                         "response",
                         None,
                     )
+                elif event_type in {
+                    "response.failed",
+                    "response.incomplete",
+                    "error",
+                }:
+                    stream_failure = event_type
 
             answer = "".join(answer_parts).strip()
 
+            if stream_failure or final_response is None:
+                error_reason = (
+                    stream_failure
+                    or "Stream ended without response.completed"
+                )
+
+                yield (
+                    "complete",
+                    NativeSearchResponse(
+                        success=False,
+                        model_name=self.model_name,
+                        provider=self.provider,
+                        query=query,
+                        answer=answer,
+                        error=error_reason,
+                        should_fallback=False,
+                    ),
+                )
+                return
             # ==========================================
             # 从最终 Response 提取搜索状态和来源
             # ==========================================
