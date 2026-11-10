@@ -3205,107 +3205,15 @@ if st.session_state.processing:
                             native_first_delta_time = None
 
                             # ----------------------------------------------
-                            # 上下文：
-                            # 海外自判模型只带紧邻当前问题的上一轮完整问答；
-                            # 中国原生搜索模型继续沿用当前 api_messages。
+                            # Native Search adds the current query itself.
+                            # Reuse the same speaker attribution for its history.
                             # ----------------------------------------------
                             if selected_model_name in SELF_DECIDING_SEARCH_MODELS:
-                                native_context_messages = []
-
-                                session_messages = st.session_state.get(
-                                    "messages",
-                                    [],
-                                )
-
-                                # 当前用户消息已经是最后一条，
-                                # Native Search 只取它之前的历史。
-                                history_messages = (
-                                    session_messages[:-1]
-                                    if session_messages
-                                    else []
-                                )
-
-                                for message in history_messages[-24:]:
-                                    role = message.get("role")
-                                    content = message.get("content")
-
-                                    if role not in {
-                                        "user",
-                                        "assistant",
-                                    }:
-                                        continue
-
-                                    # ==================================================
-                                    # 圆桌图片上下文
-                                    #
-                                    # 用户历史消息如果包含图片：
-                                    # - 当前模型支持视觉时，保留完整 multimodal content
-                                    # - 当前模型不支持视觉时，只提取其中的文字
-                                    #
-                                    # 这样后续视觉模型仍然可以看到圆桌中的原始图片。
-                                    # ==================================================
-                                    if role == "user" and isinstance(content, list):
-                                        if selected_config.supports_vision:
-                                            native_context_messages.append(
-                                                {
-                                                    "role": "user",
-                                                    "content": content,
-                                                }
-                                            )
-                                            continue
-
-                                        text_parts = []
-
-                                        for part in content:
-                                            if not isinstance(part, dict):
-                                                continue
-
-                                            if part.get("type") == "text":
-                                                text = part.get("text", "")
-
-                                                if isinstance(text, str) and text.strip():
-                                                    text_parts.append(
-                                                        text.strip()
-                                                    )
-
-                                        if text_parts:
-                                            native_context_messages.append(
-                                                {
-                                                    "role": "user",
-                                                    "content": "\n\n".join(
-                                                        text_parts
-                                                    ),
-                                                }
-                                            )
-
-                                        continue
-
-                                    if not isinstance(content, str):
-                                        continue
-
-                                    content = content.strip()
-
-                                    if not content:
-                                        continue
-
-                                    if role == "assistant":
-                                        speaker = (
-                                            message.get("model_name")
-                                            or message.get("model")
-                                            or "Megor"
-                                        )
-
-                                        content = (
-                                            f"[MODEL={speaker}]\n"
-                                            f"{content}"
-                                        )
-
-                                    native_context_messages.append(
-                                        {
-                                            "role": role,
-                                            "content": content,
-                                        }
-                                    )
+                                native_context_messages = prepare_messages(
+                                    selected_model_name,
+                                    st.session_state.messages[:-1],
+                                    history_limit=24,
+                                )[1:]
                             else:
                                 native_context_messages = api_messages
 

@@ -113,7 +113,7 @@ class ClaudeProvider(BaseProvider):
         with self.client.messages.stream(**request_args) as stream:
             for text in stream.text_stream:
                 if text:
-                    yielded_text = True
+                    yielded_text = yielded_text or bool(text.strip())
                     yield text
 
             # 流结束后取得 Claude 最终 Message，
@@ -180,6 +180,25 @@ class ClaudeProvider(BaseProvider):
                 }
 
         if not yielded_text:
+            # The SDK text iterator emits deltas only. Check the final blocks
+            # before treating a stream with no visible deltas as empty.
+            final_text = "".join(
+                block.text for block in final_message.content if block.type == "text"
+            )
+            if final_text.strip():
+                yield final_text
+                return
+
+            stop_reason = final_message.stop_reason or "unknown"
+            print(
+                "Claude response contained no visible text:",
+                f"model={self.config.model_id}",
+                f"message_id={final_message.id}",
+                f"stop_reason={stop_reason}",
+                f"block_types={[block.type for block in final_message.content]}",
+                f"max_tokens={max_tokens}",
+                f"output_tokens={(self.last_usage or {}).get('output_tokens')}",
+            )
             raise RuntimeError(
-                "Claude returned an empty response."
+                f"Claude returned no visible text (stop_reason={stop_reason})."
             )
