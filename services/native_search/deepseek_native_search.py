@@ -5,6 +5,7 @@ from typing import Any, Iterator
 
 import requests
 
+from constants import CHAT_MAX_OUTPUT_TOKENS
 from services.model_config import get_model_config
 from services.native_search.base_native_search import (
     BaseNativeSearch, NativeSearchResponse, NativeSearchResult,
@@ -65,7 +66,7 @@ class DeepSeekNativeSearch(BaseNativeSearch):
 
         payload = {
             "model": "deepseek-flash",
-            "max_tokens": 15000,
+            "max_tokens": CHAT_MAX_OUTPUT_TOKENS,
             "stream": True,
             "tools": [{
                 "type": "web_search_20250305",

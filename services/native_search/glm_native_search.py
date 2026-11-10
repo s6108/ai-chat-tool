@@ -4,6 +4,7 @@ from typing import Any, Iterator
 
 from openai import OpenAI
 
+from constants import CHAT_MAX_OUTPUT_TOKENS
 from services.model_config import get_model_config
 from services.native_search.base_native_search import (
     BaseNativeSearch,
@@ -176,6 +177,7 @@ class GLMNativeSearch(BaseNativeSearch):
 
             stream = self.client.chat.completions.create(
                 model=self.config.model_id,
+                max_tokens=CHAT_MAX_OUTPUT_TOKENS,
                 messages=glm_messages,
                 tools=[
                     {
@@ -316,6 +318,7 @@ class GLMNativeSearch(BaseNativeSearch):
 
             response = self.client.chat.completions.create(
                 model=self.config.model_id,
+                max_tokens=CHAT_MAX_OUTPUT_TOKENS,
                 messages=glm_messages,
                 tools=[
                     {

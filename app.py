@@ -20,6 +20,7 @@ from services.cookie_service import (
 )
 from supabase import create_client
 
+from constants import CHAT_MAX_OUTPUT_TOKENS
 from config import (
     SUPABASE_KEY,
     SUPABASE_SERVICE_KEY,
@@ -3027,7 +3028,6 @@ if st.session_state.processing:
                 history_limit=24,
             )
 
-            selected_max_tokens = 35000
             selected_temperature = 0.7
             
             # ===== 自动判断并执行联网搜索 =====
@@ -3717,26 +3717,6 @@ if st.session_state.processing:
                             st.session_state.submission_locked = False
                             st.stop()
 
-                    usage_max_output = (
-                        preflight
-                        .get("usage_status", {})
-                        .get("max_output_tokens")
-                    )
-
-                    if usage_max_output is not None:
-                        if selected_model_name == "Kimi" and preflight["allowed"]:
-                            # K3 spends part of this budget on mandatory thinking.
-                            kimi_budget = (
-                                4096 if preflight["usage_status"].get("heavy_limited")
-                                else 8192
-                            )
-                            usage_max_output = max(int(usage_max_output), kimi_budget)
-
-                        selected_max_tokens = min(
-                            int(selected_max_tokens),
-                            int(usage_max_output),
-                        )
-
                     cooldown_seconds = int(
                         preflight
                         .get("usage_status", {})
@@ -3772,7 +3752,7 @@ if st.session_state.processing:
                 stream = stream_model_response(
                     model_name=selected_model_name,
                     messages=api_messages,
-                    max_tokens=selected_max_tokens,
+                    max_tokens=CHAT_MAX_OUTPUT_TOKENS,
                     temperature=selected_temperature,
                     supabase_admin=supabase_admin,
                     user_id=(

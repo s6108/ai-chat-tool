@@ -4,6 +4,7 @@ from typing import Any
 
 from openai import OpenAI
 
+from constants import CHAT_MAX_OUTPUT_TOKENS
 from services.model_config import get_model_config
 from services.native_search.base_native_search import (
     BaseNativeSearch,
@@ -167,7 +168,7 @@ class GrokNativeSearch(BaseNativeSearch):
                 include=[
                     "web_search_call.action.sources",
                 ],
-                max_output_tokens=15000,
+                max_output_tokens=CHAT_MAX_OUTPUT_TOKENS,
                 store=True,
                 stream=True,
             )
@@ -329,7 +330,7 @@ class GrokNativeSearch(BaseNativeSearch):
                                         ),
                                     }
                                 ],
-                                max_output_tokens=15000,
+                                max_output_tokens=CHAT_MAX_OUTPUT_TOKENS,
                                 store=True,
                                 stream=True,
                             )
@@ -759,6 +760,7 @@ class GrokNativeSearch(BaseNativeSearch):
             # ==================================================
             response = self.client.responses.create(
                 model=self.config.model_id,
+                max_output_tokens=CHAT_MAX_OUTPUT_TOKENS,
                 input=input_messages,
                 tools=[
                     {

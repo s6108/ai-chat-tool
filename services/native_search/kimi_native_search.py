@@ -8,6 +8,7 @@ from typing import Any, Iterator
 import httpx
 from openai import OpenAI
 
+from constants import CHAT_MAX_OUTPUT_TOKENS
 from services.model_config import get_model_config
 from services.native_search.base_native_search import (
     BaseNativeSearch,
@@ -308,7 +309,7 @@ class KimiNativeSearch(BaseNativeSearch):
         stream = self.client.chat.completions.create(
             model=model_id,
             messages=messages,
-            max_tokens=15000,
+            max_tokens=CHAT_MAX_OUTPUT_TOKENS,
             temperature=1,
             stream=True,
         )
@@ -524,7 +525,7 @@ class KimiNativeSearch(BaseNativeSearch):
                     model=search_model_id,
                     messages=kimi_messages,
                     tools=self.formula_tools,
-                    max_tokens=4000,
+                    max_tokens=CHAT_MAX_OUTPUT_TOKENS,
                     temperature=1,
                     stream=True,
                 )
@@ -627,7 +628,7 @@ class KimiNativeSearch(BaseNativeSearch):
                         final_stream = self.client.chat.completions.create(
                             model=search_model_id,
                             messages=kimi_messages,
-                            max_tokens=4000,
+                            max_tokens=CHAT_MAX_OUTPUT_TOKENS,
                             temperature=1,
                             stream=True,
                         )

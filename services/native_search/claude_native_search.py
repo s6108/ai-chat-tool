@@ -4,6 +4,7 @@ from typing import Any
 
 import anthropic
 
+from constants import CHAT_MAX_OUTPUT_TOKENS
 from services.model_config import get_model_config
 from services.native_search.base_native_search import (
     BaseNativeSearch,
@@ -76,13 +77,6 @@ class ClaudeNativeSearch(BaseNativeSearch):
         try:
             is_fast_search = (
                 search_mode == "fast"
-            )
-
-            # Keep the fast path deliberately small.
-            max_tokens = (
-                3500
-                if is_fast_search
-                else 11000
             )
 
             max_uses = (
@@ -169,7 +163,7 @@ class ClaudeNativeSearch(BaseNativeSearch):
 
             request_args: dict[str, Any] = {
                 "model": self.config.model_id,
-                "max_tokens": max_tokens,
+                "max_tokens": CHAT_MAX_OUTPUT_TOKENS,
                 "system": (
                     search_instruction
                     + " Use recent conversation context when the latest "
@@ -602,7 +596,7 @@ class ClaudeNativeSearch(BaseNativeSearch):
             # ==================================================
             response = self.client.messages.create(
                 model=self.config.model_id,
-                max_tokens=1800,
+                max_tokens=CHAT_MAX_OUTPUT_TOKENS,
                 system=system_prompt,
                 messages=[
                     {

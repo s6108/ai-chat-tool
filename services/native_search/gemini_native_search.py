@@ -5,6 +5,7 @@ from typing import Any
 from google import genai
 from google.genai import types
 
+from constants import CHAT_MAX_OUTPUT_TOKENS
 from services.model_config import get_model_config
 from services.native_search.base_native_search import (
     BaseNativeSearch,
@@ -172,6 +173,7 @@ class GeminiNativeSearch(BaseNativeSearch):
                     model=self.config.model_id,
                     contents=unified_prompt,
                     config=types.GenerateContentConfig(
+                        max_output_tokens=CHAT_MAX_OUTPUT_TOKENS,
                         tools=[
                             grounding_tool,
                         ],
@@ -509,6 +511,7 @@ class GeminiNativeSearch(BaseNativeSearch):
                 model=self.config.model_id,
                 contents=search_prompt,
                 config=types.GenerateContentConfig(
+                    max_output_tokens=CHAT_MAX_OUTPUT_TOKENS,
                     tools=[
                         grounding_tool,
                     ],
