@@ -46,8 +46,7 @@ def save_remember_session(user, cookies, device_id: str) -> None:
 
     set_cookie(cookies, REMEMBER_COOKIE, token)
     set_cookie(cookies, LAST_ACTIVITY_COOKIE, now_utc())
-    persist_cookies(cookies)
-    print("✅ 长期登录 Cookie 已提交保存")
+    # The caller immediately reruns. Flush on the next page render.
 
 
 def restore_login_from_remember(

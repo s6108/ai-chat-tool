@@ -529,6 +529,8 @@ if not cookies_ready(cookies):
     )
     st.stop()
 
+# Flush the login cookie on the run after the sign-in rerun.
+persist_cookies(cookies)
 initialize_language(cookies)
 apply_brand_css()
 
