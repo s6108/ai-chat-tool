@@ -119,6 +119,7 @@ class OpenAICompatibleProvider(BaseProvider):
         messages: list[dict[str, Any]],
         max_tokens: int,
         temperature: float,
+        disable_deepseek_thinking: bool = False,
     ) -> Any:
         client = OpenAI(
             base_url=self.config.base_url,
@@ -156,6 +157,9 @@ class OpenAICompatibleProvider(BaseProvider):
                     "type": doubao_thinking_mode
                 }
             }
+
+        if self.config.provider == "deepseek" and disable_deepseek_thinking:
+            request_params["extra_body"] = {"thinking": {"type": "disabled"}}
 
         # 仅降低 Kimi-K3 普通聊天的思考强度
         if (
@@ -247,6 +251,7 @@ class OpenAICompatibleProvider(BaseProvider):
 
         initial_attempt = 0
         continuation_count = 0
+        disable_deepseek_thinking = False
 
         # 已经真正发送给前端的完整回答。
         full_answer = ""
@@ -320,6 +325,7 @@ class OpenAICompatibleProvider(BaseProvider):
                     messages=current_messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    disable_deepseek_thinking=disable_deepseek_thinking,
                 )
 
                 for chunk in stream:
@@ -390,18 +396,7 @@ class OpenAICompatibleProvider(BaseProvider):
                             f"reason={finish_reason}"
                         )
 
-                    # --------------------------------------
-                    # 不把 reasoning_content 发给前端
-                    # --------------------------------------
-                    reasoning_text = getattr(
-                        choice.delta,
-                        "reasoning_content",
-                        None,
-                    )
-
-                    if reasoning_text:
-                        continue
-
+                    # Read only visible answer text, even if this delta also carries reasoning.
                     text = getattr(
                         choice.delta,
                         "content",
@@ -575,18 +570,19 @@ class OpenAICompatibleProvider(BaseProvider):
                     "returned an empty response."
                 )
 
-                # 空响应发生在真正输出任何文字之前，
-                # 按“初始请求失败”处理并有限重试。
-                #
-                # DeepSeek 在较长历史对话中偶尔会返回空流；
-                # 第一次空响应先原样重试，第二次仍为空时，
-                # 第三次自动缩短上下文，只保留 system 消息
-                # 和最近 6 条非 system 消息。这样既保留最近语境，
-                # 又避免用户必须手动新建对话。
                 initial_attempt += 1
 
                 if initial_attempt >= max_initial_attempts:
                     break
+
+                if self.config.provider == "deepseek":
+                    # Thinking can exhaust the budget before any visible text.
+                    # Retry within the same budget, keeping the full history first.
+                    disable_deepseek_thinking = True
+                    print(
+                        "DeepSeek retry without thinking: "
+                        f"finish_reason={finish_reason}, max_tokens={max_tokens}"
+                    )
 
                 if (
                     self.config.provider == "deepseek"
