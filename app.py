@@ -3724,6 +3724,14 @@ if st.session_state.processing:
                     )
 
                     if usage_max_output is not None:
+                        if selected_model_name == "Kimi" and preflight["allowed"]:
+                            # K3 spends part of this budget on mandatory thinking.
+                            kimi_budget = (
+                                4096 if preflight["usage_status"].get("heavy_limited")
+                                else 8192
+                            )
+                            usage_max_output = max(int(usage_max_output), kimi_budget)
+
                         selected_max_tokens = min(
                             int(selected_max_tokens),
                             int(usage_max_output),
