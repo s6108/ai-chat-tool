@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import os
 import re
@@ -23,8 +24,10 @@ class Visit(BaseModel):
 
 @router.post("/growth/visit", status_code=204)
 def record_visit(visit: Visit, authorization: str = Header(default="")):
-    secret = os.environ.get("MEGOR_GROWTH_INGEST_SECRET")
-    if not secret or not hmac.compare_digest(authorization.encode(), f"Bearer {secret}".encode()):
+    expected_hash = os.environ.get("MEGOR_GROWTH_INGEST_SHA256")
+    scheme, _, token = authorization.partition(" ")
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    if scheme != "Bearer" or not token or not expected_hash or not hmac.compare_digest(token_hash, expected_hash):
         raise HTTPException(status_code=401)
     day = datetime.now(ZoneInfo("America/Edmonton")).date()
     visit_data = visit.model_dump(mode="json")
@@ -37,7 +40,7 @@ def record_visit(visit: Visit, authorization: str = Header(default="")):
 
 
 def record_first_payment(event_name, payload, user_id):
-    if not os.environ.get("MEGOR_GROWTH_INGEST_SECRET"):
+    if not os.environ.get("MEGOR_GROWTH_INGEST_SHA256"):
         return
     meta = payload.get("meta") or {}
     attributes = (payload.get("data") or {}).get("attributes") or {}
