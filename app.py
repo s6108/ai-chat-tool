@@ -1,3 +1,4 @@
+import re
 import base64
 import json
 import traceback
@@ -1656,9 +1657,11 @@ if not st.session_state.user:
 
         if st.button(t("sign_up"), use_container_width=True, key="reg_btn"):
             try:
-                supabase.auth.sign_up(
-                    {"email": email_reg, "password": password_reg}
-                )
+                signup = {"email": email_reg, "password": password_reg}
+                visitor = st.query_params.get("megor_visitor", "")
+                if re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", visitor):
+                    signup["options"] = {"data": {"megor_visitor": visitor}}
+                supabase.auth.sign_up(signup)
                 st.success(t("sign_up_success"))
             except Exception as e:
                 st.error(t("sign_up_failed", error=e))

@@ -3,6 +3,7 @@ import traceback
 
 from fastapi import FastAPI, HTTPException, Request
 
+from services.growth_service import router as growth_router, record_first_payment
 from services.webhook_service import (
     InvalidWebhookSignature,
     WebhookConfigurationError,
@@ -18,6 +19,9 @@ app = FastAPI(
     title="Megor Webhook Service",
     version="2.0.0",
 )
+
+
+app.include_router(growth_router)
 
 
 @app.get("/")
@@ -83,6 +87,8 @@ async def lemon_squeezy_webhook(
         )
 
         print("=" * 70)
+        if result.get("processed"):
+            record_first_payment(event_name, payload, result.get("user_id") or summary.get("user_id"))
         print("LEMONSQUEEZY WEBHOOK PROCESSED")
         print(
             json.dumps(
