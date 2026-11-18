@@ -1,3 +1,4 @@
+import { handleComposition } from './photographer-vision.mjs';
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -110,6 +111,11 @@ async function upstreamFailureStatus(result) {
 const maxInput = 8 * 1024 * 1024;
 let busy = false;
 createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/photographer-plan') {
+    if (!authorized(req.headers.authorization)) { res.writeHead(401).end(); return; }
+    await handleComposition(req, res, { apiKey: OPENAI_API_KEY, model: process.env.PHOTOGRAPHER_VISION_MODEL || 'gpt-6.2-astra' });
+    return;
+  }
   if (req.method !== 'POST' || req.url !== '/portrait-edit') {
     res.writeHead(404).end();
     return;
