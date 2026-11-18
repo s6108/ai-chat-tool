@@ -58,7 +58,12 @@ const seedreamPrompt = `
 保留身份、五官比例、脸型、真实肤色基调、表情、视线、姿态、服饰、物件与构图。不换脸、不液化、不重建五官、不添加虚构细节、不裁切或填边。只输出精修照片。
 `.trim();
 
-function requestImageEdit(jpeg, signal) {
+const landscapePrompt = `
+你是专业风光摄影后期修图师。以原片为依据，按实际画面调整曝光、白平衡、高光、阴影、色彩关系和空间层次，使照片清晰、有层次且符合原有光线氛围。按需压低刺眼亮部，打开仍有细节的阴影，适度局部对比、去雾、降噪和分区锐化，保留云、水、雾、植被和山石的真实质感。避免过度 HDR、边缘光晕、过饱和和暗部噪点。保留机位、地平线、构图、景物位置、季节、天气与光源方向。不得换天、添太阳、移山、添加或删除建筑人物、虚构细节，不裁剪、不填边、不叠字。只输出调整后的照片。
+`.trim();
+
+function requestImageEdit(jpeg, signal, genre) {
+  const landscape = genre === 'landscape';
   if (PORTRAIT_EDIT_PROVIDER === 'seedream') {
     return fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
       method: 'POST',
@@ -66,7 +71,7 @@ function requestImageEdit(jpeg, signal) {
       body: JSON.stringify({
         model: ARK_IMAGE_MODEL.trim(),
         image: `data:image/jpeg;base64,${jpeg.toString('base64')}`,
-        prompt: seedreamPrompt,
+        prompt: landscape ? landscapePrompt : seedreamPrompt,
         size: '2K',
         response_format: 'b64_json',
         output_format: 'jpeg',
@@ -79,7 +84,7 @@ function requestImageEdit(jpeg, signal) {
   const form = new FormData();
   form.set('model', 'gpt-image-2');
   form.set('image', new Blob([jpeg], { type: 'image/jpeg' }), 'portrait.jpg');
-  form.set('prompt', retouchPrompt);
+  form.set('prompt', landscape ? landscapePrompt : retouchPrompt);
   form.set('size', 'auto');
   form.set('output_format', 'jpeg');
   return fetch('https://api.openai.com/v1/images/edits', {
@@ -147,7 +152,8 @@ createServer(async (req, res) => {
       return;
     }
 
-    const result = await requestImageEdit(jpeg, AbortSignal.any([cancel.signal, AbortSignal.timeout(165_000)]));
+    const result = await requestImageEdit(jpeg, AbortSignal.any([cancel.signal, AbortSignal.timeout(165_000)]),
+                                          req.headers['x-photo-genre']);
     if (!result.ok) {
       res.writeHead(await upstreamFailureStatus(result)).end();
       return;
