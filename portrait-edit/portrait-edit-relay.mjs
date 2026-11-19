@@ -113,7 +113,11 @@ let busy = false;
 createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/photographer-plan') {
     if (!authorized(req.headers.authorization)) { res.writeHead(401).end(); return; }
-    await handleComposition(req, res, { apiKey: OPENAI_API_KEY, model: process.env.PHOTOGRAPHER_VISION_MODEL || 'gpt-6.2-astra' });
+    const provider = process.env.PHOTOGRAPHER_VISION_PROVIDER || 'openai';
+    if (!['openai', 'qwen'].includes(provider)) { res.writeHead(503).end(); return; }
+    await handleComposition(req, res, { provider,
+      apiKey: provider === 'qwen' ? process.env.DASHSCOPE_API_KEY : OPENAI_API_KEY,
+      model: process.env.PHOTOGRAPHER_VISION_MODEL || (provider === 'qwen' ? 'qwen3.6-flash' : 'gpt-6.2-astra') });
     return;
   }
   if (req.method !== 'POST' || req.url !== '/portrait-edit') {
