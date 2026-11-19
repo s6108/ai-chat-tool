@@ -1,4 +1,9 @@
 TEXT = {
+    'auth_email_invalid': '请输入可正常收信的邮箱地址，不支持示例或测试地址。',
+    'auth_email_wait': '请等待 {seconds} 秒后再请求邮件，请先检查收件箱和垃圾邮件。',
+    'auth_email_rate_limited': '邮件请求暂时受限，请稍后再试。重复点击不会加快发送。',
+    'auth_email_unavailable': '邮件发送暂时不可用，请稍后再试或联系 Megor 支持。',
+    'auth_password_short': '请设置至少 6 位的密码。',
     # 基础
     "language_name": "简体中文",
     "language_label": "语言",
@@ -132,7 +137,7 @@ TEXT = {
     "forgot_password": "忘记密码？",
     "reset_email": "邮箱地址",
     "send_reset_email": "发送重置邮件",
-    "reset_email_sent": "密码重置邮件已发送，请检查你的邮箱。",
+    "reset_email_sent": "如果该邮箱已注册，我们已请求发送重置邮件，请检查收件箱和垃圾邮件。",
     "enter_reset_email": "请输入你的邮箱地址。",
     "today_chat": "今日聊天",
     "today_images": "今日识图",

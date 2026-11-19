@@ -1,4 +1,9 @@
 TEXT = {
+    'auth_email_invalid': 'Enter a valid email address you can receive mail at. Example or test addresses cannot be used.',
+    'auth_email_wait': 'Please wait {seconds} seconds before requesting another email. Check your inbox and spam folder first.',
+    'auth_email_rate_limited': 'Email requests are temporarily limited. Please try again later; repeated clicks will not send another email.',
+    'auth_email_unavailable': 'Email delivery is temporarily unavailable. Please try again later or contact Megor support.',
+    'auth_password_short': 'Use a password with at least 6 characters.',
     # Basic
     "language_name": "English",
     "language_label": "Language",
@@ -166,7 +171,7 @@ TEXT = {
     "forgot_password": "Forgot password?",
     "reset_email": "Email address",
     "send_reset_email": "Send reset email",
-    "reset_email_sent": "Password reset email sent. Please check your inbox.",
+    "reset_email_sent": "If an account exists for this address, a password reset email has been requested. Check your inbox and spam folder.",
     "enter_reset_email": "Please enter your email address.",
     "today_chat": "Today's chats",
     "today_images": "Today's images",

@@ -29,6 +29,12 @@ from config import (
     AUTO_NEW_CHAT_AFTER_MINUTES,
 )
 from services.account_service import get_account_data
+from services.auth_email_service import (
+    normalize_auth_email,
+    email_wait_seconds,
+    mark_email_attempt,
+    auth_email_error_key,
+)
 from services.chat_service import save_message
 from services.device_service import get_device_id
 from services.history_service import (
@@ -1631,23 +1637,25 @@ if not st.session_state.user:
                 t("send_reset_email"),
                 key="send_reset_email_btn",
             ):
-                if not reset_email:
-                    st.error(t("enter_reset_email"))
+                try:
+                    normalized_email = normalize_auth_email(reset_email)
+                except ValueError:
+                    st.error(t("auth_email_invalid"))
                 else:
-                    try:
-                        supabase.auth.reset_password_for_email(
-                            reset_email.strip(),
-                            {
-                                "redirect_to": "https://app.megor.ai"
-                            },
-                        )
-
-                        st.success(t("reset_email_sent"))
-
-                    except Exception as reset_error:
-                        st.error(
-                            f"Unable to send reset email: {reset_error}"
-                        )
+                    wait = email_wait_seconds(st.session_state, time.monotonic())
+                    if wait:
+                        st.warning(t("auth_email_wait", seconds=wait))
+                    else:
+                        mark_email_attempt(st.session_state, time.monotonic())
+                        try:
+                            supabase.auth.reset_password_for_email(
+                                normalized_email,
+                                {"redirect_to": "https://app.megor.ai"},
+                            )
+                            st.success(t("reset_email_sent"))
+                        except Exception as reset_error:
+                            key = auth_email_error_key(reset_error)
+                            st.error(t(key or "auth_email_unavailable"))
 
             
 
@@ -1657,14 +1665,27 @@ if not st.session_state.user:
 
         if st.button(t("sign_up"), use_container_width=True, key="reg_btn"):
             try:
-                signup = {"email": email_reg, "password": password_reg}
-                visitor = st.query_params.get("megor_visitor", "")
-                if re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", visitor):
-                    signup["options"] = {"data": {"megor_visitor": visitor}}
-                supabase.auth.sign_up(signup)
-                st.success(t("sign_up_success"))
-            except Exception as e:
-                st.error(t("sign_up_failed", error=e))
+                normalized_email = normalize_auth_email(email_reg)
+            except ValueError:
+                st.error(t("auth_email_invalid"))
+            else:
+                wait = email_wait_seconds(st.session_state, time.monotonic())
+                if len(password_reg) < 6:
+                    st.error(t("auth_password_short"))
+                elif wait:
+                    st.warning(t("auth_email_wait", seconds=wait))
+                else:
+                    mark_email_attempt(st.session_state, time.monotonic())
+                    try:
+                        signup = {"email": normalized_email, "password": password_reg}
+                        visitor = st.query_params.get("megor_visitor", "")
+                        if re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", visitor):
+                            signup["options"] = {"data": {"megor_visitor": visitor}}
+                        supabase.auth.sign_up(signup)
+                        st.success(t("sign_up_success"))
+                    except Exception as error:
+                        key = auth_email_error_key(error)
+                        st.error(t(key) if key else t("sign_up_failed", error=error))
 
     st.stop()
 
