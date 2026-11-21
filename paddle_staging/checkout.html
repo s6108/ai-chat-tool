@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Megor 结账</title></head>
+<body><main><h1>Megor 结账</h1><p id="status" role="status">正在加载结账页面…</p><p>付款完成后，会员状态以服务器核验结果为准。</p></main>
+<script id="paddle-config" type="application/json">__PADDLE_CONFIG__</script>
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<script>
+const config=JSON.parse(document.getElementById('paddle-config').textContent);
+const status=document.getElementById('status');
+try {
+ if (!window.Paddle) throw new Error('付款页面加载失败，请稍后重试。');
+ const txn=new URLSearchParams(location.search).get('_ptxn');
+ if (!/^txn_[a-z0-9]{26}$/.test(txn||'')) throw new Error('请从已登录的 Megor 账户开始购买。');
+ if(config.environment==='sandbox') Paddle.Environment.set('sandbox');
+ Paddle.Initialize({token:config.clientToken,eventCallback:event=>{
+  if(event.name==='checkout.completed')status.textContent='付款流程已完成，请返回 Megor 刷新会员状态。';
+  if(event.name==='checkout.payment.failed')status.textContent='付款未成功，请检查付款方式后重试。';
+  if(event.name==='checkout.closed')status.textContent='结账已关闭。可返回 Megor 重新开始购买。';
+ }});
+ // Paddle.js reads _ptxn on initialization and opens that server-created transaction.
+ status.textContent=config.environment==='sandbox'?'Sandbox 测试结账，不会真实扣款。':'正在打开安全结账窗口…';
+}catch(error){status.textContent=error.message;}
+</script></body></html>
