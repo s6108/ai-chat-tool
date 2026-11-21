@@ -1,4 +1,9 @@
 TEXT = {
+    'confirm_email_required': '邮箱尚未验证，请检查收件箱和垃圾邮件，或使用下方的“重新发送验证邮件”。',
+    'resend_confirmation_title': '没有收到注册验证邮件？',
+    'resend_confirmation_help': '请输入注册时使用的邮箱，并检查垃圾邮件。请使用最新一封验证邮件中的链接。若数分钟后仍未收到，请联系 Megor 支持核对投递状态。',
+    'resend_confirmation': '重新发送验证邮件',
+    'resend_confirmation_requested': '如果该邮箱的注册尚待验证，我们已请求重新发送验证邮件，请检查收件箱和垃圾邮件。已验证的用户请直接登录。',
     'auth_email_invalid': '请输入可正常收信的邮箱地址，不支持示例或测试地址。',
     'auth_email_wait': '请等待 {seconds} 秒后再请求邮件，请先检查收件箱和垃圾邮件。',
     'auth_email_rate_limited': '邮件请求暂时受限，请稍后再试。重复点击不会加快发送。',

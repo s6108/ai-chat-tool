@@ -38,19 +38,19 @@ class AuthEmailTests(unittest.TestCase):
         self.assertEqual(auth_email_error_key(error), 'auth_email_rate_limited')
         self.assertEqual(auth_email_error_key(Exception('Error sending recovery email')), 'auth_email_unavailable')
 
-    def run_signup(self, email, state=None, error=None):
+    def run_signup(self, email, state=None, error=None, handler_key="reg_btn"):
         # Execute the actual button handler without booting Streamlit or sending email.
         tree = ast.parse(Path(__file__).resolve().parents[1].joinpath('app.py').read_text())
         handler = next(node for node in ast.walk(tree) if isinstance(node, ast.If)
                        and isinstance(node.test, ast.Call)
                        and any(k.arg == 'key' and isinstance(k.value, ast.Constant)
-                               and k.value.value == 'reg_btn' for k in node.test.keywords))
+                               and k.value.value == handler_key for k in node.test.keywords))
         st = SimpleNamespace(session_state=state if state is not None else {},
                              query_params={'megor_visitor': '00000000-0000-0000-0000-000000000000'},
                              error=Mock(), warning=Mock(), success=Mock())
-        auth = SimpleNamespace(sign_up=Mock(side_effect=error))
+        auth = SimpleNamespace(sign_up=Mock(side_effect=error), resend=Mock(side_effect=error))
         scope = dict(globals(), st=st, supabase=SimpleNamespace(auth=auth), email_reg=email,
-                     password_reg='long-password', t=lambda key, **kw: key)
+                     password_reg='long-password', confirmation_email=email, t=lambda key, **kw: key)
         exec(compile(ast.Module(body=handler.body, type_ignores=[]), '<signup>', 'exec'), scope)
         return st, auth
 
@@ -73,6 +73,34 @@ class AuthEmailTests(unittest.TestCase):
         st, auth = self.run_signup('name@gmail.com', error=Exception('email rate limit exceeded'))
         st.success.assert_not_called()
         st.error.assert_called_with('auth_email_rate_limited')
+
+
+    def test_resend_uses_signup_type_and_preserves_redirect(self):
+        st, auth = self.run_signup('  name@GMAIL.com ', handler_key='resend_confirmation_btn')
+        auth.resend.assert_called_once_with({
+            'type': 'signup', 'email': 'name@gmail.com',
+            'options': {'email_redirect_to': 'https://app.megor.ai'},
+        })
+        st.success.assert_called_with('resend_confirmation_requested')
+        auth.sign_up.assert_not_called()
+
+    def test_resend_obeys_shared_cooldown(self):
+        state = {}
+        self.run_signup('name@gmail.com', state)
+        st, auth = self.run_signup('name@gmail.com', state, handler_key='resend_confirmation_btn')
+        auth.resend.assert_not_called()
+        st.warning.assert_called_once()
+
+    def test_resend_failure_is_not_reported_as_success(self):
+        st, auth = self.run_signup('name@gmail.com', error=Exception('email rate limit exceeded'),
+                                   handler_key='resend_confirmation_btn')
+        st.success.assert_not_called()
+        st.error.assert_called_with('auth_email_rate_limited')
+
+    def test_invalid_resend_never_calls_supabase(self):
+        st, auth = self.run_signup('test@example.com', handler_key='resend_confirmation_btn')
+        auth.resend.assert_not_called()
+        st.error.assert_called_with('auth_email_invalid')
 
 
 if __name__ == '__main__':

@@ -1566,7 +1566,10 @@ if not st.session_state.user:
                     )
 
                 except Exception as login_error:
-                    st.error(t("sign_in_failed", error=login_error))
+                    if getattr(login_error, "code", "") == "email_not_confirmed":
+                        st.warning(t("confirm_email_required"))
+                    else:
+                        st.error(t("sign_in_failed", error=login_error))
 
                 else:
                     if not res or not res.user:
@@ -1686,6 +1689,33 @@ if not st.session_state.user:
                     except Exception as error:
                         key = auth_email_error_key(error)
                         st.error(t(key) if key else t("sign_up_failed", error=error))
+
+    with st.expander(t("resend_confirmation_title")):
+        st.caption(t("resend_confirmation_help"))
+        confirmation_email = st.text_input(
+            t("register_email"), key="confirmation_email"
+        )
+        if st.button(t("resend_confirmation"), key="resend_confirmation_btn"):
+            try:
+                normalized_email = normalize_auth_email(confirmation_email)
+            except ValueError:
+                st.error(t("auth_email_invalid"))
+            else:
+                wait = email_wait_seconds(st.session_state, time.monotonic())
+                if wait:
+                    st.warning(t("auth_email_wait", seconds=wait))
+                else:
+                    mark_email_attempt(st.session_state, time.monotonic())
+                    try:
+                        supabase.auth.resend({
+                            "type": "signup",
+                            "email": normalized_email,
+                            "options": {"email_redirect_to": "https://app.megor.ai"},
+                        })
+                        st.success(t("resend_confirmation_requested"))
+                    except Exception as error:
+                        key = auth_email_error_key(error)
+                        st.error(t(key or "auth_email_unavailable"))
 
     st.stop()
 

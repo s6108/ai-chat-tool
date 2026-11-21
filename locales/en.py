@@ -1,4 +1,9 @@
 TEXT = {
+    'confirm_email_required': 'Your email is not verified yet. Check your inbox and spam folder, or use “Resend verification email” below.',
+    'resend_confirmation_title': 'Did not receive your verification email?',
+    'resend_confirmation_help': 'Enter the email you registered with. Check your spam/junk folder. Only the newest verification link should be used. If email still does not arrive after a few minutes, contact Megor support to check delivery.',
+    'resend_confirmation': 'Resend verification email',
+    'resend_confirmation_requested': 'If this address has a pending registration, a verification email has been requested. Check your inbox and spam folder. Already verified? Sign in instead.',
     'auth_email_invalid': 'Enter a valid email address you can receive mail at. Example or test addresses cannot be used.',
     'auth_email_wait': 'Please wait {seconds} seconds before requesting another email. Check your inbox and spam folder first.',
     'auth_email_rate_limited': 'Email requests are temporarily limited. Please try again later; repeated clicks will not send another email.',
