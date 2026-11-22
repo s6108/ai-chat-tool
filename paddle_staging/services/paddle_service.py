@@ -107,6 +107,13 @@ class PaddleBackend:
         response=self.http.request(method,self.settings.base+path,
           headers={'Authorization':'Bearer '+self.settings.api_key,'Paddle-Version':'1'},
           json=body,params=params,timeout=(3,12),allow_redirects=False)
+        if response.status_code>=400:
+            # Diagnostic metadata only: never log headers, payloads, email or keys.
+            import logging
+            try:code=response.json().get('error',{}).get('code','unknown')
+            except Exception:code='unknown'
+            if not isinstance(code,str) or not re.fullmatch(r'[a-z_]{1,80}',code):code='unknown'
+            logging.getLogger('paddle_staging').warning('Paddle API operation=%s resource=%s status=%s code=%s',method,path.split('/')[1],response.status_code,code)
         response.raise_for_status()
         if 300<=response.status_code<400:raise RuntimeError('API redirect rejected')
         return response.json()
