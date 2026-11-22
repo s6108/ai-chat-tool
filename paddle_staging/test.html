@@ -1,0 +1,16 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Megor Sandbox 测试</title>
+<style>body{font:17px system-ui;max-width:720px;margin:48px auto;padding:20px}input,button{font:inherit;padding:10px;margin:8px 0}label{display:block}pre{white-space:pre-wrap}button{cursor:pointer}</style>
+<h1>Megor Sandbox 测试</h1><p>独立测试环境，不会真实扣款。登录状态仅保留在当前页面内存中；关闭页面后需重新登录。</p>
+<form id="login"><label id="keylabel">Supabase Publishable key（sb_publishable_ 开头，非 Secret key）<input id="key" autocomplete="off"></label><label>测试账户邮箱<input id="email" type="email" autocomplete="username" required></label><label>密码<input id="password" type="password" autocomplete="current-password" required></label><button>登录测试账户</button></form>
+<p id="status" role="status">请登录独立测试项目中的账户。</p><section id="actions" hidden><button id="refresh">刷新会员权益</button> <button id="premium">测试月度会员结账</button> <button id="pass">测试 30 天通行证结账</button> <button id="logout">退出</button><pre id="access"></pre><p><a id="checkout" target="_blank" rel="noopener noreferrer" hidden>打开 Sandbox 结账</a></p></section>
+<script type="application/json" id="config">__CONFIG__</script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script>
+const cfg=JSON.parse(document.querySelector('#config').textContent);let auth=null,session=null,busy=false;
+const $=s=>document.querySelector(s),say=s=>$('#status').textContent=s;
+if(cfg.key)$('#keylabel').hidden=true;
+async function api(path,body){const r=await fetch('/paddle/'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+session.access_token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});if(!r.ok)throw Error(r.status===401?'登录已失效，请重新登录。':'服务未完成请求（HTTP '+r.status+'），请检查测试环境配置和 API 权限。');return r.json()}
+async function refresh(){const a=await api('access');$('#access').textContent=JSON.stringify(a,null,2);say('已从服务器读取该登录账户的会员权益。')}
+$('#login').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;try{const key=cfg.key||$('#key').value.trim();if(!key.startsWith('sb_publishable_'))throw Error('请使用测试项目的 Publishable key。');auth=supabase.createClient(cfg.url,key,{auth:{persistSession:false,autoRefreshToken:true,detectSessionInUrl:false}});const r=await auth.auth.signInWithPassword({email:$('#email').value,password:$('#password').value});$('#password').value='';if(r.error||!r.data.session)throw Error('登录失败，请确认这是 staging 项目的已验证测试账户。');session=r.data.session;auth.auth.onAuthStateChange((_event,s)=>{session=s});$('#login').hidden=true;$('#actions').hidden=false;await refresh()}catch(e){say(e.message)}finally{busy=false}};
+$('#refresh').onclick=()=>refresh().catch(e=>say(e.message));
+async function buy(plan){if(busy)return;busy=true;$('#checkout').hidden=true;try{say('正在为当前登录账户创建 Sandbox 交易…');const r=await api('checkout',{plan});const url=new URL(r.checkout_url);if(url.origin!==location.origin||url.pathname!='/checkout')throw Error('结账地址不正确。');$('#checkout').href=url.href;$('#checkout').hidden=false;say('交易已创建，请点击下方链接完成测试付款，然后返回刷新会员权益。')}catch(e){say(e.message)}finally{busy=false}}
+$('#premium').onclick=()=>buy('premium');$('#pass').onclick=()=>buy('pass_30_day');$('#logout').onclick=async()=>{if(auth)await auth.auth.signOut();session=null;location.reload()};
+</script></html>

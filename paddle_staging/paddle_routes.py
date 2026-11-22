@@ -76,3 +76,11 @@ async def webhook(request:Request):
     except PermissionError as exc:raise HTTPException(401,'Invalid signature') from exc
     except (ValueError,KeyError,TypeError) as exc:raise HTTPException(400,'Invalid event') from exc
     except Exception as exc:raise HTTPException(503,'Event not durably stored; retry') from exc
+
+@checkout_router.get('/test',response_class=HTMLResponse)
+def test_page():
+    if os.getenv('PADDLE_ENV')!='sandbox':raise HTTPException(404)
+    config=json.dumps({'url':os.environ.get('SUPABASE_URL',''),
+      'key':os.environ.get('SUPABASE_PUBLISHABLE_KEY','')}).replace('<','\\u003c')
+    return HTMLResponse((Path(__file__).parent/'test.html').read_text().replace('__CONFIG__',config),
+      headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer'})
