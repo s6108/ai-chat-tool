@@ -8,8 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict
-from supabase import create_client
-from supabase.lib.client_options import ClientOptions
+from supabase import create_client, ClientOptions
 from services.paddle_service import PaddleBackend, Settings
 
 router=APIRouter(prefix='/paddle')

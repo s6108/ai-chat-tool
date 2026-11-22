@@ -19,6 +19,12 @@ class BackendTests(unittest.TestCase):
  def test_fail_closed_environment(self):
   for cfg in [replace(CFG,enabled=False),replace(CFG,environment='live'),replace(CFG,api_key='pdl_live_apikey_wrong'),replace(CFG,checkout_url='http://local')]:
    with self.assertRaises(RuntimeError):cfg.validate()
+ def test_real_supabase_client_options_initialize_without_network(self):
+  from paddle_routes import backend
+  with patch('paddle_routes.Settings.from_env',return_value=CFG),patch.dict('os.environ',{
+    'SUPABASE_URL':'https://fixture.supabase.co','SUPABASE_SERVICE_KEY':'sb_secret_fabricated'}):
+   service=backend()
+   self.assertIsInstance(service,PaddleBackend)
  def test_signature_and_minimal_inbox(self):
   raw=json.dumps(event()).encode();ts=str(int(time.time()));sig=hmac.new(CFG.webhook_secret.encode(),ts.encode()+b':'+raw,hashlib.sha256).hexdigest()
   self.s.accept(raw,f'ts={ts};h1={sig}')
